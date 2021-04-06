@@ -108,7 +108,7 @@ accessParser config =
 fixedAccessorParser : Parser Accessor
 fixedAccessorParser =
     Parser.succeed Fixed
-        |. Parser.succeed "."
+        |. Parser.symbol "."
         |= Names.variableParser
 
 {-| -}
