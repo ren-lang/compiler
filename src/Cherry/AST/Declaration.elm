@@ -1,5 +1,7 @@
 module Cherry.AST.Declaration exposing 
     ( Declaration(..)
+    , isFunction, isVariable, isPublic
+    , getName, getBody, getBindings
     )
 
 
@@ -47,3 +49,71 @@ bindings after the body expression.
 type Declaration
     = Function Bool String (List Expression.Variable) Expression (List ( String, Expression ))
     | Variable Bool String Expression (List ( String, Expression ))
+
+
+-- PREDICATES ------------------------------------------------------------------
+
+
+{-| -}
+isFunction : Declaration -> Bool
+isFunction declaration =
+    case declaration of
+        Function _ _ _ _ _ ->
+            True
+
+        Variable _ _ _ _ ->
+            False
+
+{-| -}
+isVariable : Declaration -> Bool
+isVariable declaration =
+    case declaration of
+        Function _ _ _ _ _ ->
+            False
+
+        Variable _ _ _ _ ->
+            True
+
+{-| -}
+isPublic : Declaration -> Bool
+isPublic declaration =
+    case declaration of
+        Function pub _ _ _ _ ->
+            pub
+
+        Variable pub _ _ _ ->
+            pub
+
+
+-- GETTERS ---------------------------------------------------------------------
+
+
+{-| -}
+getName : Declaration -> String
+getName declaration =
+    case declaration of
+        Function _ name _ _ _ ->
+            name
+
+        Variable _ name _ _ ->
+            name
+
+{-| -}
+getBody : Declaration -> Expression
+getBody declaration =
+    case declaration of
+        Function _ _ _ body _ ->
+            body
+
+        Variable _ _ body _ ->
+            body
+
+{-| -}
+getBindings : Declaration -> List ( String, Expression )
+getBindings declaration =
+    case declaration of
+        Function _ _ _ _ bindings ->
+            bindings
+
+        Variable _ _ _ bindings ->
+            bindings
