@@ -98,7 +98,6 @@ accessParser config =
             , literalParser config
             , variableParser
             ]
-        |. Parser.spaces
         |= Parser.oneOf
             [ fixedAccessorParser
             , computedAccessorParser config
