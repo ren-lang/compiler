@@ -40,9 +40,9 @@ parser =
     Pratt.expression
         { oneOf =
             [ applicationParser
+            , accessParser
             , parenthesisedExpressionParser
             , conditionalParser
-            , accessParser
             , lambdaParser
             , literalParser
             , Pratt.literal variableParser
@@ -149,8 +149,8 @@ applicationParser : Pratt.Config Expression -> Parser Expression
 applicationParser config =
     Parser.succeed Application
         |= Parser.oneOf
-            [ parenthesisedExpressionParser config
-            , accessParser config
+            [ accessParser config
+            , parenthesisedExpressionParser config
             , literalParser config
             , variableParser
             ]
