@@ -9,7 +9,7 @@ import Json.Encode
 import Json.Encode.Extra
 
 
--- RUNNING THE EMITTER ---------------------------------------------------------
+-- RUNNING THE ENCODER ---------------------------------------------------------
 
 
 encode : Expression -> String
