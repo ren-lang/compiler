@@ -155,7 +155,7 @@ applicationParser config =
             , variableParser
             ]
         |. Parser.spaces
-        |= Pratt.subExpression 0 config
+        |= Pratt.subExpression 99 config
         |> Parser.backtrackable
     
 
