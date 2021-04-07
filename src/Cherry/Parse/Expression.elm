@@ -342,6 +342,7 @@ operatorVariableParser =
         |= Parser.oneOf
             [ Parser.succeed Pipe |. Parser.symbol "|>"
             , Parser.succeed Compose |. Parser.symbol ">>"
+            , Parser.succeed Discard |. Parser.symbol ";"
             , Parser.succeed Eq |. Parser.symbol "=="
             , Parser.succeed NotEq |. Parser.symbol "!="
             , Parser.succeed Lte |. Parser.symbol "<="
