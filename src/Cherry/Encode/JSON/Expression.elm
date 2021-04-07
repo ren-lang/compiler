@@ -6,6 +6,7 @@ module Cherry.Encode.JSON.Expression exposing (..)
 
 import Cherry.AST.Expression exposing (..)
 import Json.Encode
+import Json.Encode.Extra
 
 
 -- RUNNING THE EMITTER ---------------------------------------------------------
@@ -60,17 +61,15 @@ accessEncoder expr accessor =
 
 computedAccessorEncoder : Expression -> Expression -> Json.Encode.Value
 computedAccessorEncoder expr key =
-    Json.Encode.object
-        [ ( "$", Json.Encode.string "Expression.Access.Computed" )
-        , ( "expr", encoder expr )
+    Json.Encode.Extra.taggedObject "Expression.Access.Computed"
+        [ ( "expr", encoder expr )
         , ( "key", encoder key)
         ]
 
 fixedAccessorEncoder : Expression -> String -> Json.Encode.Value
 fixedAccessorEncoder expr key =
-    Json.Encode.object
-        [ ( "$", Json.Encode.string "Expression.Access.Fixed" )
-        , ( "expr", encoder expr )
+    Json.Encode.Extra.taggedObject "Expression.Access.Fixed"
+        [ ( "expr", encoder expr )
         , ( "key", Json.Encode.string key )
         ]
 
@@ -80,9 +79,8 @@ fixedAccessorEncoder expr key =
 
 applicationEncoder : Expression -> Expression -> Json.Encode.Value
 applicationEncoder fn arg =
-    Json.Encode.object
-        [ ( "$", Json.Encode.string "Expression.Application" )
-        , ( "fn", encoder fn )
+    Json.Encode.Extra.taggedObject "Expression.Application"
+        [ ( "fn", encoder fn )
         , ( "arg", encoder arg )
         ]
 
@@ -92,9 +90,8 @@ applicationEncoder fn arg =
 
 infixOpEncoder : Operator -> Expression -> Expression -> Json.Encode.Value
 infixOpEncoder op lhs rhs =
-    Json.Encode.object
-        [ ( "$", Json.Encode.string "Expression.InfixOp" )
-        , ( "op", operatorEncoder op )
+    Json.Encode.Extra.taggedObject "Expression.InfixOp"
+        [ ( "op", operatorEncoder op )
         , ( "lhs", encoder lhs )
         , ( "rhs", encoder rhs )
         ]
@@ -103,99 +100,61 @@ operatorEncoder : Operator -> Json.Encode.Value
 operatorEncoder operator =
     case operator of
         Pipe ->
-            Json.Encode.object 
-                [ ( "$", Json.Encode.string "Expression.Operator.Pipe" ) 
-                ]
+            Json.Encode.Extra.taggedObject "Expression.Operator.Pipe" []
 
         Compose ->
-            Json.Encode.object 
-                [ ( "$", Json.Encode.string "Expression.Operator.Compose" ) 
-                ]
+            Json.Encode.Extra.taggedObject "Expression.Operator.Compose" []
 
         Discard ->
-            Json.Encode.object 
-                [ ( "$", Json.Encode.string "Expression.Operator.Discard" ) 
-                ]
+            Json.Encode.Extra.taggedObject "Expression.Operator.Discard" []
 
         Add ->
-            Json.Encode.object 
-                [ ( "$", Json.Encode.string "Expression.Operator.Add" ) 
-                ]
+            Json.Encode.Extra.taggedObject "Expression.Operator.Add" []
 
         Sub ->
-            Json.Encode.object 
-                [ ( "$", Json.Encode.string "Expression.Operator.Sub" ) 
-                ]
+            Json.Encode.Extra.taggedObject "Expression.Operator.Sub" []
 
         Mul ->
-            Json.Encode.object 
-                [ ( "$", Json.Encode.string "Expression.Operator.Mul" ) 
-                ]
+            Json.Encode.Extra.taggedObject "Expression.Operator.Mul" []
 
         Div ->
-            Json.Encode.object 
-                [ ( "$", Json.Encode.string "Expression.Operator.Div" ) 
-                ]
+            Json.Encode.Extra.taggedObject "Expression.Operator.Div" []
 
         Pow ->
-            Json.Encode.object 
-                [ ( "$", Json.Encode.string "Expression.Operator.Pow" ) 
-                ]
+            Json.Encode.Extra.taggedObject "Expression.Operator.Pow" []
 
         Mod ->
-            Json.Encode.object 
-                [ ( "$", Json.Encode.string "Expression.Operator.Mod" ) 
-                ]
+            Json.Encode.Extra.taggedObject "Expression.Operator.Mod" []
 
         Eq ->
-            Json.Encode.object 
-                [ ( "$", Json.Encode.string "Expression.Operator.Eq" ) 
-                ]
+            Json.Encode.Extra.taggedObject "Expression.Operator.Eq" []
 
         NotEq ->
-            Json.Encode.object 
-                [ ( "$", Json.Encode.string "Expression.Operator.NotEq" ) 
-                ]
+            Json.Encode.Extra.taggedObject "Expression.Operator.NotEq" []
 
         Lt ->
-            Json.Encode.object 
-                [ ( "$", Json.Encode.string "Expression.Operator.Lt" ) 
-                ]
+            Json.Encode.Extra.taggedObject "Expression.Operator.Lt" []
 
         Lte ->
-            Json.Encode.object 
-                [ ( "$", Json.Encode.string "Expression.Operator.Lte" ) 
-                ]
+            Json.Encode.Extra.taggedObject "Expression.Operator.Lte" []
 
         Gt ->
-            Json.Encode.object 
-                [ ( "$", Json.Encode.string "Expression.Operator.Gt" ) 
-                ]
+            Json.Encode.Extra.taggedObject "Expression.Operator.Gt" []
 
         Gte ->
-            Json.Encode.object 
-                [ ( "$", Json.Encode.string "Expression.Operator.Gte" ) 
-                ]
+            Json.Encode.Extra.taggedObject "Expression.Operator.Gte" []
 
         And ->
-            Json.Encode.object 
-                [ ( "$", Json.Encode.string "Expression.Operator.And" ) 
-                ]
+            Json.Encode.Extra.taggedObject "Expression.Operator.And" []
 
         Or ->
-            Json.Encode.object 
-                [ ( "$", Json.Encode.string "Expression.Operator.Or" ) 
-                ]
+            Json.Encode.Extra.taggedObject "Expression.Operator.Or" []
 
         Cons ->
-            Json.Encode.object 
-                [ ( "$", Json.Encode.string "Expression.Operator.Cons" ) 
-                ]
+            Json.Encode.Extra.taggedObject "Expression.Operator.Cons" []
 
         Join ->
-            Json.Encode.object 
-                [ ( "$", Json.Encode.string "Expression.Operator.Join" ) 
-                ]
+            Json.Encode.Extra.taggedObject "Expression.Operator.Join" []
 
 
 -- CONDITIONAL ENCODER ---------------------------------------------------------
@@ -203,9 +162,8 @@ operatorEncoder operator =
 
 conditionalEncoder : Expression -> Expression -> Expression -> Json.Encode.Value
 conditionalEncoder predicate ifTrue ifFalse =
-    Json.Encode.object
-        [ ( "$", Json.Encode.string "Expression.Conditional" )
-        , ( "if", encoder predicate )
+    Json.Encode.Extra.taggedObject "Expression.Conditional"
+        [ ( "if", encoder predicate )
         , ( "then", encoder ifTrue )
         , ( "else", encoder ifFalse )
         ]
@@ -216,7 +174,119 @@ conditionalEncoder predicate ifTrue ifFalse =
 
 lambdaEncoder : List Variable -> Expression -> Json.Encode.Value
 lambdaEncoder args body =
-    Json.Encode.object
-        [ ( "$", Json.Encode.string "Expression.Lambda" )
-        , ( "args", Json.Encode.list variableEncoder)
+    Json.Encode.Extra.taggedObject "Expression.Lambda"
+        [ ( "args", Json.Encode.list variableEncoder args)
+        , ( "body", encoder body )
+        ]
+
+
+-- LITERAL ENCODERS ------------------------------------------------------------
+
+
+literalEncoder : Literal -> Json.Encode.Value
+literalEncoder literal =
+    case literal of
+        Array elements ->
+            literalArrayEncoder elements
+
+        Boolean b ->
+            literalBooleanEncoder b
+
+        Number n ->
+            literalNumberEncoder n
+
+        Object entries ->
+            literalObjectEncoder entries
+
+        String s ->
+            literalStringEncoder s
+
+literalArrayEncoder : List (Expression) -> Json.Encode.Value
+literalArrayEncoder elements =
+    Json.Encode.Extra.taggedObject "Expression.Literal.Array"
+        [ ( "elements", Json.Encode.list encoder elements )
+        ]
+
+literalBooleanEncoder : Bool -> Json.Encode.Value
+literalBooleanEncoder b =
+    Json.Encode.Extra.taggedObject "Expression.Literal.Boolean"
+        [ ( "b", Json.Encode.bool b )
+        ]
+
+literalNumberEncoder : Float -> Json.Encode.Value
+literalNumberEncoder n =
+    Json.Encode.Extra.taggedObject "Expression.Literal.Number"
+        [ ( "n", Json.Encode.float n )
+        ]
+
+literalObjectEncoder : List ( String, Expression ) -> Json.Encode.Value
+literalObjectEncoder entries =
+    let
+        literalObjectFieldEncoder ( k, v ) =
+            Json.Encode.Extra.taggedObject "Expression.Literal.Object.Field"
+                [ ( "key", Json.Encode.string k )
+                , ( "value", encoder v )
+                ]
+    in
+    Json.Encode.Extra.taggedObject "Expression.Literal.Object"
+        [ ( "entries", Json.Encode.list literalObjectFieldEncoder entries)
+        ]
+
+literalStringEncoder : String -> Json.Encode.Value
+literalStringEncoder s =
+    Json.Encode.Extra.taggedObject "Expression.Literal.String"
+        [ ( "s", Json.Encode.string s )
+        ]
+
+
+-- VARIABLE ENCODERS -----------------------------------------------------------
+
+
+variableEncoder : Variable -> Json.Encode.Value
+variableEncoder variable =
+    case variable of
+        ArrayDestructure bindings ->
+            variableArrayDestructureEncoder bindings
+
+        Local name ->
+            variableLocalEncoder name
+
+        ObjectDestructure bindings ->
+            variableObjectDestructureEncoder bindings
+
+        Operator op ->
+            variableOperatorEncoder op
+
+        Scoped scopes name ->
+            variableScopedEncoder scopes name
+
+variableArrayDestructureEncoder : List (Variable) -> Json.Encode.Value
+variableArrayDestructureEncoder bindings =
+    Json.Encode.Extra.taggedObject "Expression.Variable.ArrayDestructure"
+        [ ("bindings", Json.Encode.list variableEncoder bindings )
+        ]
+
+variableLocalEncoder : String -> Json.Encode.Value
+variableLocalEncoder name =
+    Json.Encode.Extra.taggedObject "Expression.Variable.Local"
+        [ ( "name", Json.Encode.string name )
+        ]
+
+variableObjectDestructureEncoder : List Variable -> Json.Encode.Value
+variableObjectDestructureEncoder bindings =
+    Json.Encode.Extra.taggedObject "Expression.Variable.ObjectDestructure"
+        [ ( "bindings", Json.Encode.list variableEncoder bindings )
+        ]
+
+variableOperatorEncoder : Operator -> Json.Encode.Value
+variableOperatorEncoder op =
+    Json.Encode.Extra.taggedObject "Expression.Variable.Operator"
+        [ ( "op", operatorEncoder op )
+        ]
+
+variableScopedEncoder : List String -> String -> Json.Encode.Value
+variableScopedEncoder scopes name =
+    Json.Encode.Extra.taggedObject "Expression.Variable.Scoped"
+        [ ( "scopes", Json.Encode.list Json.Encode.string scopes )
+        , ( "name", Json.Encode.string name )
         ]
