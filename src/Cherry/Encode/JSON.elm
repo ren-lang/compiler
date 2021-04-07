@@ -6,7 +6,6 @@ module Cherry.Encode.JSON exposing (..)
 
 import Cherry.AST.Module exposing (..)
 import Cherry.Encode.JSON.Declaration as Declaration
-import Cherry.Encode.JSON.Expression as Expression
 import Json.Encode
 import Json.Encode.Extra
 
