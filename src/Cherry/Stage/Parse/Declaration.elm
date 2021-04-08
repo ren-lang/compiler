@@ -67,6 +67,7 @@ funParser =
         |= Expression.parser
         |. Parser.spaces
         |= bindingsParser
+        |> Parser.backtrackable
 
 
 -- LET PARSER ------------------------------------------------------------------
