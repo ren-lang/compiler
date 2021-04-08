@@ -93,4 +93,5 @@ importExposedBindingsParser =
                 , item = Identifier.nameParser
                 , trailing = Parser.Forbidden
                 }
+        , Parser.succeed []
         ]
