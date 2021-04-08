@@ -11,3 +11,4 @@ generated-docs/
 .spago
 .vscode/
 .cache/
+bin/
