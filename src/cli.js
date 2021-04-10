@@ -2,6 +2,7 @@ const Compiler = require('./CLI/Compiler.elm').Elm.CLI.Compiler
 const Filesystem = require('fs').promises
 const Package = require('../package.json')
 const Path = require('path')
+const Prettier = require('prettier')
 const Sade = require('sade')
 
 const program = Sade('cherry')
@@ -14,16 +15,13 @@ const program = Sade('cherry')
     .action(async (src, options) => {
         const path = Path.resolve(src)
         const stat = await Filesystem.stat(src)
-
-        console.log(options)
-
         const compiler = Compiler.init({
             flags: {
                 debug: options.debug
             }
         })
 
-        compiler.ports.fromGenerator.subscribe(writeFile)
+        compiler.ports.fromEmitter.subscribe(writeFile)
         compiler.ports.fromError.subscribe(console.error)
 
         if (stat.isFile()) {
@@ -69,6 +67,8 @@ async function writeFile ({ source, name, path } = {}) {
     if (!source || !name || !path) {
         console.error('')
     } else try {
+        source = name.endsWith('.js') ? Prettier.format(source) : source
+
         await Filesystem.writeFile(
             Path.resolve(path, name),
             source,

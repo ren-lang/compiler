@@ -5,7 +5,7 @@ port module CLI.Compiler exposing (main)
 
 
 import Cherry.Stage.Parse as Cherry
-import Cherry.Stage.Generate as Cherry
+import Cherry.Stage.Emit as Cherry
 import Json.Decode
 import Result.Extra
 import Parser.Extra
@@ -79,20 +79,26 @@ update msg model =
         CompileFile { source, name, path } ->
             if model.debug then
                 Cherry.parseModule source
-                    |> Result.map Cherry.generateJSON
+                    |> Result.map Cherry.emitJSON
                     |> Result.map (\s -> File s (name ++ ".json") path)
-                    |> Result.map fromGenerator
+                    |> Result.map fromEmitter
+                    |> Result.mapError (Parser.Extra.deadEndsToString)
+                    |> Result.mapError fromError
+                    |> Result.Extra.unwrap
+                    |> Tuple.pair model
+            
+            else
+                Cherry.parseModule source
+                    |> Result.map Cherry.emitJavaScript
+                    |> Result.map (\s -> File s (name ++ ".js") path)
+                    |> Result.map fromEmitter
                     |> Result.mapError (Parser.Extra.deadEndsToString)
                     |> Result.mapError fromError
                     |> Result.Extra.unwrap
                     |> Tuple.pair model
 
-            else
-                Cmd.none
-                    |> Tuple.pair model
-
 {-| -}
-port fromGenerator : File -> Cmd msg
+port fromEmitter : File -> Cmd msg
 
 {-| -}
 port fromError : String -> Cmd msg
