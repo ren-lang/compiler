@@ -25,6 +25,9 @@ emit identifier =
         AST.Operator op ->
             operatorEmitter op
 
+        AST.ObjectField fieldName ->
+            objectFieldEmitter fieldName
+
 {-| -}
 localEmitter : String -> String
 localEmitter name =
@@ -97,3 +100,9 @@ operatorEmitter op =
 
         AST.Join ->
             "($x) => ($y) => ([ ...$x, ...$y ])"
+
+{-| -}
+objectFieldEmitter : String -> String
+objectFieldEmitter fieldName =
+    "($x) => $x.{fieldName}"
+        |> String.replace "{fieldName}" fieldName
