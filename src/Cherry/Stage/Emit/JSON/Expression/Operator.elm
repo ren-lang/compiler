@@ -1,5 +1,5 @@
-module Cherry.Stage.Generate.JSON.Expression.Operator exposing
-    ( generator
+module Cherry.Stage.Emit.JSON.Expression.Operator exposing
+    ( emit
     )
 
 
@@ -11,12 +11,12 @@ import Json.Encode
 import Json.Encode.Extra
 
 
--- GENERATORS ------------------------------------------------------------------
+-- EMITTERS ------------------------------------------------------------------
 
 
 {-| -}
-generator : AST.Operator -> Json.Encode.Value
-generator operator =
+emit: AST.Operator -> Json.Encode.Value
+emit operator =
     case operator of
         AST.Pipe ->
             Json.Encode.Extra.taggedObject "AST.Operator.Pipe" []

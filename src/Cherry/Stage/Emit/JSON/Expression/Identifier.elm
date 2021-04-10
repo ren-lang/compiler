@@ -1,5 +1,5 @@
-module Cherry.Stage.Generate.JSON.Expression.Identifier exposing 
-    ( generator
+module Cherry.Stage.Emit.JSON.Expression.Identifier exposing 
+    ( emit
     )
 
 
@@ -7,46 +7,46 @@ module Cherry.Stage.Generate.JSON.Expression.Identifier exposing
 
 
 import Cherry.Data.AST as AST
-import Cherry.Stage.Generate.JSON.Expression.Operator as Operator
+import Cherry.Stage.Emit.JSON.Expression.Operator as Operator
 import Json.Encode
 import Json.Encode.Extra
 
 
--- GENERATORS ------------------------------------------------------------------
+-- EMITTERS ------------------------------------------------------------------
 
 
 {-| -}
-generator : AST.Identifier -> Json.Encode.Value
-generator identifier =
+emit: AST.Identifier -> Json.Encode.Value
+emit identifier =
     case identifier of
         AST.Local name ->
-            localGenerator name
+            localEmitter name
 
         AST.Scoped namespace name ->
-            scopedGenerator namespace name
+            scopedEmitter namespace name
 
         AST.Operator op ->
-            operatorGenerator op
+            operatorEmitter op
 
 {-| -}
-localGenerator : String -> Json.Encode.Value
-localGenerator name =
+localEmitter : String -> Json.Encode.Value
+localEmitter name =
     Json.Encode.Extra.taggedObject "AST.Identifier.Local"
         [ ( "name", Json.Encode.string name )
         ]
 
 {-| -}
-scopedGenerator : List String -> String -> Json.Encode.Value
-scopedGenerator namespace name =
+scopedEmitter : List String -> String -> Json.Encode.Value
+scopedEmitter namespace name =
     Json.Encode.Extra.taggedObject "AST.Identifier.Scoped"
         [ ( "namespace", Json.Encode.list Json.Encode.string namespace )
         , ( "name", Json.Encode.string name )
         ]
 
 {-| -}
-operatorGenerator : AST.Operator -> Json.Encode.Value
-operatorGenerator op =
+operatorEmitter : AST.Operator -> Json.Encode.Value
+operatorEmitter op =
     Json.Encode.Extra.taggedObject "AST.Identifier.Operator"
-        [ ( "op", Operator.generator op )
+        [ ( "op", Operator.emit op )
         ]
 
