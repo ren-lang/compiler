@@ -1,6 +1,6 @@
 module Cherry.Stage.Parse.Expression.Identifier exposing 
     ( parser
-    , nameParser, namespaceParser, objectFieldParser
+    , nameParser, namespaceParser
     )
 
 
@@ -74,5 +74,5 @@ namespaceParser =
 objectFieldParser : Parser AST.Identifier
 objectFieldParser =
     Parser.succeed AST.ObjectField
-     |. Parser.symbol "."
-     |= nameParser
+        |. Parser.symbol "."
+        |= nameParser
