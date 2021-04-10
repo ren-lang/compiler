@@ -28,6 +28,9 @@ emit identifier =
         AST.Operator op ->
             operatorEmitter op
 
+        AST.ObjectField fieldName ->
+            objectFieldEmitter fieldName
+
 {-| -}
 localEmitter : String -> Json.Encode.Value
 localEmitter name =
@@ -50,3 +53,8 @@ operatorEmitter op =
         [ ( "op", Operator.emit op )
         ]
 
+objectFieldEmitter : String -> Json.Encode.Value
+objectFieldEmitter fieldName =
+    Json.Encode.Extra.taggedObject "AST.Identifier.ObjectField"
+        [ ( "fieldName", Json.Encode.string fieldName )
+        ]

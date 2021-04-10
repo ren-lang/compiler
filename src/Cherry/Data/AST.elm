@@ -65,6 +65,7 @@ type Identifier
     = Local String
     | Scoped (List String) String
     | Operator Operator
+    | ObjectField String
 
 {-| -}
 type Operator
