@@ -31,6 +31,9 @@ emit emitExpression pattern =
         AST.Value literal ->
             valueEmitter emitExpression literal
 
+        AST.Wildcard name ->
+            wildcardEmitter name
+
 {-| -}
 arrayDestructureEmitter : (AST.Expression -> Json.Encode.Value) -> List AST.Pattern -> Json.Encode.Value
 arrayDestructureEmitter emitExpression patterns =
@@ -74,3 +77,15 @@ valueEmitter emitExpression literal =
         [ ( "literal", Literal.emit emitExpression literal )
         ]
 
+{-| -}
+wildcardEmitter : Maybe String -> Json.Encode.Value
+wildcardEmitter name =
+    case name of
+        Just n ->
+            Json.Encode.Extra.taggedObject "AST.Pattern.Wildcard"
+                [ ( "name", Json.Encode.string n ) 
+                ]
+
+        Nothing ->
+            Json.Encode.Extra.taggedObject "AST.Pattern.Wildcard" 
+                []
