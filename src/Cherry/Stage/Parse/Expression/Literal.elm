@@ -100,12 +100,17 @@ objectParser expressionParser =
             , separator = ","
             , end = "}"
             , item = 
-                Parser.succeed Tuple.pair
-                    |= Identifier.nameParser
-                    |. Parser.spaces
-                    |. Parser.symbol ":"
-                    |. Parser.spaces
-                    |= expressionParser
+                Parser.oneOf
+                    [ Parser.succeed Tuple.pair
+                        |= Identifier.nameParser
+                        |. Parser.spaces
+                        |. Parser.symbol ":"
+                        |. Parser.spaces
+                        |= expressionParser
+                        |> Parser.backtrackable
+                    , Parser.succeed (\name -> ( name , AST.Identifier (AST.Local name) ))
+                        |= Identifier.nameParser
+                    ]
             , spaces = Parser.spaces
             , trailing = Parser.Forbidden
             }
