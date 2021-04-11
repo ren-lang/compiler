@@ -29,6 +29,9 @@ emit emitExpression pattern =
         AST.Value literal ->
             valueEmitter emitExpression literal
 
+        AST.Wildcard name ->
+            wildcardEmitter name
+
 {-| -}
 arrayDestructureEmitter : (AST.Expression -> String) -> List AST.Pattern -> String
 arrayDestructureEmitter emitExpression patterns =
@@ -63,3 +66,8 @@ valueEmitter : (AST.Expression -> String) -> AST.Literal -> String
 valueEmitter emitExpression literal =
     Literal.emit emitExpression literal
 
+{-| -}
+wildcardEmitter : Maybe String -> String
+wildcardEmitter name =
+    "_{name}"
+        |> String.replace "{name}" (Maybe.withDefault "" name)

@@ -85,6 +85,7 @@ type Pattern
     | Name String
     | ObjectDestructure (List ( String, Maybe Pattern ))
     | Value Literal
+    | Wildcard (Maybe String)
 
 {-| -}
 type Literal
