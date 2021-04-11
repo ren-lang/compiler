@@ -20,6 +20,7 @@ parser =
         , nameParser
         , objectDestructureParser
         , valueParser
+        , wildcardParser
         ]
 
 arrayDestructureParser : Parser AST.Pattern
@@ -65,3 +66,14 @@ valueParser : Parser AST.Pattern
 valueParser =
     Parser.succeed AST.Value
         |= Literal.primitiveParser
+
+{-| -}
+wildcardParser : Parser AST.Pattern
+wildcardParser =
+    Parser.succeed AST.Wildcard
+        |. Parser.symbol "_"
+        |= Parser.oneOf
+            [ Parser.succeed Just
+                |= Identifier.nameParser
+            , Parser.succeed Nothing
+            ]
