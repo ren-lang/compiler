@@ -109,7 +109,7 @@ bindingsEmitter bindings =
 bindingEmitter : AST.Binding -> String
 bindingEmitter { name, body } =
     "var {name} = {body};"
-        |> String.replace "{name}" name
+        |> String.replace "{name}" (Pattern.emit Expression.emit name)
         |> String.replace "{body}" (Expression.emit body)
 
 

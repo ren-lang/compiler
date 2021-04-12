@@ -69,6 +69,6 @@ visibilityEmitter visibility =
 bindingEmitter : AST.Binding -> Json.Encode.Value
 bindingEmitter { name, body } =
     Json.Encode.Extra.taggedObject "AST.Binding"
-        [ ( "name", Json.Encode.string name )
+        [ ( "name", Pattern.emit Expression.emit name )
         , ( "body", Expression.emit body )
         ]
