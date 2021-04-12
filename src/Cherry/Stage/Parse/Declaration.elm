@@ -130,7 +130,7 @@ bindingParser : Parser AST.Binding
 bindingParser =
     Parser.succeed AST.Binding
         |. Parser.spaces
-        |= Identifier.nameParser
+        |= Pattern.parser
         |. Parser.Extra.spaces
         |. Parser.symbol "="
         |. Parser.spaces

@@ -37,7 +37,7 @@ type Visibility
 
 {-| -}
 type alias Binding =
-    { name : String
+    { name : Pattern
     , body : Expression
     }
 
