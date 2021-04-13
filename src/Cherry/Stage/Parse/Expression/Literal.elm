@@ -123,4 +123,7 @@ objectParser expressionParser =
 stringParser : Parser AST.Literal
 stringParser =
     Parser.succeed AST.String
-        |= Parser.Extra.string '\''
+        |= Parser.oneOf
+            [ Parser.Extra.string '"'
+            , Parser.Extra.string '\''
+            ]
