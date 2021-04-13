@@ -34,5 +34,8 @@
     "parcel-bundler": "^1.12.5",
     "prettier": "^2.2.1",
     "sade": "^1.7.4"
+  },
+  "devDependencies": {
+    "elm-test": "*"
   }
 }
