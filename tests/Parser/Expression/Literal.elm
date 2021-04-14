@@ -2,13 +2,19 @@ module Parser.Expression.Literal exposing
     ( suite
     )
 
-import Cherry.Stage.Parse.Expression.Literal as Literal
+
+-- IMPORTS ---------------------------------------------------------------------
+
+
 import Cherry.Data.AST as AST
+import Cherry.Stage.Parse.Expression as Expression
+import Cherry.Stage.Parse.Expression.Literal as Literal
 import Parser
 
 import Expect
-import Test exposing (..)
 import Fuzz exposing (..)
+import Test exposing (..)
+import Cherry.Data.AST exposing (Expression)
 import Cherry.Data.AST exposing (Expression(..))
 
 
@@ -19,6 +25,7 @@ suite : Test
 suite =
     describe "AST.Literal"
         [ primitiveParserSuite
+        , containerParserSuite
 
         , test "Errors when no literals can be parsed" <| \_ ->
             Parser.run Literal.primitiveParser "truish"
@@ -31,6 +38,13 @@ primitiveParserSuite =
         [ booleanTests
         , numberTests
         , stringTests
+        ]
+
+containerParserSuite : Test
+containerParserSuite =
+    describe "Literal.containerParser"
+        [ arrayTests
+        , objectTests
         ]
 
 
@@ -102,4 +116,48 @@ stringTests =
         , test "Text surrounded by single quotes ignores escaped single quotes" <| \_ ->
             Parser.run Literal.primitiveParser "'single and \\'single\\' quotes'"
                 |> Expect.equal (Ok <| AST.String "single and 'single' quotes")
+        ]
+
+
+-- CONTAINER PARSER TESTS ------------------------------------------------------
+
+
+arrayTests : Test
+arrayTests =
+    describe "Literal.Array"
+        [ test "It parses an array with no elements" <| \_ ->
+            Parser.run (Literal.containerParser Expression.parser) "[]"
+                |> Expect.equal (Ok <| AST.Array [])
+        , test "It parses an array with one element" <| \_ ->
+            Parser.run (Literal.containerParser Expression.parser) "[1]"
+                |> Expect.equal (Ok <| AST.Array <| List.map (AST.Literal << AST.Number) [ 1 ])
+        , test "It parses an array with many elements" <| \_ ->
+            Parser.run (Literal.containerParser Expression.parser) "[1,2,3,4]"
+                |> Expect.equal (Ok <| AST.Array <| List.map (AST.Literal << AST.Number) [ 1, 2, 3, 4 ])
+        , test "Whitespace is insignificant" <| \_ ->
+            Parser.run (Literal.containerParser Expression.parser) "[   1, 2,\n   3    ,4]"
+                |> Expect.equal (Ok <| AST.Array <| List.map (AST.Literal << AST.Number) [ 1, 2, 3, 4 ])
+        , test "Arrays can be nested" <| \_ ->
+            Parser.run (Literal.containerParser Expression.parser) "[[1]]]"
+                |> Expect.equal (Ok <| AST.Array [ AST.Literal <| AST.Array [ AST.Literal <| AST.Number 1 ]])
+        ]
+
+objectTests : Test
+objectTests =
+    describe "Literal.Object"
+        [ test "It parses an object with no fields" <| \_ ->
+            Parser.run (Literal.containerParser Expression.parser) "{}"
+                |> Expect.equal (Ok <| AST.Object [])
+        , test "It parses an object with one field" <| \_ ->
+            Parser.run (Literal.containerParser Expression.parser) "{ a: 1 }"
+                |> Expect.equal (Ok <| AST.Object [( "a", AST.Literal <| AST.Number 1 )])
+        , test "It parses an object with two fields" <| \_ ->
+            Parser.run (Literal.containerParser Expression.parser) "{ a: 1, b: 2  }"
+                |> Expect.equal (Ok <| AST.Object [( "a", AST.Literal <| AST.Number 1 ), ( "b", AST.Literal <| AST.Number 2 )])
+        , test "Whitespace is insignificant" <| \_ ->
+            Parser.run (Literal.containerParser Expression.parser) "{\n a     : 1   , b: \n2  }"
+                |> Expect.equal (Ok <| AST.Object [( "a", AST.Literal <| AST.Number 1 ), ( "b", AST.Literal <| AST.Number 2 )])
+        , test "Objects can be nested" <| \_ ->
+            Parser.run (Literal.containerParser Expression.parser) "{ a: { b: 1 } }"
+                |> Expect.equal (Ok <| AST.Object [( "a", AST.Literal <| AST.Object [( "b", AST.Literal <| AST.Number 1 )] )])
         ]
