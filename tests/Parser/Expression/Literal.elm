@@ -130,16 +130,16 @@ arrayTests =
                 |> Expect.equal (Ok <| AST.Array [])
         , test "It parses an array with one element" <| \_ ->
             Parser.run (Literal.containerParser Expression.parser) "[1]"
-                |> Expect.equal (Ok <| AST.Array <| List.map (AST.Literal << AST.Number) [ 1 ])
+                |> Expect.equal (Ok <| AST.Array [ AST.number 1 ])
         , test "It parses an array with many elements" <| \_ ->
             Parser.run (Literal.containerParser Expression.parser) "[1,2,3,4]"
-                |> Expect.equal (Ok <| AST.Array <| List.map (AST.Literal << AST.Number) [ 1, 2, 3, 4 ])
+                |> Expect.equal (Ok <| AST.Array <| [ AST.number 1, AST.number 2, AST.number 3, AST.number 4 ])
         , test "Whitespace is insignificant" <| \_ ->
             Parser.run (Literal.containerParser Expression.parser) "[   1, 2,\n   3    ,4]"
-                |> Expect.equal (Ok <| AST.Array <| List.map (AST.Literal << AST.Number) [ 1, 2, 3, 4 ])
+                |> Expect.equal (Ok <| AST.Array <| [ AST.number 1, AST.number 2, AST.number 3, AST.number 4 ])
         , test "Arrays can be nested" <| \_ ->
             Parser.run (Literal.containerParser Expression.parser) "[[1]]]"
-                |> Expect.equal (Ok <| AST.Array [ AST.Literal <| AST.Array [ AST.Literal <| AST.Number 1 ]])
+                |> Expect.equal (Ok <| AST.Array [ AST.array [ AST.number 1 ] ])
         ]
 
 objectTests : Test
@@ -150,14 +150,14 @@ objectTests =
                 |> Expect.equal (Ok <| AST.Object [])
         , test "It parses an object with one field" <| \_ ->
             Parser.run (Literal.containerParser Expression.parser) "{ a: 1 }"
-                |> Expect.equal (Ok <| AST.Object [( "a", AST.Literal <| AST.Number 1 )])
+                |> Expect.equal (Ok <| AST.Object [( "a", AST.number 1 )])
         , test "It parses an object with two fields" <| \_ ->
             Parser.run (Literal.containerParser Expression.parser) "{ a: 1, b: 2  }"
-                |> Expect.equal (Ok <| AST.Object [( "a", AST.Literal <| AST.Number 1 ), ( "b", AST.Literal <| AST.Number 2 )])
+                |> Expect.equal (Ok <| AST.Object [( "a", AST.number 1 ), ( "b", AST.number 2 )])
         , test "Whitespace is insignificant" <| \_ ->
             Parser.run (Literal.containerParser Expression.parser) "{\n a     : 1   , b: \n2  }"
-                |> Expect.equal (Ok <| AST.Object [( "a", AST.Literal <| AST.Number 1 ), ( "b", AST.Literal <| AST.Number 2 )])
+                |> Expect.equal (Ok <| AST.Object [( "a", AST.number 1 ), ( "b", AST.number 2 )])
         , test "Objects can be nested" <| \_ ->
             Parser.run (Literal.containerParser Expression.parser) "{ a: { b: 1 } }"
-                |> Expect.equal (Ok <| AST.Object [( "a", AST.Literal <| AST.Object [( "b", AST.Literal <| AST.Number 1 )] )])
+                |> Expect.equal (Ok <| AST.Object [( "a", AST.object [( "b", AST.number 1 )] )])
         ]
