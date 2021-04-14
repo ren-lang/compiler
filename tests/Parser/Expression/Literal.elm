@@ -49,7 +49,7 @@ containerParserSuite =
         , objectTests
 
         , test "Errors when trying to parse a primitive" <| \_ ->
-            Parser.run Literal.primitiveParser "true"
+            Parser.run (Literal.containerParser Expression.parser) "true"
                 |> Expect.err
         ]
 
