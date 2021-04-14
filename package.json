@@ -12,7 +12,7 @@
     "unlink": "npm unlink cherry",
     "start": "npm run build && ./bin/cherry",
     "start:dev": "npm run build:dev && NODE_ENV=development ./bin/cherry",
-    "tests": "elm-test"
+    "test": "elm-test"
   },
   "repository": {
     "type": "git",
