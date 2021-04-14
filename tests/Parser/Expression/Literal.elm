@@ -14,8 +14,6 @@ import Parser
 import Expect
 import Fuzz exposing (..)
 import Test exposing (..)
-import Cherry.Data.AST exposing (Expression)
-import Cherry.Data.AST exposing (Expression(..))
 
 
 -- SUITES ----------------------------------------------------------------------
@@ -38,6 +36,10 @@ primitiveParserSuite =
         [ booleanTests
         , numberTests
         , stringTests
+
+        , test "Errors when trying to parse a container" <| \_ ->
+            Parser.run Literal.primitiveParser "[ 1, 2, 3 ]"
+                |> Expect.err
         ]
 
 containerParserSuite : Test
@@ -45,6 +47,10 @@ containerParserSuite =
     describe "Literal.containerParser"
         [ arrayTests
         , objectTests
+
+        , test "Errors when trying to parse a primitive" <| \_ ->
+            Parser.run Literal.primitiveParser "true"
+                |> Expect.err
         ]
 
 
