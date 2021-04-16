@@ -10,6 +10,7 @@ import Cherry.Data.AST as AST
 import Cherry.Stage.Emit.JavaScript.Expression.Identifier as Identifier
 import Cherry.Stage.Emit.JavaScript.Expression.Literal as Literal
 import Cherry.Stage.Emit.JavaScript.Expression.Pattern as Pattern
+import Cherry.Stage.Emit.JavaScript.Expression.Identifier exposing (emit)
 
 
 -- EMITTERS ------------------------------------------------------------------
@@ -18,7 +19,6 @@ import Cherry.Stage.Emit.JavaScript.Expression.Pattern as Pattern
 {-| -}
 emit : AST.Expression -> String
 emit expression =
-    (\exprString -> "(" ++ exprString ++ ")") <|
     case expression of
         AST.Access expr accessors ->
             accessEmitter expr accessors
@@ -71,7 +71,7 @@ accessorEmitter accessor =
 {-| -}
 applicationEmitter : AST.Expression -> List AST.Expression -> String
 applicationEmitter func args =
-    "{func}{args}"
+    "{func} {args}"
         |> String.replace "{func}" (emit func)
         |> String.replace "{args}" (applicationArgsEmitter args)
 
@@ -79,7 +79,7 @@ applicationEmitter func args =
 applicationArgsEmitter : List AST.Expression  -> String
 applicationArgsEmitter args =
     List.map (\arg -> "(" ++ emit arg ++ ")") args
-        |> String.join ""
+        |> String.join " "
 
 
 -- INFIX EMITTER -------------------------------------------------------------
@@ -90,12 +90,12 @@ infixEmitter : AST.Operator -> AST.Expression -> AST.Expression -> String
 infixEmitter op lhs rhs =
     case op of
         AST.Pipe ->
-            applicationEmitter lhs [ rhs ]
+            applicationEmitter rhs [ lhs ]
 
         AST.Compose ->
-            "($) => {rhs}({lhs}($))"
-                |> String.replace "{lhs}" (emit lhs)
-                |> String.replace "{rhs}" (emit rhs)
+            applicationEmitter 
+                (AST.Identifier (AST.Scoped [ "$Function" ] "compose"))
+                [ lhs, rhs ]
 
         AST.Discard ->
             "{lhs}, {rhs}"

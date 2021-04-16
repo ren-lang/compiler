@@ -15,13 +15,24 @@ import Cherry.Stage.Emit.JavaScript.Declaration as Declaration
 
 {-| -}
 emit: AST.Module -> String
-emit { imports, declarations } =
-    String.join "\n\n"
-        [ List.map importEmitter imports 
-            |> String.join "\n"
-        , List.map Declaration.emit declarations
-            |> String.join "\n\n"
-        ]
+emit { imports, declarations } = String.trim """
+{defaultImports}
+{imports}
+
+{declarations}
+""" |> String.replace "{defaultImports}" defaultImports
+    |> String.replace "{imports}" (List.map importEmitter imports |> String.join "\n")
+    |> String.replace "{declarations}" (List.map Declaration.emit declarations |> String.join "\n\n")
+
+defaultImports : String
+defaultImports = String.trim """
+import * as $Array from './.cherry/array.js'
+import * as $Compare from './.cherry/compare.js'
+import * as $Function from './.cherry/function.js'
+import * as $Logic from './.cherry/logic.js'
+import * as $Math from './.cherry/math.js'
+import * as $Object from './.cherry/object.js'
+"""
 
 
 {-| -}
@@ -29,25 +40,45 @@ importEmitter : AST.Import -> String
 importEmitter { path, name, exposedBindings } =
     let
         fullName = String.join "$" name
-        bindings = String.join ", " exposedBindings
     in
     case ( name, exposedBindings ) of
         ( [], [] ) ->
-            "require('{path}');"
-                |> String.replace "{path}" path
+            importUnqualifiedNoBindingsTemplate path
 
         ( _, [] ) ->
-            "const {name} = require('{path}');"
-                |> String.replace "{name}" fullName
-                |> String.replace "{path}" path
+            importQualifiedNoBindings path fullName
         
         ( [], _ ) ->
-            "const { {bindings} } = require('{path}');"
-                |> String.replace "{bindings}" bindings
-                |> String.replace "{path}" path
+            importUnqualified path exposedBindings
         
         ( _, _ ) ->
-            "const { {bindings}, ...{name} } = require('{path}');"
-                |> String.replace "{name}" fullName
-                |> String.replace "{bindings}" bindings
-                |> String.replace "{path}" path
+            importQualified path fullName exposedBindings
+
+
+-- IMPORT TEMPLATES ------------------------------------------------------------
+
+
+importUnqualified : String -> List String -> String
+importUnqualified path bindings = String.trim """
+import { {bindings} } from '{path}'
+""" |> String.replace "{bindings}" (String.join ", " bindings)
+    |> String.replace "{path}" path
+
+importUnqualifiedNoBindingsTemplate : String -> String
+importUnqualifiedNoBindingsTemplate path = String.trim """
+import '{path}'
+""" |> String.replace "{path}" path
+
+importQualified : String -> String -> List String -> String
+importQualified path name bindings = String.trim """
+import * as {name} from '{path}'
+import { {bindings} } from '{path}'
+""" |> String.replace "{name}" name
+    |> String.replace "{bindings}" (String.join ", " bindings)
+    |> String.replace "{path}" path
+
+importQualifiedNoBindings : String -> String -> String
+importQualifiedNoBindings path name = String.trim """
+import * as {name} from '{path}'
+""" |> String.replace "{name}" name
+    |> String.replace "{path}" path
