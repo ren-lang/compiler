@@ -45,64 +45,64 @@ operatorEmitter : AST.Operator -> String
 operatorEmitter op =
     case op of
         AST.Pipe ->
-            "($x) => ($f) => $f($x)" 
+            "$Function.pipe" 
 
         AST.Compose ->
-            "($f) => ($g) => ($x) => $g($f($x))"
+            "$Function.compose"
 
         AST.Discard ->
-            "($x) => ($y) => $y"
+            "$Function.discard"
     
         AST.Add ->
-            "($x) => ($y) => $x + $y"
+            "$Math.add"
 
         AST.Sub ->
-            "($x) => ($y) => $x - $y"
+            "$Math.sub"
 
         AST.Mul ->
-            "($x) => ($y) => $x * $y"
+            "$Math.mul"
 
         AST.Div ->
-            "($x) => ($y) => $x / $y"
+            "$Math.div"
 
         AST.Pow ->
-            "($x) => ($y) => $x ** $y"
+            "$Math.pow"
 
         AST.Mod ->
-            "($x) => ($y) => $x % $y"
+            "$Math.mod"
 
         AST.Eq ->
-            "($x) => ($y) => $x == $y"
+            "$Compare.eq"
 
         AST.NotEq ->
-            "($x) => ($y) => $x != $y"
+            "$Compare.notEq"
 
         AST.Lt ->
-            "($x) => ($y) => $x < $y"
+            "$Compare.lt"
 
         AST.Lte ->
-            "($x) => ($y) => $x <= $y"
+            "$Compare.lte"
 
         AST.Gt ->
-            "($x) => ($y) => $x > $y"
+            "$Compare.gt"
 
         AST.Gte ->
-            "($x) => ($y) => $x >= $y"
+            "$Compare.gte"
 
         AST.And ->
-            "($x) => ($y) => $x && $y"
+            "$Logic.and"
 
         AST.Or ->
-            "($x) => ($y) => $x || $y"
+            "$Logic.or"
 
         AST.Cons ->
-            "($x) => ($y) => ([ $x, ...$y ])"
+            "$Array.cons"
 
         AST.Join ->
-            "($x) => ($y) => ([ ...$x, ...$y ])"
+            "$Array.join"
 
 {-| -}
 objectFieldEmitter : String -> String
 objectFieldEmitter fieldName =
-    "($x) => $x.{fieldName}"
+    "$Object.get {fieldName}"
         |> String.replace "{fieldName}" fieldName
