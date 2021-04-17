@@ -33,11 +33,11 @@ parser : Parser AST.Expression
 parser =
     Pratt.expression
         { oneOf =
-            [ parenthesisedParser
-            , conditionalParser
+            [ conditionalParser
             , applicationParser
             , accessParser
             , lambdaParser
+            , parenthesisedParser
             , Pratt.literal identifierParser
             , Pratt.literal literalParser
             ]
