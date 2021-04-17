@@ -116,11 +116,11 @@ bindingsParser =
             |. Parser.spaces
             |= Parser.sequence
                 { start = ""
-                , separator = "\n"
+                , separator = "and"
                 , end = ""
                 , item = bindingParser
-                , spaces = Parser.succeed ()
-                , trailing = Parser.Optional
+                , spaces = Parser.spaces
+                , trailing = Parser.Forbidden
                 }
         , Parser.succeed []
         ]
