@@ -20,7 +20,7 @@ all =
     Set.fromList
         [ "if", "then", "else" 
         , "import", "as", "exposing"
-        , "pub", "fun", "let", "where"
+        , "pub", "fun", "let", "where", "and"
         ]
 
 
