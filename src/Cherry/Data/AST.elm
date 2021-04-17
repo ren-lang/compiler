@@ -2,6 +2,7 @@ module Cherry.Data.AST exposing
     ( Module, Import
     , Declaration(..), Visibility(..), Binding
     , Expression(..), Accessor(..), Identifier(..), Operator(..), Pattern(..), Literal(..)
+    , array, boolean, number, object, string
     )
 
 
@@ -94,3 +95,28 @@ type Literal
     | Number Float
     | Object (List ( String, Expression ))
     | String String
+
+{-| -}
+array : List Expression -> Expression
+array elements =
+    Literal <| Array elements
+
+{-| -}
+boolean : Bool -> Expression
+boolean b =
+    Literal <| Boolean b
+
+{-| -}
+number : Float -> Expression
+number f =
+    Literal <| Number f
+
+{-| -}
+object : List ( String, Expression ) -> Expression
+object fields =
+    Literal <| Object fields
+
+{-| -}
+string : String -> Expression
+string s =
+    Literal <| String s

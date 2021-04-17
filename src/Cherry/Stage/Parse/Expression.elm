@@ -22,7 +22,7 @@ import Pratt
 {-| -}
 run : String -> Result (List Parser.DeadEnd) AST.Expression
 run input =
-    Parser.run parser input
+    Parser.run (parser |. Parser.end) input
 
 
 -- PARSER ----------------------------------------------------------------------
@@ -33,11 +33,11 @@ parser : Parser AST.Expression
 parser =
     Pratt.expression
         { oneOf =
-            [ parenthesisedParser
-            , conditionalParser
+            [ conditionalParser
             , applicationParser
             , accessParser
             , lambdaParser
+            , parenthesisedParser
             , Pratt.literal identifierParser
             , Pratt.literal literalParser
             ]

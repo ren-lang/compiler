@@ -18,7 +18,7 @@ import Pratt
 {-| -}
 table : List (Pratt.Config AST.Expression -> ( Int, AST.Expression -> Parser AST.Expression ))
 table =
-    [ AST.Infix AST.Pipe    |> Pratt.infixRight 1 (Parser.symbol "|>")
+    [ AST.Infix AST.Pipe    |> Pratt.infixLeft  1 (Parser.symbol "|>")
     , AST.Infix AST.Compose |> Pratt.infixRight 9 (Parser.symbol ">>")
     , AST.Infix AST.Eq      |> Pratt.infixLeft  4 (Parser.symbol "==")
     , AST.Infix AST.NotEq   |> Pratt.infixLeft  4 (Parser.symbol "!=")

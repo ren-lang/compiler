@@ -20,7 +20,7 @@ import Parser.Extra
 {-| -}
 run : String -> Result (List Parser.DeadEnd) AST.Declaration
 run input =
-    Parser.run parser input
+    Parser.run (parser |. Parser.end) input
 
 
 -- PARSER ----------------------------------------------------------------------
@@ -116,11 +116,11 @@ bindingsParser =
             |. Parser.spaces
             |= Parser.sequence
                 { start = ""
-                , separator = "\n"
+                , separator = "and"
                 , end = ""
                 , item = bindingParser
-                , spaces = Parser.succeed ()
-                , trailing = Parser.Optional
+                , spaces = Parser.spaces
+                , trailing = Parser.Forbidden
                 }
         , Parser.succeed []
         ]

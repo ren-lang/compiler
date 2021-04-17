@@ -81,10 +81,17 @@ booleanParser =
 numberParser : Parser AST.Literal
 numberParser =
     Parser.succeed AST.Number
-        |= Parser.oneOf
-            [ Parser.float
-            , Parser.int
-                |> Parser.map Basics.toFloat
+        |= Parser.number
+            { int = Just Basics.toFloat
+            , hex = Just Basics.toFloat
+            , octal = Just Basics.toFloat
+            , binary = Just Basics.toFloat
+            , float = Just identity
+            }
+        -- This is necessary to ensure we don't parse "123abc" as "AST.Number 123"
+        |. Parser.oneOf
+            [ Parser.chompIf (\c -> c == ' ' || c == '\n' || c == '\t')
+            , Parser.end
             ]
 
 
@@ -123,4 +130,7 @@ objectParser expressionParser =
 stringParser : Parser AST.Literal
 stringParser =
     Parser.succeed AST.String
-        |= Parser.Extra.string '\''
+        |= Parser.oneOf
+            [ Parser.Extra.string '"'
+            , Parser.Extra.string '\''
+            ]

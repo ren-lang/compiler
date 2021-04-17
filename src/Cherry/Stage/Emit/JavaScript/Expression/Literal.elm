@@ -54,7 +54,7 @@ numberEmitter n =
 {-| -}
 objectEmitter : (AST.Expression -> String) -> List ( String, AST.Expression ) -> String
 objectEmitter emitExpression entries =
-    "{ {entires} }"
+    "{ {entries} }"
         |> String.replace "{entries}" (List.map (objectEntryEmitter emitExpression) entries |> String.join ", ")
 
 {-| -}
