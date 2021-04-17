@@ -11,7 +11,8 @@
     "link": "npm link",
     "unlink": "npm unlink cherry",
     "start": "npm run build && ./bin/cherry",
-    "start:dev": "npm run build:dev && NODE_ENV=development ./bin/cherry"
+    "start:dev": "npm run build:dev && NODE_ENV=development ./bin/cherry",
+    "test": "elm-test"
   },
   "repository": {
     "type": "git",
@@ -34,5 +35,8 @@
     "parcel-bundler": "^1.12.5",
     "prettier": "^2.2.1",
     "sade": "^1.7.4"
+  },
+  "devDependencies": {
+    "elm-test": "*"
   }
 }
