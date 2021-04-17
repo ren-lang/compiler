@@ -11,7 +11,6 @@ import Cherry.Data.AST as AST
 import Cherry.Stage.Parse.Expression.Identifier as Identifier
 import Parser exposing ((|=), (|.), Parser)
 import Parser.Extra
-import Parser exposing (chompIf)
 
 
 -- PARSERS ---------------------------------------------------------------------
