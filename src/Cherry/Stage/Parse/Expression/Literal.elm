@@ -80,8 +80,8 @@ booleanParser =
 {-| -}
 numberParser : Parser AST.Literal
 numberParser =
-    Parser.succeed AST.Number
-        |= Parser.number
+    let
+        numberConfig =
             { int = Just Basics.toFloat
             , hex = Just Basics.toFloat
             , octal = Just Basics.toFloat
