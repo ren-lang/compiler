@@ -88,6 +88,14 @@ numberParser =
             , binary = Just Basics.toFloat
             , float = Just identity
             }
+    in
+    Parser.succeed AST.Number
+        |= Parser.oneOf
+            [ Parser.succeed Basics.negate
+                |. Parser.symbol "-" 
+                |= Parser.number numberConfig
+            , Parser.number numberConfig
+            ]
         -- This is necessary to ensure we don't parse "123abc" as "AST.Number 123"
         |. Parser.oneOf
             [ Parser.chompIf (\c -> c == ' ' || c == '\n' || c == '\t')
