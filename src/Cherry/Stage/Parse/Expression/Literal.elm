@@ -98,8 +98,9 @@ numberParser =
             ]
         -- This is necessary to ensure we don't parse "123abc" as "AST.Number 123"
         |. Parser.oneOf
-            [ Parser.chompIf (\c -> c == ' ' || c == '\n' || c == '\t')
-            , Parser.end
+            [ Parser.chompIf (Char.isAlpha)
+                |> Parser.andThen (\_ -> Parser.problem "")
+            , Parser.succeed ()
             ]
 
 
