@@ -11,8 +11,9 @@
     "link": "npm link",
     "unlink": "npm unlink cherry",
     "start": "npm run build && ./bin/cherry",
-    "start:dev": "npm run build:dev && NODE_ENV=development ./bin/cherry",
-    "test": "elm-test"
+    "start:dev": "npm run build:dev && NODE_ENV=development ./bin/cherry build ./example/test.cherry",
+    "test": "elm-test",
+    "docs": "elm-doc-preview"
   },
   "repository": {
     "type": "git",
@@ -37,6 +38,7 @@
     "sade": "^1.7.4"
   },
   "devDependencies": {
+    "elm-doc-preview": "^5.0.5",
     "elm-test": "*"
   }
 }

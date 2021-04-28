@@ -1,6 +1,6 @@
 module Cherry.Data.Keywords exposing 
     ( all
-    , substitute, javascriptSubstitutions
+    , substitute
     )
 
 
@@ -14,7 +14,15 @@ import Set exposing (Set)
 -- RESERVED WORDS --------------------------------------------------------------
 
 
-{-| -}
+{-| A `Set` of all the keywords reserved by Cherry. So far that's:
+
+    Set.fromList
+        [ "if", "then", "else" 
+        , "import", "as", "exposing"
+        , "pub", "fun", "let", "where", "and"
+        ]
+
+-}
 all : Set String
 all =
     Set.fromList
@@ -27,7 +35,16 @@ all =
 -- SUBSTITUTIONS ---------------------------------------------------------------
 
 
-{-| -}
+{-| Most keywords in JavaScript are totally fine identifiers in Cherry, we still
+have to make sure none of those identifiers make their way into any compiled JS
+code so this function substitutes a JS keyword with a dollar-prefixed version.
+
+If you don't pass in a JS keyword then you just get back what you gave it.
+
+    substitute "const" == "$const"
+    substitute "foo" == "foo"
+
+-}
 substitute : String -> String
 substitute name =
     Dict.get name javascriptSubstitutions

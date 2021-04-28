@@ -55,9 +55,26 @@ whitespace : Parser ()
 whitespace =
     Parser.chompWhile (\c -> c == ' ' || c == '\t' || c == '\r' || c == '\n')
 
+newline : Parser ()
+newline =
+    Parser.oneOf
+        [ Parser.token "\r\n"
+        , Parser.token "\n"
+        ]
+
 newlines : Parser ()
 newlines =
     Parser.chompWhile (\c -> c == '\n' || c == '\r')
+
+
+-- COMMENTS --------------------------------------------------------------------
+
+
+{-| -}
+comment : String -> Parser String
+comment start =
+    Parser.lineComment start
+        |> Parser.getChompedString
 
 
 -- DEADENDS --------------------------------------------------------------------
