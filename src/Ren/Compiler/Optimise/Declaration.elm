@@ -19,7 +19,8 @@ module Ren.Compiler.Optimise.Declaration exposing
 
 import Maybe.Extra
 import Ren.Compiler.Optimise.Expression as Expression
-import Ren.Data.Declaration exposing (Declaration(..), Binding(..))
+import Ren.Data.Declaration exposing (Declaration(..))
+import Ren.Data.Declaration.Binding exposing (Binding(..))
 import Ren.Data.Expression as Expression exposing (Expression)
 import Ren.Data.Expression.Pattern exposing (Pattern(..))
 

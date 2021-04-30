@@ -1,5 +1,5 @@
 module Ren.Data.Declaration exposing 
-    ( Declaration(..), Visibility(..), Binding(..)
+    ( Declaration(..), Visibility, Binding
     , function, variable
     , name, visibility
     , expose, conceal
@@ -69,6 +69,8 @@ import Json.Decode exposing (Decoder)
 import Json.Decode.Extra
 import Parser exposing (Parser, (|=), (|.))
 import Parser.Extra
+import Ren.Data.Declaration.Binding as Binding
+import Ren.Data.Declaration.Visibility as Visibility
 import Ren.Data.Expression as Expression exposing (Expression)
 import Ren.Data.Expression.Pattern as Pattern
 import Ren.Data.Keywords as Keywords
@@ -96,13 +98,12 @@ type Declaration
         }
 
 {-| -}
-type Visibility
-    = Public
-    | Private
+type alias Visibility
+    = Visibility.Visibility
 
 {-| -}
-type Binding
-    = Binding Expression.Pattern Expression
+type alias Binding
+    = Binding.Binding
 
 
 -- CONSTRUCTORS ----------------------------------------------------------------
@@ -165,20 +166,20 @@ expose : Declaration -> Declaration
 expose declaration =
     case declaration of
         Function data ->
-            Function { data | visibility = Public }
+            Function { data | visibility = Visibility.Public }
 
         Variable data ->
-            Variable { data | visibility = Public }
+            Variable { data | visibility = Visibility.Public }
 
 {-| -}
 conceal : Declaration -> Declaration
 conceal declaration =
     case declaration of
         Function data ->
-            Function { data | visibility = Private }
+            Function { data | visibility = Visibility.Private }
 
         Variable data ->
-            Variable { data | visibility = Private }
+            Variable { data | visibility = Visibility.Private }
 
 
 -- PARSING JSON ----------------------------------------------------------------
@@ -209,14 +210,14 @@ functionDecoder =
             (Json.Decode.field "comment" <|
                 Json.Decode.list Json.Decode.string
             )
-            (Json.Decode.field "visibility" visibilityDecoder)
+            (Json.Decode.field "visibility" Visibility.decoder)
             (Json.Decode.field "name" Json.Decode.string)
             (Json.Decode.field "args" <|
                 Json.Decode.list Pattern.decoder
             )
             (Json.Decode.field "body" Expression.decoder)
             (Json.Decode.field "bindings" <|
-                Json.Decode.list bindingDecoder
+                Json.Decode.list Binding.decoder
             )
 
     
@@ -231,38 +232,12 @@ variableDecoder =
             (Json.Decode.field "comment" <|
                 Json.Decode.list Json.Decode.string
             )
-            (Json.Decode.field "visibility" visibilityDecoder)
+            (Json.Decode.field "visibility" Visibility.decoder)
             (Json.Decode.field "name" Json.Decode.string)
             (Json.Decode.field "body" Expression.decoder)
             (Json.Decode.field "bindings" <|
-                Json.Decode.list bindingDecoder
+                Json.Decode.list Binding.decoder
             )
-
-
--- PARSING JSON: VISIBILITY ----------------------------------------------------
-
-
-{-| -}
-visibilityDecoder : Decoder Visibility
-visibilityDecoder =
-    Json.Decode.oneOf
-        [ Json.Decode.Extra.taggedObject "Visibility.Public" <|
-            Json.Decode.succeed Public
-        , Json.Decode.Extra.taggedObject "Visibility.Private" <|
-            Json.Decode.succeed Private
-        ]
-
-
--- PARSING JSON: BINDING -------------------------------------------------------
-
-
-{-| -}
-bindingDecoder : Decoder Binding
-bindingDecoder =
-    Json.Decode.Extra.taggedObject "Binding" <|
-        Json.Decode.map2 Binding
-            (Json.Decode.field "name" Pattern.decoder)
-            (Json.Decode.field "body" Expression.decoder)
 
 
 -- PARSING SOURCE --------------------------------------------------------------
@@ -291,7 +266,7 @@ functionParser =
     Parser.succeed function
         |= commentParser
         |. Parser.Extra.newlines
-        |= visibilityParser
+        |= Visibility.parser
         |. Parser.Extra.spaces
         |. Parser.keyword "fun"
         |. Parser.Extra.spaces
@@ -332,7 +307,7 @@ variableParser =
     Parser.succeed variable
         |= commentParser
         |. Parser.Extra.newlines
-        |= visibilityParser
+        |= Visibility.parser
         |. Parser.Extra.spaces
         |. Parser.keyword "let"
         |. Parser.Extra.spaces
@@ -349,19 +324,6 @@ variableParser =
         |> Parser.backtrackable
 
 
--- PARSING SOURCE: VISIBILITY --------------------------------------------------
-
-
-{-| -}
-visibilityParser : Parser Visibility
-visibilityParser =
-    Parser.oneOf
-        [ Parser.succeed Public
-            |. Parser.keyword "pub"
-        , Parser.succeed Private
-        ]
-
-
 -- PARSING SOURCE: BINDING -----------------------------------------------------
 
 
@@ -376,22 +338,12 @@ bindingsParser =
                 { start = ""
                 , separator = "and"
                 , end = ""
-                , item = bindingParser
+                , item = Binding.parser
                 , spaces = Parser.spaces
                 , trailing = Parser.Forbidden
                 }
         , Parser.succeed []
         ]
-
-{-| -}
-bindingParser : Parser Binding
-bindingParser =
-    Parser.succeed Binding
-        |= Pattern.parser
-        |. Parser.Extra.spaces
-        |. Parser.symbol "="
-        |. Parser.spaces
-        |= Expression.parser
 
 
 -- PARSING SOURCE: COMMENT -----------------------------------------------------

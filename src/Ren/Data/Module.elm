@@ -59,7 +59,8 @@ module Ren.Data.Module exposing
 import Json.Decode exposing (Decoder)
 import Json.Decode.Extra
 import Parser exposing (Parser, (|=), (|.))
-import Ren.Data.Declaration as Declaration exposing (Declaration, Visibility(..))
+import Ren.Data.Declaration as Declaration exposing (Declaration)
+import Ren.Data.Declaration.Visibility exposing (Visibility(..))
 import Ren.Data.Module.Import as Import
 
 
