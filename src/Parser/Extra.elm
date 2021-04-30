@@ -37,8 +37,8 @@ string quoteChar =
                     , Parser.succeed (List.reverse chunks |> String.join "")
                         |. Parser.token quoteString
                         |> Parser.map Parser.Done
-                    , Parser.succeed (\chunk -> chunk :: chunks)
-                        |= Parser.getChompedString (Parser.chompWhile isNotEndOrEscape)
+                    , Parser.getChompedString (Parser.chompWhile isNotEndOrEscape)
+                        |> Parser.andThen (\s -> if s == "" then Parser.problem "" else Parser.succeed (s :: chunks))
                         |> Parser.map Parser.Loop
                     ]
             )
