@@ -611,8 +611,8 @@ parser =
         { oneOf =
             [ Pratt.literal commentParser
             , conditionalParser
-            , accessParser
             , applicationParser
+            , accessParser
             , lambdaParser
             , parenthesisedParser
             , Pratt.literal literalParser
