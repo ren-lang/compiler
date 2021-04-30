@@ -91,28 +91,17 @@ parser =
             [ Parser.Extra.string '\''
             , Parser.Extra.string '"'
             ]
+        |. Parser.Extra.spaces
         |= Parser.oneOf
             [ Parser.succeed identity
-                |. Parser.Extra.spaces
                 |. Parser.keyword "as"
                 |. Parser.Extra.spaces
-                |= Parser.sequence
-                    { start = ""
-                    , separator = "."
-                    , end = ""
-                    , item = Parser.variable
-                        { start = Char.isUpper
-                        , inner = Char.isAlphaNum
-                        , reserved = Set.empty
-                        }
-                    , spaces = Parser.succeed ()
-                    , trailing = Parser.Forbidden
-                    }
+                |= namespaceParser
             , Parser.succeed []
             ]
+        |. Parser.Extra.spaces
         |= Parser.oneOf
             [ Parser.succeed identity
-                |. Parser.Extra.spaces
                 |. Parser.keyword "exposing"
                 |. Parser.Extra.spaces
                 |= Parser.sequence
@@ -129,3 +118,32 @@ parser =
                     }
             , Parser.succeed []
             ]
+
+namespaceParser : Parser (List String)
+namespaceParser =
+    Parser.succeed (::)
+        |= Parser.variable
+            { start = Char.isUpper
+            , inner = Char.isAlphaNum
+            , reserved = Set.empty
+            }
+        |= Parser.loop []
+            (\namespaces ->
+                Parser.oneOf
+                    [ Parser.succeed (\ns -> ns :: namespaces)
+                        |. Parser.symbol "." 
+                        |= Parser.variable
+                            { start = Char.isUpper
+                            , inner = Char.isAlphaNum
+                            , reserved = Set.empty
+                            }
+                        |> Parser.map Parser.Loop
+                    , Parser.succeed (List.reverse namespaces)
+                        |. Parser.oneOf
+                            [ Parser.token " "
+                            , Parser.token "\n"
+                            , Parser.end
+                            ]
+                        |> Parser.map Parser.Done
+                    ]
+            )
