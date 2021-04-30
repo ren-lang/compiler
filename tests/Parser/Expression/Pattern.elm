@@ -1,1 +1,0 @@
-module Parser.Expression.Pattern exposing (..)
