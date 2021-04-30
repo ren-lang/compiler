@@ -1,14 +1,14 @@
 {
     "type": "package",
-    "name": "cherry-script/compiler",
-    "summary": "The compiler for CherryScript.",
+    "name": "ren-lang/compiler",
+    "summary": "The compiler for Ren.",
     "license": "MIT",
     "version": "1.0.0",
     "exposed-modules": [
-        "Cherry.Compiler",
-        "Cherry.Data.Expression",
-        "Cherry.Data.Declaration",
-        "Cherry.Data.Module"
+        "Ren.Compiler",
+        "Ren.Data.Expression",
+        "Ren.Data.Declaration",
+        "Ren.Data.Module"
     ],
     "elm-version": "0.19.0 <= v < 0.20.0",
     "dependencies": {
