@@ -3,7 +3,7 @@
     "name": "ren-lang/compiler",
     "summary": "The compiler for Ren.",
     "license": "MIT",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "exposed-modules": [
         "Ren.Compiler",
         "Ren.Data.Expression",
