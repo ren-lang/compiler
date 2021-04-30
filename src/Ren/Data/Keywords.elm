@@ -1,4 +1,4 @@
-module Cherry.Data.Keywords exposing 
+module Ren.Data.Keywords exposing 
     ( all
     , substitute
     )
@@ -14,7 +14,7 @@ import Set exposing (Set)
 -- RESERVED WORDS --------------------------------------------------------------
 
 
-{-| A `Set` of all the keywords reserved by Cherry. So far that's:
+{-| A `Set` of all the keywords reserved by Ren. So far that's:
 
     Set.fromList
         [ "if", "then", "else" 
@@ -35,7 +35,7 @@ all =
 -- SUBSTITUTIONS ---------------------------------------------------------------
 
 
-{-| Most keywords in JavaScript are totally fine identifiers in Cherry, we still
+{-| Most keywords in JavaScript are totally fine identifiers in Ren, we still
 have to make sure none of those identifiers make their way into any compiled JS
 code so this function substitutes a JS keyword with a dollar-prefixed version.
 

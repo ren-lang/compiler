@@ -1,4 +1,4 @@
-module Cherry.Data.Declaration exposing 
+module Ren.Data.Declaration exposing 
     ( Declaration(..), Visibility(..), Binding(..)
     , function, variable
     , name, visibility
@@ -65,13 +65,13 @@ module Cherry.Data.Declaration exposing
 -- IMPORTS ---------------------------------------------------------------------
 
 
-import Cherry.Data.Expression as Expression exposing (Expression)
-import Cherry.Data.Expression.Pattern as Pattern
-import Cherry.Data.Keywords as Keywords
 import Json.Decode exposing (Decoder)
 import Json.Decode.Extra
 import Parser exposing (Parser, (|=), (|.))
 import Parser.Extra
+import Ren.Data.Expression as Expression exposing (Expression)
+import Ren.Data.Expression.Pattern as Pattern
+import Ren.Data.Keywords as Keywords
 
 
 -- TYPES -----------------------------------------------------------------------

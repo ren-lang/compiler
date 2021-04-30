@@ -1,4 +1,4 @@
-module Cherry.Compiler.Emit.ES6 exposing 
+module Ren.Compiler.Emit.ES6 exposing 
     ( fromModule
     , fromDeclaration
     , fromExpression
@@ -8,17 +8,17 @@ module Cherry.Compiler.Emit.ES6 exposing
 -- IMPORTS ---------------------------------------------------------------------
 
 
-import Cherry.Data.Declaration exposing (Declaration(..), Binding(..), Visibility(..))
-import Cherry.Data.Expression as Expression exposing (Expression(..), Identifier)
-import Cherry.Data.Expression exposing (Identifier)
-import Cherry.Data.Expression.Accessor exposing (Accessor(..))
-import Cherry.Data.Expression.Identifier exposing (Identifier(..))
-import Cherry.Data.Expression.Literal exposing (Literal(..))
-import Cherry.Data.Expression.Operator exposing (Operator(..))
-import Cherry.Data.Expression.Pattern exposing (Pattern(..))
-import Cherry.Data.Module exposing (Module(..))
-import Cherry.Data.Module.Import exposing (Import(..))
 import Dict
+import Ren.Data.Declaration exposing (Declaration(..), Binding(..), Visibility(..))
+import Ren.Data.Expression as Expression exposing (Expression(..), Identifier)
+import Ren.Data.Expression exposing (Identifier)
+import Ren.Data.Expression.Accessor exposing (Accessor(..))
+import Ren.Data.Expression.Identifier exposing (Identifier(..))
+import Ren.Data.Expression.Literal exposing (Literal(..))
+import Ren.Data.Expression.Operator exposing (Operator(..))
+import Ren.Data.Expression.Pattern exposing (Pattern(..))
+import Ren.Data.Module exposing (Module(..))
+import Ren.Data.Module.Import exposing (Import(..))
 import String.Extra
 
 
@@ -39,12 +39,12 @@ fromModule (Module { imports, declarations }) = String.trim """
 {-| -}
 defaultImports : String
 defaultImports = String.trim """
-import * as $Array from './.cherry/array.js'
-import * as $Compare from './.cherry/compare.js'
-import * as $Function from './.cherry/function.js'
-import * as $Logic from './.cherry/logic.js'
-import * as $Math from './.cherry/math.js'
-import * as $Object from './.cherry/object.js'
+import * as $Array from './.Ren/array.js'
+import * as $Compare from './.Ren/compare.js'
+import * as $Function from './.Ren/function.js'
+import * as $Logic from './.Ren/logic.js'
+import * as $Math from './.Ren/math.js'
+import * as $Object from './.Ren/object.js'
 """
 
 {-| -}

@@ -1,4 +1,4 @@
-module Cherry.Data.Module exposing 
+module Ren.Data.Module exposing 
     ( Module(..), Import
     , module_, import_
     , imports, exposes
@@ -56,14 +56,11 @@ module Cherry.Data.Module exposing
 -- IMPORTS ---------------------------------------------------------------------
 
 
-import Cherry.Data.Declaration as Declaration exposing 
-    ( Declaration
-    , Visibility(..)
-    )
-import Cherry.Data.Module.Import as Import
 import Json.Decode exposing (Decoder)
 import Json.Decode.Extra
 import Parser exposing (Parser, (|=), (|.))
+import Ren.Data.Declaration as Declaration exposing (Declaration, Visibility(..))
+import Ren.Data.Module.Import as Import
 
 
 

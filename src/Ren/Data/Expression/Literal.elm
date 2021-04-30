@@ -1,4 +1,4 @@
-module Cherry.Data.Expression.Literal exposing 
+module Ren.Data.Expression.Literal exposing 
     ( Literal(..)
     , coerceToNumber, coerceToInteger, coerceToString
     , decoder, primitiveDecoder
@@ -9,12 +9,12 @@ module Cherry.Data.Expression.Literal exposing
 -- IMPORTS ---------------------------------------------------------------------
 
 
-import Cherry.Data.Keywords as Keywords
 import Dict exposing (Dict)
 import Json.Decode exposing (Decoder)
 import Json.Decode.Extra
 import Parser exposing (Parser, (|=), (|.))
 import Parser.Extra
+import Ren.Data.Keywords as Keywords
 
 
 -- TYPES -----------------------------------------------------------------------

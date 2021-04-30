@@ -1,4 +1,4 @@
-module Cherry.Data.Expression.Operator exposing 
+module Ren.Data.Expression.Operator exposing 
     ( Operator(..)
     , decoder
     , parser

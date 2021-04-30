@@ -1,4 +1,4 @@
-module Cherry.Data.Module.Import exposing 
+module Ren.Data.Module.Import exposing 
     ( Import(..), import_
     , path, name, exposed
     , decoder
@@ -9,11 +9,11 @@ module Cherry.Data.Module.Import exposing
 -- IMPORTS ---------------------------------------------------------------------
 
 
-import Cherry.Data.Keywords as Keywords
 import Json.Decode exposing (Decoder)
 import Json.Decode.Extra
 import Parser exposing (Parser, (|=), (|.))
 import Parser.Extra
+import Ren.Data.Keywords as Keywords
 import Set
 
 

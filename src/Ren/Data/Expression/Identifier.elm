@@ -1,4 +1,4 @@
-module Cherry.Data.Expression.Identifier exposing
+module Ren.Data.Expression.Identifier exposing
     ( Identifier(..)
     , decoder
     , parser
@@ -8,11 +8,11 @@ module Cherry.Data.Expression.Identifier exposing
 -- IMPORTS ---------------------------------------------------------------------
 
 
-import Cherry.Data.Expression.Operator as Operator exposing (Operator)
-import Cherry.Data.Keywords as Keywords
 import Json.Decode exposing (Decoder)
 import Json.Decode.Extra
 import Parser exposing (Parser, (|=), (|.))
+import Ren.Data.Expression.Operator as Operator exposing (Operator)
+import Ren.Data.Keywords as Keywords
 import Set
 
 

@@ -1,4 +1,4 @@
-module Cherry.Compiler exposing 
+module Ren.Compiler exposing 
     ( run
     , Module, Declaration, Expression
     , parse, parseDeclaration, parseExpression
@@ -16,12 +16,12 @@ module Cherry.Compiler exposing
 ## Types
 
 This module aliases the main types that you might be interested in working with.
-See the appropriate modules (e.g [`Cherry.Data.Expression`](./Cherry-Data-Expression))
+See the appropriate modules (e.g [`Ren.Data.Expression`](./Ren-Data-Expression))
 for more documentation about that type and the things you might want to do with
 it.
 
 The alises are provided here as a convenience so you only need to import
-`Cherry.Compiler` if you don't want to do anything fancy!
+`Ren.Compiler` if you don't want to do anything fancy!
 
 @docs Module, Declaration, Expression
 
@@ -47,14 +47,14 @@ The alises are provided here as a convenience so you only need to import
 -- IMPORTS ---------------------------------------------------------------------
 
 
-import Cherry.Compiler.Optimise.Declaration as Declaration
-import Cherry.Compiler.Optimise.Expression as Expression
-import Cherry.Compiler.Emit.ES6 as ES6
-import Cherry.Data.Expression as Expression
-import Cherry.Data.Declaration as Declaration
-import Cherry.Data.Module as Module
 import Json.Decode
 import Parser
+import Ren.Compiler.Emit.ES6 as ES6
+import Ren.Compiler.Optimise.Declaration as Declaration
+import Ren.Compiler.Optimise.Expression as Expression
+import Ren.Data.Declaration as Declaration
+import Ren.Data.Expression as Expression
+import Ren.Data.Module as Module
 
 
 -- RUNNING THE COMPILER --------------------------------------------------------
@@ -67,7 +67,7 @@ and then emit the module as an ES6 JavaScript module.
 You can recreate this function yourself from a composition of the other functions
 exposed in this module:
 
-    import Cherry.Compiler exposing 
+    import Ren.Compiler exposing 
         ( parse
         , optimise
         , emit, Target(..)

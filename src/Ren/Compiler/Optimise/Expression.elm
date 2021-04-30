@@ -1,4 +1,4 @@
-module Cherry.Compiler.Optimise.Expression exposing
+module Ren.Compiler.Optimise.Expression exposing
     ( optimise
     )
 
@@ -6,12 +6,12 @@ module Cherry.Compiler.Optimise.Expression exposing
 -- IMPORTS ---------------------------------------------------------------------
 
 
-import Cherry.Data.Expression as Expression exposing (Expression(..))
-import Cherry.Data.Expression.Accessor exposing (Accessor(..))
-import Cherry.Data.Expression.Literal as Literal exposing (Literal(..))
-import Cherry.Data.Expression.Operator exposing (Operator(..))
 import Dict
 import List.Extra
+import Ren.Data.Expression as Expression exposing (Expression(..))
+import Ren.Data.Expression.Accessor exposing (Accessor(..))
+import Ren.Data.Expression.Literal as Literal exposing (Literal(..))
+import Ren.Data.Expression.Operator exposing (Operator(..))
 import Transform
 
 

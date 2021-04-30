@@ -1,4 +1,4 @@
-module Cherry.Data.Expression.Pattern exposing 
+module Ren.Data.Expression.Pattern exposing 
     ( Pattern(..)
     , decoder
     , parser
@@ -8,11 +8,11 @@ module Cherry.Data.Expression.Pattern exposing
 -- IMPORTS ---------------------------------------------------------------------
 
 
-import Cherry.Data.Expression.Literal as Literal exposing (Literal)
-import Cherry.Data.Keywords as Keywords
 import Json.Decode exposing (Decoder)
 import Json.Decode.Extra
 import Parser exposing (Parser, (|=), (|.))
+import Ren.Data.Expression.Literal as Literal exposing (Literal)
+import Ren.Data.Keywords as Keywords
 
 
 -- TYPES -----------------------------------------------------------------------

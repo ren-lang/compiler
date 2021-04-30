@@ -1,4 +1,4 @@
-module Cherry.Data.Expression exposing
+module Ren.Data.Expression exposing
     ( Expression(..), Accessor, Identifier, Literal, Operator, Pattern
     , local, scoped, operator, field
     , array, boolean, number, int, object, string
@@ -79,17 +79,17 @@ module Cherry.Data.Expression exposing
 -- IMPORTS ---------------------------------------------------------------------
 
 
-import Cherry.Data.Expression.Accessor as Accessor
-import Cherry.Data.Expression.Identifier as Identifier
-import Cherry.Data.Expression.Literal as Literal
-import Cherry.Data.Expression.Operator as Operator
-import Cherry.Data.Expression.Pattern as Pattern
 import Dict
 import Json.Decode exposing (Decoder)
 import Json.Decode.Extra
 import Parser exposing (Parser, (|=), (|.))
 import Pratt
-import Cherry.Data.Expression.Identifier exposing (Identifier)
+import Ren.Data.Expression.Accessor as Accessor
+import Ren.Data.Expression.Identifier as Identifier
+import Ren.Data.Expression.Identifier exposing (Identifier)
+import Ren.Data.Expression.Literal as Literal
+import Ren.Data.Expression.Operator as Operator
+import Ren.Data.Expression.Pattern as Pattern
 
 
 -- TYPES -----------------------------------------------------------------------
@@ -181,7 +181,7 @@ type alias Literal =
     Literal.Literal Expression
 
 {-| Unlike a language like Haskell or PureScript, we don't allow custom operators.
-Below is a list of all the operators Cherry has, and their names. Refer to the
+Below is a list of all the operators Ren has, and their names. Refer to the
 language docs if you want to know what all of these do!
 
     -- Functions
@@ -274,7 +274,7 @@ field name =
 -- OPERATOR HELPERS ------------------------------------------------------------
 
 
-{-| Convert an `Operator` to its symbollic representation in Cherry code. -}
+{-| Convert an `Operator` to its symbollic representation in Ren code. -}
 operatorToSymbol : Operator -> String
 operatorToSymbol op =
     case op of
@@ -298,7 +298,7 @@ operatorToSymbol op =
         Operator.Cons      -> "::"
         Operator.Join      -> "++"
 
-{-| Create an `Operator` from its symbollic representation in Cherry code. -}
+{-| Create an `Operator` from its symbollic representation in Ren code. -}
 operatorFromSymbol : String -> Maybe Operator
 operatorFromSymbol op =
     case op of
@@ -393,7 +393,7 @@ number f =
     Literal <| Literal.Number f
 
 {-| Create a number literal expression from an Elm Int. Remember numbers in
-Cherry are always floating-point, so this will convert the argument to an Elm
+Ren are always floating-point, so this will convert the argument to an Elm
 Float first.
 -}
 int : Int -> Expression
@@ -464,7 +464,7 @@ references name_ expression =
 
 
 {-| Parse an `Expression` from an Elm JSON `Value`. You might find this handy if
-you're working with some tooling that emits a Cherry AST as JSON. -}
+you're working with some tooling that emits a Ren AST as JSON. -}
 fromJSON : Json.Decode.Value -> Result Json.Decode.Error Expression
 fromJSON json =
     Json.Decode.decodeValue decoder json
@@ -596,7 +596,7 @@ literalDecoder =
 -- PARSING SOURCE CODE ---------------------------------------------------------
 
 
-{-| Parse an `Expression` from some Cherry source code. It doesn't seem all that
+{-| Parse an `Expression` from some Ren source code. It doesn't seem all that
 likely you'll need to use this over `Declaration.fromSource` or `Module.fromSource`
 but just in case it is, here you go. -}
 fromSource : String -> Result (List Parser.DeadEnd) Expression
