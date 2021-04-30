@@ -3,7 +3,7 @@
     "name": "ren-lang/compiler",
     "summary": "The compiler for Ren.",
     "license": "MIT",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "exposed-modules": [
         "Ren.Compiler",
         "Ren.Data.Expression",
@@ -18,5 +18,7 @@
         "elm/json": "1.1.3 <= v < 2.0.0",
         "elm/parser": "1.1.0 <= v < 2.0.0"
     },
-    "test-dependencies": {}
+    "test-dependencies": {
+        "elm-explorations/test": "1.2.0 <= v < 2.0.0"
+    }
 }
