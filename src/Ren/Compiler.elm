@@ -8,7 +8,33 @@ module Ren.Compiler exposing
     )
 
 
-{-| 
+{-| ## Table of Contents
+
+* Running The Compiler
+    * [run](#run)
+* Types
+    * [Module](#Module)
+    * [Declaration](#Declaration)
+    * [Expression](#Expression)
+* Parsing
+    * [parse](#parse)
+    * [parseDeclaration](#parseDeclaration)
+    * [parseExpression](#parseExpression)
+    * [decode](#decode)
+    * [decodeDeclaration](#decodeDeclaration)
+    * [decodeExpression](#decodeExpression)
+* Optimisation
+    * [optimise](#optimise)
+    * [optimiseDeclaration](#optimiseDeclaration)
+    * [optimiseExpression](#optimiseExpression)
+* Emitting Target Code
+    * [Target](#Target)
+    * [emit](#emit)
+    * [emitDeclaration](#emitDeclaration)
+    * [emitExpression](#emitExpression)
+
+---
+## Running The Compiler
 
 @docs run
 
