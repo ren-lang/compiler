@@ -317,6 +317,7 @@ variableParser =
             , reserved = Keywords.all
             }
         |. Parser.Extra.spaces
+        |. Parser.symbol "="
         |. Parser.spaces
         |= Expression.parser
         |. Parser.spaces
