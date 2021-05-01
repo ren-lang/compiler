@@ -10,6 +10,7 @@ import Dict
 import List.Extra
 import Ren.Data.Expression as Expression exposing (Expression(..))
 import Ren.Data.Expression.Accessor exposing (Accessor(..))
+import Ren.Data.Expression.Identifier exposing (Identifier(..))
 import Ren.Data.Expression.Literal as Literal exposing (Literal(..))
 import Ren.Data.Expression.Operator exposing (Operator(..))
 import Transform
@@ -130,6 +131,22 @@ constantFold expression =
             Maybe.map2 Dict.get (Literal.coerceToString s) (Just fields)
                 |> Maybe.andThen identity
                 |> Maybe.map (\obj -> Access obj accessors)
+
+        -- APPLICATION ---------------------------------------------------------
+
+        -- When using the function form of an object field accessor `.field obj`
+        -- we can simplify that to just plain dot notation as long as the argument
+        -- is an identifier (eg not a complicated expression)
+        Application (Identifier (Field key)) [ Identifier id ] ->
+            Access (Identifier id) [ Fixed key ]
+                |> Just
+
+        -- When using the function form of an object field accessor `.field obj`
+        -- we can simplify that to just plain dot notation as long as the argument
+        -- is an identifier (eg not a complicated expression)
+        Application (Identifier (Field key)) [ Literal obj ] ->
+            Access (Literal obj) [ Fixed key ]
+                |> Just
 
         -- CONDITIONAL ---------------------------------------------------------
 
