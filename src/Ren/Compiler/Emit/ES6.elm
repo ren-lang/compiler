@@ -432,7 +432,7 @@ fromIdentifier identifier =
             "$Array.join"
 
         Field fieldName ->
-            "$Object.get {fieldName}"
+            "$Object.get ('{fieldName}')"
                 |> String.replace "{fieldName}" fieldName
 
 
