@@ -78,6 +78,7 @@ import Parser
 import Ren.Compiler.Emit.ES6 as ES6
 import Ren.Compiler.Optimise.Declaration as Declaration
 import Ren.Compiler.Optimise.Expression as Expression
+import Ren.Compiler.Optimise.Module as Module
 import Ren.Data.Declaration as Declaration
 import Ren.Data.Expression as Expression
 import Ren.Data.Module as Module
@@ -186,8 +187,8 @@ decodeExpression =
 
 {-| -}
 optimise : Module -> Module
-optimise (Module.Module ({ declarations } as data)) =
-    Module.Module { data | declarations = List.map Declaration.optimise declarations }
+optimise =
+    Module.optimise
 
 
 {-| -}
