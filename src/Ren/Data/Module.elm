@@ -2,6 +2,7 @@ module Ren.Data.Module exposing
     ( Module(..), Import
     , module_, import_
     , imports, exposes
+    , addImport, addDefaultImports
     , fromJSON, decoder
     , fromSource, parser
     )
@@ -19,6 +20,9 @@ module Ren.Data.Module exposing
     * Queries
         * [imports](#imports)
         * [exposes](#exposes)
+    * Modifications
+        * [addImport](#addImport)
+        * [addDefaultImports](#addDefaultImports)
 * Parsing
     * [fromJSON](#fromJSON)
     * [decoder](#decoder)
@@ -115,7 +119,7 @@ import_ =
     Import.import_
 
 
--- HELPERS ---------------------------------------------------------------------
+-- QUERIES ---------------------------------------------------------------------
 
 
 {-| Check if a module imports a function or variable with the given name. -}
@@ -133,6 +137,30 @@ exposes name (Module data) =
         |> List.filter (Declaration.visibility >> (==) Public)
         |> List.map Declaration.name
         |> List.member name
+
+
+-- MODIFICATIONS ---------------------------------------------------------------
+
+
+{-| -}
+addImport : Import -> Module -> Module
+addImport import__ (Module data) =
+    Module { data | imports = import__ :: data.imports }
+
+{-| -}
+addDefaultImports : Module -> Module
+addDefaultImports (Module data) =
+    let
+        defaultImports =
+            [ import_ "ren-stdlib/array.js" ["$Array"] []
+            , import_ "ren-stdlib/compare.js" ["$Compare"] []
+            , import_ "ren-stdlib/function.js" ["$Function"] []
+            , import_ "ren-stdlib/logic.js" ["$Logic"] []
+            , import_ "ren-stdlib/math.js" ["$Math"] []
+            , import_ "ren-stdlib/object.js"["$Object"] []
+            ]
+    in
+    Module { data | imports = defaultImports ++ data.imports }
 
 
 -- PARSING JSON ----------------------------------------------------------------
@@ -163,6 +191,7 @@ decoder =
 fromSource : String -> Result (List Parser.DeadEnd) Module
 fromSource source =
     Parser.run parser source
+        |> Result.map addDefaultImports
 
 {-| -}
 parser : Parser Module
