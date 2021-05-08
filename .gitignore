@@ -12,3 +12,4 @@ generated-docs/
 .vscode/
 .cache/
 bin/
+.DS_Store
