@@ -30,24 +30,12 @@ import String.Extra
 {-| -}
 fromModule : Module -> String
 fromModule (Module { imports, declarations }) = String.trim """
-{defaultImports}
 {imports}
 
 {declarations}
-""" |> String.replace "{defaultImports}" defaultImports
-    |> String.replace "{imports}" (List.map fromImport imports |> String.join "\n")
+""" |> String.replace "{imports}" (List.map fromImport imports |> String.join "\n")
     |> String.replace "{declarations}" (List.map fromDeclaration declarations |> String.join "\n")
-
-{-| -}
-defaultImports : String
-defaultImports = String.trim """
-import * as $Array from './.Ren/array.js'
-import * as $Compare from './.Ren/compare.js'
-import * as $Function from './.Ren/function.js'
-import * as $Logic from './.Ren/logic.js'
-import * as $Math from './.Ren/math.js'
-import * as $Object from './.Ren/object.js'
-"""
+    |> String.trimLeft
 
 {-| -}
 fromImport : Import -> String
