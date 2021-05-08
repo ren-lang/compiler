@@ -3,7 +3,7 @@ module Ren.Data.Expression exposing
     , local, scoped, operator, field
     , array, boolean, number, int, object, string
     , operatorFromName, operatorToName, operatorFromSymbol, operatorToSymbol
-    , references
+    , referencesName, referencesScopedName, referencesModule
     , fromJSON, decoder
     , fromSource, parser
     )
@@ -415,16 +415,16 @@ string s =
 
 
 {-| -}
-references : String -> Expression -> Bool
-references name_ expression =
+referencesName : String -> Expression -> Bool
+referencesName name_ expression =
     case expression of
         Access expr accessors ->
-            references name_ expr
+            referencesName name_ expr
                 || List.any
                     (\accessor ->
                         case accessor of
                             Accessor.Computed e ->
-                                references name_ e
+                                referencesName name_ e
 
                             Accessor.Fixed _ ->
                                 False
@@ -432,16 +432,16 @@ references name_ expression =
                     accessors
     
         Application func args ->
-            references name_ func
-                || List.any (references name_) args
+            referencesName name_ func
+                || List.any (referencesName name_) args
 
         Comment _ ->
             False
 
         Conditional predicate true false ->
-            references name_ predicate
-                || references name_ true
-                || references name_ false
+            referencesName name_ predicate
+                || referencesName name_ true
+                || referencesName name_ false
 
         Identifier (Identifier.Local id) ->
             id == name_
@@ -450,11 +450,158 @@ references name_ expression =
             False
 
         Infix _ lhs rhs ->
-            references name_ lhs 
-                || references name_ rhs
+            referencesName name_ lhs 
+                || referencesName name_ rhs
 
         Lambda _ body ->
-            references name_ body
+            referencesName name_ body
+
+        Literal _ ->
+            False
+
+{-| -}
+referencesScopedName : List String -> String -> Expression -> Bool
+referencesScopedName namespace_ name_ expression =
+    case expression of
+        Access expr accessors ->
+            referencesScopedName namespace_ name_ expr
+                || List.any
+                    (\accessor ->
+                        case accessor of
+                            Accessor.Computed e ->
+                                referencesScopedName namespace_ name_ e
+
+                            Accessor.Fixed _ ->
+                                False
+                    )
+                    accessors
+    
+        Application func args ->
+            referencesScopedName namespace_ name_ func
+                || List.any (referencesScopedName namespace_ name_) args
+
+        Comment _ ->
+            False
+
+        Conditional predicate true false ->
+            referencesScopedName namespace_ name_ predicate
+                || referencesScopedName namespace_ name_ true
+                || referencesScopedName namespace_ name_ false
+
+        Identifier (Identifier.Scoped ns id) ->
+            ns == namespace_ && id == name_
+
+        Identifier _ ->
+            False
+
+        Infix _ lhs rhs ->
+            referencesScopedName namespace_ name_ lhs 
+                || referencesScopedName namespace_ name_ rhs
+
+        Lambda _ body ->
+            referencesScopedName namespace_ name_ body
+
+        Literal _ ->
+            False
+
+{-| -}
+referencesModule : List String -> Expression -> Bool
+referencesModule namespace_ expression =
+    case expression of
+        Access expr accessors ->
+            referencesModule namespace_ expr
+                || List.any
+                    (\accessor ->
+                        case accessor of
+                            Accessor.Computed e ->
+                                referencesModule namespace_ e
+
+                            Accessor.Fixed _ ->
+                                False
+                    )
+                    accessors
+    
+        Application func args ->
+            referencesModule namespace_ func
+                || List.any (referencesModule namespace_) args
+
+        Comment _ ->
+            False
+
+        Conditional predicate true false ->
+            referencesModule namespace_ predicate
+                || referencesModule namespace_ true
+                || referencesModule namespace_ false
+
+        Identifier (Identifier.Scoped ns _) ->
+            ns == namespace_
+
+        Identifier (Identifier.Operator Operator.Pipe) ->
+            ["$Function"] == namespace_
+
+        Identifier (Identifier.Operator Operator.Compose) ->
+            ["$Function"] == namespace_
+
+        Identifier (Identifier.Operator Operator.Discard) ->
+            ["$Function"] == namespace_
+
+        Identifier (Identifier.Operator Operator.Add) ->
+            ["$Math"] == namespace_
+
+        Identifier (Identifier.Operator Operator.Sub) ->
+            ["$Math"] == namespace_
+
+        Identifier (Identifier.Operator Operator.Mul) ->
+            ["$Math"] == namespace_
+
+        Identifier (Identifier.Operator Operator.Div) ->
+            ["$Math"] == namespace_
+
+        Identifier (Identifier.Operator Operator.Pow) ->
+            ["$Math"] == namespace_
+
+        Identifier (Identifier.Operator Operator.Mod) ->
+            ["$Math"] == namespace_
+
+        Identifier (Identifier.Operator Operator.Eq) ->
+            ["$Comparison"] == namespace_
+
+        Identifier (Identifier.Operator Operator.NotEq) ->
+            ["$Comparison"] == namespace_
+
+        Identifier (Identifier.Operator Operator.Lt) ->
+            ["$Comparison"] == namespace_
+
+        Identifier (Identifier.Operator Operator.Lte) ->
+            ["$Comparison"] == namespace_
+
+        Identifier (Identifier.Operator Operator.Gt) ->
+            ["$Comparison"] == namespace_
+
+        Identifier (Identifier.Operator Operator.Gte) ->
+            ["$Comparison"] == namespace_
+
+        Identifier (Identifier.Operator Operator.And) ->
+            ["$Logic"] == namespace_
+
+        Identifier (Identifier.Operator Operator.Or) ->
+            ["$Logic"] == namespace_
+
+        Identifier (Identifier.Operator Operator.Cons) ->
+            ["$Array"] == namespace_
+
+        Identifier (Identifier.Operator Operator.Join) ->
+            ["$Array"] == namespace_
+
+        Identifier _ ->
+            False
+
+        Infix _ lhs rhs ->
+            referencesModule namespace_ lhs 
+                || referencesModule namespace_ rhs
+
+        Lambda _ body ->
+            referencesModule namespace_ body
 
         Literal _ ->
             False
