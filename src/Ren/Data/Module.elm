@@ -47,6 +47,10 @@ module Ren.Data.Module exposing
 
 @docs imports, exposes
 
+### Modifications
+
+@docs addImport, addDefaultImports
+
 ---
 
 ## Parsing

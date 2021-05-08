@@ -26,6 +26,10 @@ module Ren.Data.Declaration exposing
     * Visibility Helpers
         * [expose](#expose)
         * [conceal](#conceal)
+    * Queries
+        * [referencesName](#referencesName)
+        * [referencesScopedName](#referencesScopedName)
+        * [referencesModule](#referencesModule)
 * Parsing
     * [fromJSON](#fromJSON)
     * [decoder](#decoder)
@@ -51,6 +55,10 @@ module Ren.Data.Declaration exposing
 ### Visibility Helpers
 
 @docs expose, conceal
+
+### Queries
+
+@docs referencesName, referencesScopedName, referencesModule
 
 ---
 ## Parsing

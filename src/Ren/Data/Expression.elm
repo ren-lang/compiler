@@ -36,7 +36,9 @@ module Ren.Data.Expression exposing
         * [operatorFromSymbol](#operatorFromSymbol)
         * [operatorToSymbol](#operatorToSymbol)
     * Queries
-        * [references](#references)
+        * [referencesName](#referencesName)
+        * [referencesScopedName](#referencesScopedName)
+        * [refernecesModule](#referencesModule)
 * Parsing
     * [fromJSON](#fromJSON)
     * [decoder](#decoder)
@@ -65,7 +67,7 @@ module Ren.Data.Expression exposing
 
 ### Queries
 
-@docs references
+@docs referencesName, referencesScopedName, referencesModule
 
 ---
 ## Parsing
