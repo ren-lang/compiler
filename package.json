@@ -1,23 +1,14 @@
 {
-  "name": "cherry",
+  "name": "ren-compiler",
   "version": "1.0.0",
   "description": "A functional scripting language for the Web.",
-  "main": "src/cli.js",
-  "bin": "bin/cherry",
   "scripts": {
-    "build": "parcel build src/cli.js --target node --out-dir bin --out-file cli.js --no-content-hash --no-source-maps",
-    "build:dev": "parcel build src/cli.js --target node --out-dir bin --out-file cli.dev.js --no-content-hash --no-source-maps --no-minify",
-    "build:all": "npm run build && npm run build:dev",
-    "link": "npm link",
-    "unlink": "npm unlink cherry",
-    "start": "npm run build && ./bin/cherry",
-    "start:dev": "npm run build:dev && NODE_ENV=development ./bin/cherry build ./example/test.cherry",
     "test": "elm-test",
     "docs": "elm-doc-preview"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/cherry-script/cherry-compiler.git"
+    "url": "git+https://github.com/ren-lang/ren-compiler.git"
   },
   "keywords": [
     "programming-language",
@@ -28,15 +19,9 @@
   "author": "Andy Thompson",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/cherry-script/cherry-compiler/issues"
+    "url": "https://github.com/ren-lang/ren-compiler/issues"
   },
-  "homepage": "https://github.com/cherry-script/cherry-compiler#readme",
-  "dependencies": {
-    "node-elm-compiler": "^5.0.5",
-    "parcel-bundler": "^1.12.5",
-    "prettier": "^2.2.1",
-    "sade": "^1.7.4"
-  },
+  "homepage": "https://github.com/ren-lang/ren-compiler#readme",
   "devDependencies": {
     "elm-doc-preview": "^5.0.5",
     "elm-test": "*"
