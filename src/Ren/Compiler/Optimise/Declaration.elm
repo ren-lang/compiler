@@ -32,9 +32,9 @@ import Ren.Data.Expression.Pattern exposing (Pattern(..))
 optimise : Declaration -> Declaration
 optimise =
     apply 
-        [ removeUnusedBindings
+        [ simplifyBody
         , simplifyBindings
-        , simplifyBody 
+        , removeUnusedBindings
         ]
 
 {-| -}
@@ -147,13 +147,13 @@ isPatternUsed body pattern =
             List.any (isPatternUsed body) patterns
 
         Name name ->
-            Expression.references name body
+            Expression.referencesName name body
 
         ObjectDestructure fields ->
             List.any
                 (\( key, val ) ->
                     if val == Nothing then
-                        Expression.references key body
+                        Expression.referencesName key body
 
                     else
                         Maybe.map (isPatternUsed body) val
