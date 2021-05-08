@@ -3,10 +3,10 @@ module Ren.Data.Declaration exposing
     , function, variable
     , name, visibility
     , expose, conceal
+    , referencesName, referencesScopedName, referencesModule
     , fromJSON, decoder
     , fromSource, parser
     )
-
 
 {-| ## Table of Contents
 
@@ -180,6 +180,59 @@ conceal declaration =
 
         Variable data ->
             Variable { data | visibility = Visibility.Private }
+
+
+-- QUERIES ---------------------------------------------------------------------
+
+
+{-| -}
+referencesName : String -> Declaration -> Bool
+referencesName name_ declaration =
+    let
+        bindingReferencesName (Binding.Binding _ expr) =
+            Expression.referencesName name_ expr
+    in
+    case declaration of
+        Function { body, bindings } ->
+            Expression.referencesName name_ body 
+                || List.any bindingReferencesName bindings
+
+        Variable { body, bindings } ->
+            Expression.referencesName name_ body 
+                || List.any bindingReferencesName bindings
+
+{-| -}
+referencesScopedName : List String -> String -> Declaration -> Bool
+referencesScopedName namespace_ name_ declaration =
+    let
+        bindingReferencesScopedName (Binding.Binding _ expr) =
+            Expression.referencesScopedName namespace_ name_ expr
+    in
+    case declaration of
+        Function { body, bindings } ->
+            Expression.referencesScopedName namespace_ name_ body 
+                || List.any bindingReferencesScopedName bindings
+
+        Variable { body, bindings } ->
+            Expression.referencesScopedName namespace_ name_ body 
+                || List.any bindingReferencesScopedName bindings
+
+{-| -}
+referencesModule : List String -> Declaration -> Bool
+referencesModule namespace_ declaration =
+    let
+        bindingReferencesModule (Binding.Binding _ expr) =
+            Expression.referencesModule namespace_ expr
+    in
+    case declaration of
+        Function { body, bindings } ->
+            Expression.referencesModule namespace_ body 
+                || List.any bindingReferencesModule bindings
+
+        Variable { body, bindings } ->
+            Expression.referencesModule namespace_ body 
+                || List.any bindingReferencesModule bindings
+
 
 
 -- PARSING JSON ----------------------------------------------------------------
