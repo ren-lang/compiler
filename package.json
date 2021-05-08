@@ -1,6 +1,6 @@
 {
   "name": "ren-compiler",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "A functional scripting language for the Web.",
   "scripts": {
     "test": "elm-test",
