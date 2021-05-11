@@ -246,7 +246,7 @@ underscore on a simple name pattern:
 
 -}
 type alias Pattern =
-    Pattern.Pattern Expression
+    Pattern.Pattern
 
 
 -- IDENITIFER HELPERS ----------------------------------------------------------
@@ -800,12 +800,12 @@ accessParser prattConfig =
             , identifierParser
             , literalParser
             ]
-        |= Accessor.parser prattConfig
+        |= Accessor.parser lazyParser
         |= Parser.loop []
             (\accessors ->
                 Parser.oneOf
                     [ Parser.succeed (\accessor -> accessor :: accessors)
-                        |= Accessor.parser prattConfig
+                        |= Accessor.parser lazyParser
                         |> Parser.map Parser.Loop
                     , Parser.succeed (List.reverse accessors)
                         |> Parser.map Parser.Done

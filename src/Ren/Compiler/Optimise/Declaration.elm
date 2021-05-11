@@ -140,7 +140,7 @@ isBindingUsed body bindings (Binding pattern _) =
         || List.any (\(Binding _ expr) -> isPatternUsed expr pattern) bindings
 
 {-| -}
-isPatternUsed : Expression -> Pattern Expression -> Bool
+isPatternUsed : Expression -> Pattern -> Bool
 isPatternUsed body pattern =
     case pattern of
         ArrayDestructure patterns ->

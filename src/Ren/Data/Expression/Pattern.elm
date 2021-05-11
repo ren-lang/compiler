@@ -1,38 +1,44 @@
-module Ren.Data.Expression.Pattern exposing 
+module Ren.Data.Expression.Pattern exposing
     ( Pattern(..)
     , decoder
     , parser
     )
 
-
 -- IMPORTS ---------------------------------------------------------------------
-
 
 import Json.Decode exposing (Decoder)
 import Json.Decode.Extra
-import Parser exposing (Parser, (|=), (|.))
+import Parser exposing ((|.), (|=), Parser)
 import Ren.Data.Expression.Literal as Literal exposing (Literal)
 import Ren.Data.Keywords as Keywords
+
 
 
 -- TYPES -----------------------------------------------------------------------
 
 
 {-| -}
-type Pattern expression
-    = ArrayDestructure (List (Pattern expression))
+type Pattern
+    = ArrayDestructure (List Pattern)
     | Name String
-    | ObjectDestructure (List ( String, Maybe (Pattern expression) ))
-    | Value (Literal expression)
+    | ObjectDestructure (List ( String, Maybe Pattern ))
+      -- What is this `Never`? The Literal type is parameterised to cover object
+      -- and array literals that can contain other expressions. By using `Never`
+      -- we tell Elm's type system that we can *never* have those types of literals
+      -- in a Value pattern. In other words, we only support primitive literals like
+      -- strings and numbers.
+      -- Pretty nifty trick, eh!
+    | Value (Literal Never)
     | Wildcard (Maybe String)
+
 
 
 -- PARSING JSON ----------------------------------------------------------------
 
 
 {-| -}
-decoder : Decoder (Pattern expression)
-decoder  =
+decoder : Decoder Pattern
+decoder =
     Json.Decode.oneOf
         [ arrayDestructureDecoder
         , nameDecoder
@@ -41,13 +47,15 @@ decoder  =
         , wildcardDecoder
         ]
 
+
 {-| -}
-lazyDecoder : Decoder (Pattern expression)
+lazyDecoder : Decoder Pattern
 lazyDecoder =
     Json.Decode.lazy (\_ -> decoder)
 
+
 {-| -}
-arrayDestructureDecoder : Decoder (Pattern expression)
+arrayDestructureDecoder : Decoder Pattern
 arrayDestructureDecoder =
     Json.Decode.Extra.taggedObject "Pattern.ArrayDestructure" <|
         Json.Decode.map ArrayDestructure
@@ -55,15 +63,17 @@ arrayDestructureDecoder =
                 Json.Decode.list lazyDecoder
             )
 
+
 {-| -}
-nameDecoder : Decoder (Pattern expression)
+nameDecoder : Decoder Pattern
 nameDecoder =
     Json.Decode.Extra.taggedObject "Pattern.Name" <|
         Json.Decode.map Name
             (Json.Decode.field "name" Json.Decode.string)
 
+
 {-| -}
-objectDestructureDecoder : Decoder (Pattern expression)
+objectDestructureDecoder : Decoder Pattern
 objectDestructureDecoder =
     Json.Decode.Extra.taggedObject "Pattern.ObjectDestructure" <|
         Json.Decode.map ObjectDestructure
@@ -76,15 +86,17 @@ objectDestructureDecoder =
                         )
             )
 
+
 {-| -}
-valueDecoder : Decoder (Pattern expression)
+valueDecoder : Decoder Pattern
 valueDecoder =
     Json.Decode.Extra.taggedObject "Pattern.Value" <|
         Json.Decode.map Value
             (Json.Decode.field "value" Literal.primitiveDecoder)
 
+
 {-| -}
-wildcardDecoder : Decoder (Pattern expression)
+wildcardDecoder : Decoder Pattern
 wildcardDecoder =
     Json.Decode.Extra.taggedObject "Pattern.Wildcard" <|
         Json.Decode.map Wildcard
@@ -93,11 +105,12 @@ wildcardDecoder =
             )
 
 
+
 -- PARSING SOURCE --------------------------------------------------------------
 
 
 {-| -}
-parser : Parser (Pattern expression)
+parser : Parser Pattern
 parser =
     Parser.oneOf
         [ arrayDestructureParser
@@ -107,13 +120,15 @@ parser =
         , wildcardParser
         ]
 
+
 {-| -}
-lazyParser : Parser (Pattern expression)
+lazyParser : Parser Pattern
 lazyParser =
     Parser.lazy (\_ -> parser)
 
+
 {-| -}
-arrayDestructureParser : Parser (Pattern expression)
+arrayDestructureParser : Parser Pattern
 arrayDestructureParser =
     Parser.succeed ArrayDestructure
         |= Parser.sequence
@@ -125,8 +140,9 @@ arrayDestructureParser =
             , trailing = Parser.Forbidden
             }
 
+
 {-| -}
-nameParser : Parser (Pattern expression)
+nameParser : Parser Pattern
 nameParser =
     Parser.succeed Name
         |= Parser.variable
@@ -135,8 +151,9 @@ nameParser =
             , reserved = Keywords.all
             }
 
+
 {-| -}
-objectDestructureParser : Parser (Pattern expression)
+objectDestructureParser : Parser Pattern
 objectDestructureParser =
     Parser.succeed ObjectDestructure
         |= Parser.sequence
@@ -162,14 +179,16 @@ objectDestructureParser =
             , trailing = Parser.Forbidden
             }
 
+
 {-| -}
-valueParser : Parser (Pattern expression)
+valueParser : Parser Pattern
 valueParser =
     Parser.succeed Value
         |= Literal.primitiveParser
 
+
 {-| -}
-wildcardParser : Parser (Pattern expression)
+wildcardParser : Parser Pattern
 wildcardParser =
     Parser.succeed Wildcard
         |. Parser.symbol "_"
