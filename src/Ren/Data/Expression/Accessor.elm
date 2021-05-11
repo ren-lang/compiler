@@ -11,7 +11,6 @@ module Ren.Data.Expression.Accessor exposing
 import Json.Decode exposing (Decoder)
 import Json.Decode.Extra
 import Parser exposing (Parser, (|=), (|.))
-import Pratt
 import Set
 
 
@@ -53,20 +52,20 @@ fixedAccessorDecoder =
 
 
 {-| -}
-parser : Pratt.Config expression -> Parser (Accessor expression)
-parser prattConfig =
+parser : Parser expression -> Parser (Accessor expression)
+parser expressionParser =
     Parser.oneOf
-        [ computedAccessorParser prattConfig
+        [ computedAccessorParser expressionParser
         , fixedAccessorParser
         ]
 
 {-| -}
-computedAccessorParser : Pratt.Config expression -> Parser (Accessor expression)
-computedAccessorParser prattConfig =
+computedAccessorParser : Parser expression -> Parser (Accessor expression)
+computedAccessorParser expressionParser =
     Parser.succeed Computed
         |. Parser.symbol "["
         |. Parser.spaces 
-        |= Pratt.subExpression 0 prattConfig
+        |= expressionParser
         |. Parser.spaces
         |. Parser.symbol "]"
 
