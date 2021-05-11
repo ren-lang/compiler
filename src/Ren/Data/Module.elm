@@ -1,35 +1,35 @@
-module Ren.Data.Module exposing 
+module Ren.Data.Module exposing
     ( Module(..), Import
     , module_, import_
     , imports, exposes
-    , addImport, addDefaultImports
+    , addImport
     , fromJSON, decoder
     , fromSource, parser
     )
 
-
 {-| Table of Contents
 
-* Types
-    * [Module](#Module)
-    * [Import](#Import)
-* Helpers
-    * Constructors
-        * [module_](#module_)
-        * [import_](#import_)
-    * Queries
-        * [imports](#imports)
-        * [exposes](#exposes)
-    * Modifications
-        * [addImport](#addImport)
-        * [addDefaultImports](#addDefaultImports)
-* Parsing
-    * [fromJSON](#fromJSON)
-    * [decoder](#decoder)
-    * [fromSource](#fromSource)
-    * [parser](#parser)
+  - Types
+      - [Module](#Module)
+      - [Import](#Import)
+  - Helpers
+      - Constructors
+          - [module\_](#module_)
+          - [import\_](#import_)
+      - Queries
+          - [imports](#imports)
+          - [exposes](#exposes)
+      - Modifications
+          - [addImport](#addImport)
+          - [addDefaultImports](#addDefaultImports)
+  - Parsing
+      - [fromJSON](#fromJSON)
+      - [decoder](#decoder)
+      - [fromSource](#fromSource)
+      - [parser](#parser)
 
 ---
+
 
 ## Types
 
@@ -37,21 +37,26 @@ module Ren.Data.Module exposing
 
 ---
 
+
 ## Helpers
+
 
 ### Constructors
 
 @docs module_, import_
 
+
 ### Queries
 
 @docs imports, exposes
+
 
 ### Modifications
 
 @docs addImport, addDefaultImports
 
 ---
+
 
 ## Parsing
 
@@ -60,13 +65,11 @@ module Ren.Data.Module exposing
 
 -}
 
-
 -- IMPORTS ---------------------------------------------------------------------
-
 
 import Json.Decode exposing (Decoder)
 import Json.Decode.Extra
-import Parser exposing (Parser, (|=), (|.))
+import Parser exposing ((|.), (|=), Parser)
 import Ren.Data.Declaration as Declaration exposing (Declaration)
 import Ren.Data.Declaration.Visibility exposing (Visibility(..))
 import Ren.Data.Module.Import as Import
@@ -83,7 +86,8 @@ type Module
         , declarations : List Declaration
         }
 
-{-| Imports can take a few different shapes. 
+
+{-| Imports can take a few different shapes.
 
 They can be aliased:
 
@@ -102,8 +106,9 @@ Or neither:
     import 'foo/bar'
 
 -}
-type alias Import
-    = Import.Import
+type alias Import =
+    Import.Import
+
 
 
 -- CONSTRUCTORS ----------------------------------------------------------------
@@ -117,16 +122,19 @@ module_ imports_ declarations =
         , declarations = declarations
         }
 
+
 {-| -}
 import_ : String -> List String -> List String -> Import
 import_ =
     Import.import_
 
 
+
 -- QUERIES ---------------------------------------------------------------------
 
 
-{-| Check if a module imports a function or variable with the given name. -}
+{-| Check if a module imports a function or variable with the given name.
+-}
 imports : String -> Module -> Bool
 imports name (Module data) =
     data.imports
@@ -134,13 +142,15 @@ imports name (Module data) =
         |> List.any (List.member name)
 
 
-{-| Check if a module exposes a function or variable with the given name. -}
+{-| Check if a module exposes a function or variable with the given name.
+-}
 exposes : String -> Module -> Bool
 exposes name (Module data) =
     data.declarations
         |> List.filter (Declaration.visibility >> (==) Public)
         |> List.map Declaration.name
         |> List.member name
+
 
 
 -- MODIFICATIONS ---------------------------------------------------------------
@@ -151,20 +161,6 @@ addImport : Import -> Module -> Module
 addImport import__ (Module data) =
     Module { data | imports = import__ :: data.imports }
 
-{-| -}
-addDefaultImports : Module -> Module
-addDefaultImports (Module data) =
-    let
-        defaultImports =
-            [ import_ "ren-stdlib/array.js" ["$Array"] []
-            , import_ "ren-stdlib/compare.js" ["$Compare"] []
-            , import_ "ren-stdlib/function.js" ["$Function"] []
-            , import_ "ren-stdlib/logic.js" ["$Logic"] []
-            , import_ "ren-stdlib/math.js" ["$Math"] []
-            , import_ "ren-stdlib/object.js"["$Object"] []
-            ]
-    in
-    Module { data | imports = defaultImports ++ data.imports }
 
 
 -- PARSING JSON ----------------------------------------------------------------
@@ -174,6 +170,7 @@ addDefaultImports (Module data) =
 fromJSON : Json.Decode.Value -> Result Json.Decode.Error Module
 fromJSON json =
     Json.Decode.decodeValue decoder json
+
 
 {-| -}
 decoder : Decoder Module
@@ -188,6 +185,7 @@ decoder =
             )
 
 
+
 -- PARSING SOURCE --------------------------------------------------------------
 
 
@@ -195,7 +193,7 @@ decoder =
 fromSource : String -> Result (List Parser.DeadEnd) Module
 fromSource source =
     Parser.run parser source
-        |> Result.map addDefaultImports
+
 
 {-| -}
 parser : Parser Module
