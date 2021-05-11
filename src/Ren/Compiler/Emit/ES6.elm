@@ -99,7 +99,7 @@ fromDeclaration declaration_ =
 
 
 {-| -}
-fromFunction : String -> List (Pattern Expression) -> Expression -> List Binding -> String
+fromFunction : String -> List (Pattern) -> Expression -> List Binding -> String
 fromFunction name args body bindings =
     case ( args, List.length bindings ) of
         ( [], 0 ) ->
@@ -121,7 +121,7 @@ fromFunction name args body bindings =
             functionManyArgsTemplate name ( arg, rest ) body bindings
 
 {-| -}
-fromFunctionArgs : List (Pattern Expression) -> String
+fromFunctionArgs : List (Pattern) -> String
 fromFunctionArgs args = 
     List.map (\arg -> "(" ++ fromPattern arg ++ ")") args
         |> String.join " => "
@@ -148,7 +148,7 @@ function {name} () {
     |> String.replace "{body}" (fromExpression body)
 
 {-| -}
-functionOneArgTemplate : String -> (Pattern Expression) -> Expression -> List Binding -> String
+functionOneArgTemplate : String -> (Pattern) -> Expression -> List Binding -> String
 functionOneArgTemplate name arg body bindings = String.trimLeft """
 function {name} ({arg}) {
     {bindings}
@@ -161,7 +161,7 @@ function {name} ({arg}) {
     |> String.replace "{body}" (fromExpression body)
 
 {-| -}
-functionOneArgNoBindingsTemplate : String -> (Pattern Expression) -> Expression -> String
+functionOneArgNoBindingsTemplate : String -> (Pattern) -> Expression -> String
 functionOneArgNoBindingsTemplate name arg body = String.trimLeft """
 function {name} ({arg}) {
     return {body}
@@ -171,7 +171,7 @@ function {name} ({arg}) {
     |> String.replace "{body}" (fromExpression body)
 
 {-| -}
-functionManyArgsTemplate : String -> ( (Pattern Expression), List (Pattern Expression) ) -> Expression -> List Binding -> String
+functionManyArgsTemplate : String -> ( (Pattern), List (Pattern) ) -> Expression -> List Binding -> String
 functionManyArgsTemplate name ( arg, args ) body bindings = String.trimLeft """
 function {name} ({arg}) {
     return {args} => {
@@ -187,7 +187,7 @@ function {name} ({arg}) {
     |> String.replace "{body}" (fromExpression body)
 
 {-| -}
-functionManyArgsNoBindingsTemplate : String -> ( (Pattern Expression), List (Pattern Expression) )-> Expression -> String
+functionManyArgsNoBindingsTemplate : String -> ( (Pattern), List (Pattern) )-> Expression -> String
 functionManyArgsNoBindingsTemplate name ( arg, args ) body = String.trimLeft """
 function {name} ({arg}) {
     return {args} => {
@@ -245,7 +245,7 @@ fromBindings bindings =
 {-| -}
 fromBinding : Binding -> String
 fromBinding (Binding name body) =
-    "const {name} = {body};"
+    "var {name} = {body};"
         |> String.replace "{name}" (fromPattern name)
         |> String.replace "{body}" (fromExpression body)
 
@@ -529,20 +529,20 @@ fromInfix op lhs rhs =
 
 
 {-| -}
-fromLambda : List (Pattern Expression) -> Expression -> String
+fromLambda : List (Pattern) -> Expression -> String
 fromLambda args body =
     "{args} => {body}"
         |> String.replace "{args}" (fromLambdaArgs args)
         |> String.replace "{body}" (fromExpression body)
 
 {-| -}
-fromLambdaArgs : List (Pattern Expression) -> String
+fromLambdaArgs : List (Pattern) -> String
 fromLambdaArgs args =
     List.map (\arg -> "(" ++ fromPattern arg ++ ")") args
         |> String.join " => "
 
 {-| -}
-fromPattern : (Pattern Expression) -> String
+fromPattern : (Pattern) -> String
 fromPattern pattern =
     case pattern of
         ArrayDestructure patterns ->
@@ -555,26 +555,26 @@ fromPattern pattern =
             fromObjectDestructure patterns
 
         Value literal ->
-            fromLiteral literal
+            fromPrimitiveLiteral literal
 
         Wildcard name ->
             "_{name}"
                 |> String.replace "{name}" (Maybe.withDefault "" name)
 
 {-| -}
-fromArrayDestructure : List (Pattern Expression) -> String
+fromArrayDestructure : List (Pattern) -> String
 fromArrayDestructure patterns =
     "[ {patterns} ]"
         |> String.replace "{patterns}" (List.map fromPattern patterns |> String.join ", ")
 
 {-| -}
-fromObjectDestructure : List ( String, Maybe (Pattern Expression) ) -> String
+fromObjectDestructure : List ( String, Maybe (Pattern) ) -> String
 fromObjectDestructure patterns =
     "{ {patterns} }"
         |> String.replace "{patterns}" (List.map fromObjectDestructurePattern patterns |> String.join ", ")
 
 {-| -}
-fromObjectDestructurePattern : ( String, Maybe (Pattern Expression) ) -> String
+fromObjectDestructurePattern : ( String, Maybe (Pattern) ) -> String
 fromObjectDestructurePattern pattern =
     case pattern of
         ( key, Just nestedPattern ) ->
@@ -607,6 +607,26 @@ fromLiteral literal =
 
         String s ->
             "'" ++ s ++ "'"
+
+{-| -}
+fromPrimitiveLiteral : Literal Never -> String
+fromPrimitiveLiteral literal =
+    case literal of
+        Array _ ->
+            ""
+
+        Boolean bool ->
+            if bool then "true" else "false"
+
+        Number n ->
+            String.fromFloat n
+
+        Object _ ->
+            ""
+
+        String s ->
+            "'" ++ s ++ "'"
+
 
 {-| -}
 fromArray : List Expression -> String
