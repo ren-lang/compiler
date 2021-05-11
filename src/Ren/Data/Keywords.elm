@@ -20,6 +20,7 @@ import Set exposing (Set)
         [ "if", "then", "else" 
         , "import", "as", "exposing"
         , "pub", "fun", "let", "where", "and"
+        , "true", "false"
         ]
 
 -}
@@ -29,6 +30,7 @@ all =
         [ "if", "then", "else" 
         , "import", "as", "exposing"
         , "pub", "fun", "let", "where", "and"
+        , "true", "false"
         ]
 
 
