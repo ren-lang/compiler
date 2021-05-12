@@ -2,7 +2,7 @@ module Ren.Data.Module exposing
     ( Module(..), Import
     , module_, import_
     , imports, exposes
-    , addImport
+    , addImport, addDeclaration
     , fromJSON, decoder
     , fromSource, parser
     )
@@ -53,7 +53,7 @@ module Ren.Data.Module exposing
 
 ### Modifications
 
-@docs addImport, addDefaultImports
+@docs addImport, addDeclaration
 
 ---
 
@@ -160,6 +160,12 @@ exposes name (Module data) =
 addImport : Import -> Module -> Module
 addImport import__ (Module data) =
     Module { data | imports = import__ :: data.imports }
+
+
+{-| -}
+addDeclaration : Declaration -> Module -> Module
+addDeclaration declaration (Module data) =
+    Module { data | declarations = declaration :: data.declarations }
 
 
 
