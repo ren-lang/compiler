@@ -349,6 +349,15 @@ lazyParser =
     Parser.lazy (\_ -> parser)
 
 
+{-| -}
+bindingParser : Parser Declaration
+bindingParser =
+    Parser.oneOf
+        [ functionBindingParser
+        , variableBindingParser
+        ]
+
+
 
 -- PARSING SOURCE: DECLARATION.FUNCTION ----------------------------------------
 
@@ -395,7 +404,7 @@ functionParser =
                             (\bindings ->
                                 Parser.oneOf
                                     [ Parser.succeed (\binding -> binding :: bindings)
-                                        |= lazyParser
+                                        |= bindingParser
                                         |. Parser.spaces
                                         |> Parser.map Parser.Loop
                                     , Parser.succeed (List.reverse bindings)
@@ -415,6 +424,72 @@ functionParser =
                         |> Parser.backtrackable
                     ]
             )
+        |> Parser.backtrackable
+
+
+{-| -}
+functionBindingParser : Parser Declaration
+functionBindingParser =
+    Parser.succeed function
+        |= commentParser
+        |. Parser.Extra.newlines
+        |= Parser.succeed Visibility.Private
+        |. Parser.Extra.spaces
+        |. Parser.keyword "fun"
+        |. Parser.Extra.spaces
+        |= Parser.variable
+            { start = Char.isLower
+            , inner = Char.isAlphaNum
+            , reserved = Keywords.all
+            }
+        |. Parser.Extra.spaces
+        |. Parser.symbol "="
+        |. Parser.Extra.spaces
+        |= Parser.loop []
+            (\args ->
+                Parser.oneOf
+                    [ Parser.succeed (\arg -> arg :: args)
+                        |= Pattern.parser
+                        |. Parser.Extra.spaces
+                        |> Parser.map Parser.Loop
+                    , Parser.succeed (List.reverse args)
+                        |> Parser.map Parser.Done
+                    ]
+            )
+        |. Parser.Extra.spaces
+        |. Parser.symbol "=>"
+        |. Parser.spaces
+        |> Parser.andThen
+            (\func ->
+                Parser.oneOf
+                    [ Parser.succeed func
+                        |. Parser.symbol "{"
+                        |. Parser.spaces
+                        |= Parser.loop []
+                            (\bindings ->
+                                Parser.oneOf
+                                    [ Parser.succeed (\binding -> binding :: bindings)
+                                        |= bindingParser
+                                        |. Parser.spaces
+                                        |> Parser.map Parser.Loop
+                                    , Parser.succeed (List.reverse bindings)
+                                        |> Parser.map Parser.Done
+                                    ]
+                            )
+                        |. Parser.spaces
+                        |. Parser.keyword "ret"
+                        |. Parser.spaces
+                        |= Expression.parser
+                        |. Parser.spaces
+                        |. Parser.symbol "}"
+                        |> Parser.backtrackable
+                    , Parser.succeed func
+                        |= Parser.succeed []
+                        |= Expression.parser
+                        |> Parser.backtrackable
+                    ]
+            )
+        |> Parser.backtrackable
 
 
 
@@ -445,7 +520,53 @@ variableParser =
                             (\bindings ->
                                 Parser.oneOf
                                     [ Parser.succeed (\binding -> binding :: bindings)
-                                        |= lazyParser
+                                        |= bindingParser
+                                        |. Parser.spaces
+                                        |> Parser.map Parser.Loop
+                                    , Parser.succeed (List.reverse bindings)
+                                        |> Parser.map Parser.Done
+                                    ]
+                            )
+                        |. Parser.spaces
+                        |. Parser.keyword "ret"
+                        |. Parser.spaces
+                        |= Expression.parser
+                        |. Parser.spaces
+                        |. Parser.symbol "}"
+                        |> Parser.backtrackable
+                    , Parser.succeed var
+                        |= Parser.succeed []
+                        |= Expression.parser
+                        |> Parser.backtrackable
+                    ]
+            )
+
+
+{-| -}
+variableBindingParser : Parser Declaration
+variableBindingParser =
+    Parser.succeed variable
+        |= commentParser
+        |. Parser.Extra.newlines
+        |= Parser.succeed Visibility.Private
+        |. Parser.Extra.spaces
+        |. Parser.keyword "let"
+        |. Parser.Extra.spaces
+        |= Pattern.parser
+        |. Parser.Extra.spaces
+        |. Parser.symbol "="
+        |. Parser.spaces
+        |> Parser.andThen
+            (\var ->
+                Parser.oneOf
+                    [ Parser.succeed var
+                        |. Parser.symbol "{"
+                        |. Parser.spaces
+                        |= Parser.loop []
+                            (\bindings ->
+                                Parser.oneOf
+                                    [ Parser.succeed (\binding -> binding :: bindings)
+                                        |= bindingParser
                                         |. Parser.spaces
                                         |> Parser.map Parser.Loop
                                     , Parser.succeed (List.reverse bindings)
