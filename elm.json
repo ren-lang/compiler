@@ -1,9 +1,9 @@
 {
     "type": "package",
     "name": "ren-lang/compiler",
-    "summary": "The compiler for Ren.",
+    "summary": "The compiler for Ren: a dynamically typed, functional scripting language.",
     "license": "MIT",
-    "version": "4.0.0",
+    "version": "4.0.1",
     "exposed-modules": [
         "Ren.Compiler",
         "Ren.Data.Expression",

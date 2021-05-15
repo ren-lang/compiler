@@ -1,7 +1,7 @@
 {
   "name": "ren-compiler",
-  "version": "4.0.0",
-  "description": "A functional scripting language for the Web.",
+  "version": "4.0.1",
+  "description": "The compiler for Ren: a dynamically typed, functional scripting language.",
   "scripts": {
     "test": "elm-test",
     "docs": "elm-doc-preview"
