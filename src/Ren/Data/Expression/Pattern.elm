@@ -1,8 +1,18 @@
 module Ren.Data.Expression.Pattern exposing
     ( Pattern(..)
+    , names
     , decoder
     , parser
     )
+
+{-|
+
+@docs Pattern
+@docs names
+@docs decoder
+@docs parser
+
+-}
 
 -- IMPORTS ---------------------------------------------------------------------
 
@@ -30,6 +40,34 @@ type Pattern
       -- Pretty nifty trick, eh!
     | Value (Literal Never)
     | Wildcard (Maybe String)
+
+
+
+-- QUERIES ---------------------------------------------------------------------
+
+
+names : Pattern -> List String
+names pattern =
+    case pattern of
+        ArrayDestructure patterns ->
+            List.concatMap names patterns
+
+        Name name_ ->
+            [ name_ ]
+
+        ObjectDestructure patterns ->
+            List.concatMap
+                (\( name_, nestedPattern ) ->
+                    Maybe.map names nestedPattern
+                        |> Maybe.withDefault [ name_ ]
+                )
+                patterns
+
+        Value _ ->
+            []
+
+        Wildcard _ ->
+            []
 
 
 

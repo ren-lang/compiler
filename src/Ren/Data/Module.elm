@@ -72,6 +72,7 @@ import Json.Decode.Extra
 import Parser exposing ((|.), (|=), Parser)
 import Ren.Data.Declaration as Declaration exposing (Declaration)
 import Ren.Data.Declaration.Visibility exposing (Visibility(..))
+import Ren.Data.Expression.Pattern as Pattern
 import Ren.Data.Module.Import as Import
 
 
@@ -149,7 +150,7 @@ exposes name (Module data) =
     data.declarations
         |> List.filter (Declaration.visibility >> (==) Public)
         |> List.map Declaration.name
-        |> List.member name
+        |> List.any (Pattern.names >> List.member name)
 
 
 

@@ -1,19 +1,16 @@
-module Ren.Compiler.Emit.ES6 exposing 
-    ( fromModule
-    , fromDeclaration
+module Ren.Compiler.Emit.ES6 exposing
+    ( fromDeclaration
     , fromExpression
+    , fromModule
     )
 
-
 -- IMPORTS ---------------------------------------------------------------------
-
 
 import Dict
 import Ren.Data.Declaration exposing (Declaration(..))
 import Ren.Data.Declaration.Binding exposing (Binding(..))
 import Ren.Data.Declaration.Visibility exposing (Visibility(..))
 import Ren.Data.Expression as Expression exposing (Expression(..), Identifier)
-import Ren.Data.Expression exposing (Identifier)
 import Ren.Data.Expression.Accessor exposing (Accessor(..))
 import Ren.Data.Expression.Identifier exposing (Identifier(..))
 import Ren.Data.Expression.Literal exposing (Literal(..))
@@ -24,18 +21,22 @@ import Ren.Data.Module.Import exposing (Import(..))
 import String.Extra
 
 
+
 -- EMITTING MODULES ------------------------------------------------------------
 
 
 {-| -}
 fromModule : Module -> String
-fromModule (Module { imports, declarations }) = String.trim """
+fromModule (Module { imports, declarations }) =
+    String.trim """
 {imports}
 
 {declarations}
-""" |> String.replace "{imports}" (List.map fromImport imports |> String.join "\n")
-    |> String.replace "{declarations}" (List.map fromDeclaration declarations |> String.join "\n")
-    |> String.trimLeft
+"""
+        |> String.replace "{imports}" (List.map fromImport imports |> String.join "\n")
+        |> String.replace "{declarations}" (List.map fromDeclaration declarations |> String.join "\n")
+        |> String.trimLeft
+
 
 {-| -}
 fromImport : Import -> String
@@ -46,37 +47,49 @@ fromImport (Import { path, name, exposed }) =
 
         ( _, [] ) ->
             importQualifiedNoBindingsTemplate path (String.join "$" name)
-        
+
         ( [], _ ) ->
             importUnqualifiedTemplate path exposed
-        
+
         ( _, _ ) ->
             importQualifiedTemplate path (String.join "$" name) exposed
 
+
 importUnqualifiedTemplate : String -> List String -> String
-importUnqualifiedTemplate path bindings = String.trim """
+importUnqualifiedTemplate path bindings =
+    String.trim """
 import { {bindings} } from '{path}'
-""" |> String.replace "{bindings}" (String.join ", " bindings)
-    |> String.replace "{path}" path
+"""
+        |> String.replace "{bindings}" (String.join ", " bindings)
+        |> String.replace "{path}" path
+
 
 importUnqualifiedNoBindingsTemplate : String -> String
-importUnqualifiedNoBindingsTemplate path = String.trim """
+importUnqualifiedNoBindingsTemplate path =
+    String.trim """
 import '{path}'
 """ |> String.replace "{path}" path
 
+
 importQualifiedTemplate : String -> String -> List String -> String
-importQualifiedTemplate path name bindings = String.trim """
+importQualifiedTemplate path name bindings =
+    String.trim """
 import * as {name} from '{path}'
 import { {bindings} } from '{path}'
-""" |> String.replace "{name}" name
-    |> String.replace "{bindings}" (String.join ", " bindings)
-    |> String.replace "{path}" path
+"""
+        |> String.replace "{name}" name
+        |> String.replace "{bindings}" (String.join ", " bindings)
+        |> String.replace "{path}" path
+
 
 importQualifiedNoBindingsTemplate : String -> String -> String
-importQualifiedNoBindingsTemplate path name = String.trim """
+importQualifiedNoBindingsTemplate path name =
+    String.trim """
 import * as {name} from '{path}'
-""" |> String.replace "{name}" name
-    |> String.replace "{path}" path
+"""
+        |> String.replace "{name}" name
+        |> String.replace "{path}" path
+
 
 
 -- EMITTING DECLARATIONS -------------------------------------------------------
@@ -86,168 +99,186 @@ import * as {name} from '{path}'
 fromDeclaration : Declaration -> String
 fromDeclaration declaration_ =
     case declaration_ of
-        Function { visibility, name, args, body, bindings } ->
-            fromFunction name args body bindings
+        Function { visibility, name, args, bindings, body } ->
+            fromFunction (fromPattern name) args bindings body
                 |> (++) (fromVisibility visibility)
 
-        Variable { visibility, name, body, bindings } ->
-            fromVariable name body bindings
+        Variable { visibility, name, bindings, body } ->
+            fromVariable (fromPattern name) bindings body
                 |> (++) (fromVisibility visibility)
+
 
 
 -- EMIITTING DECLARATIONS: FUNCTIONS -------------------------------------------
 
 
 {-| -}
-fromFunction : String -> List (Pattern) -> Expression -> List Binding -> String
-fromFunction name args body bindings =
+fromFunction : String -> List Pattern -> List Declaration -> Expression -> String
+fromFunction name args bindings body =
     case ( args, List.length bindings ) of
         ( [], 0 ) ->
             functionNoArgsNoBindingsTemplate name body
 
         ( [], _ ) ->
-            functionNoArgsTemplate name body bindings
+            functionNoArgsTemplate name bindings body
 
         ( arg :: [], 0 ) ->
             functionOneArgNoBindingsTemplate name arg body
 
         ( arg :: [], _ ) ->
-            functionOneArgTemplate name arg body bindings
+            functionOneArgTemplate name arg bindings body
 
         ( arg :: rest, 0 ) ->
             functionManyArgsNoBindingsTemplate name ( arg, rest ) body
 
         ( arg :: rest, _ ) ->
-            functionManyArgsTemplate name ( arg, rest ) body bindings
+            functionManyArgsTemplate name ( arg, rest ) bindings body
+
 
 {-| -}
-fromFunctionArgs : List (Pattern) -> String
-fromFunctionArgs args = 
+fromFunctionArgs : List Pattern -> String
+fromFunctionArgs args =
     List.map (\arg -> "(" ++ fromPattern arg ++ ")") args
         |> String.join " => "
 
+
 {-| -}
-functionNoArgsTemplate : String -> Expression -> List Binding -> String
-functionNoArgsTemplate name body bindings = String.trimLeft """
+functionNoArgsTemplate : String -> List Declaration -> Expression -> String
+functionNoArgsTemplate name bindings body =
+    String.trimLeft """
 function {name} () {
     {bindings}
-
     return {body}
 }
-""" |> String.replace "{name}" name
-    |> String.replace "{bindings}" (fromBindings bindings |> String.Extra.nest 4 1)
-    |> String.replace "{body}" (fromExpression body)
+"""
+        |> String.replace "{name}" name
+        |> String.replace "{bindings}" (fromBindings bindings |> String.Extra.nest 4 1)
+        |> String.replace "{body}" (fromExpression body)
+
 
 {-| -}
 functionNoArgsNoBindingsTemplate : String -> Expression -> String
-functionNoArgsNoBindingsTemplate name body = String.trimLeft """
+functionNoArgsNoBindingsTemplate name body =
+    String.trimLeft """
 function {name} () {
     return {body}
 }
-""" |> String.replace "{name}" name
-    |> String.replace "{body}" (fromExpression body)
+"""
+        |> String.replace "{name}" name
+        |> String.replace "{body}" (fromExpression body)
+
 
 {-| -}
-functionOneArgTemplate : String -> (Pattern) -> Expression -> List Binding -> String
-functionOneArgTemplate name arg body bindings = String.trimLeft """
+functionOneArgTemplate : String -> Pattern -> List Declaration -> Expression -> String
+functionOneArgTemplate name arg bindings body =
+    String.trimLeft """
 function {name} ({arg}) {
     {bindings}
-
     return {body}
 }
-""" |> String.replace "{name}" name
-    |> String.replace "{arg}" (fromPattern arg)
-    |> String.replace "{bindings}" (fromBindings bindings |> String.Extra.nest 4 1)
-    |> String.replace "{body}" (fromExpression body)
+"""
+        |> String.replace "{name}" name
+        |> String.replace "{arg}" (fromPattern arg)
+        |> String.replace "{bindings}" (fromBindings bindings |> String.Extra.nest 4 1)
+        |> String.replace "{body}" (fromExpression body)
+
 
 {-| -}
-functionOneArgNoBindingsTemplate : String -> (Pattern) -> Expression -> String
-functionOneArgNoBindingsTemplate name arg body = String.trimLeft """
+functionOneArgNoBindingsTemplate : String -> Pattern -> Expression -> String
+functionOneArgNoBindingsTemplate name arg body =
+    String.trimLeft """
 function {name} ({arg}) {
     return {body}
 }
-""" |> String.replace "{name}" name
-    |> String.replace "{arg}" (fromPattern arg)
-    |> String.replace "{body}" (fromExpression body)
+"""
+        |> String.replace "{name}" name
+        |> String.replace "{arg}" (fromPattern arg)
+        |> String.replace "{body}" (fromExpression body)
+
 
 {-| -}
-functionManyArgsTemplate : String -> ( (Pattern), List (Pattern) ) -> Expression -> List Binding -> String
-functionManyArgsTemplate name ( arg, args ) body bindings = String.trimLeft """
+functionManyArgsTemplate : String -> ( Pattern, List Pattern ) -> List Declaration -> Expression -> String
+functionManyArgsTemplate name ( arg, args ) bindings body =
+    String.trimLeft """
 function {name} ({arg}) {
     return {args} => {
         {bindings}
-
         return {body}
     }
 }
-""" |> String.replace "{name}" name
-    |> String.replace "{arg}" (fromPattern arg)
-    |> String.replace "{args}" (fromFunctionArgs args)
-    |> String.replace "{bindings}" (fromBindings bindings |> String.Extra.nest 4 1)
-    |> String.replace "{body}" (fromExpression body)
+"""
+        |> String.replace "{name}" name
+        |> String.replace "{arg}" (fromPattern arg)
+        |> String.replace "{args}" (fromFunctionArgs args)
+        |> String.replace "{bindings}" (fromBindings bindings |> String.Extra.nest 4 2)
+        |> String.replace "{body}" (fromExpression body)
+
 
 {-| -}
-functionManyArgsNoBindingsTemplate : String -> ( (Pattern), List (Pattern) )-> Expression -> String
-functionManyArgsNoBindingsTemplate name ( arg, args ) body = String.trimLeft """
+functionManyArgsNoBindingsTemplate : String -> ( Pattern, List Pattern ) -> Expression -> String
+functionManyArgsNoBindingsTemplate name ( arg, args ) body =
+    String.trimLeft """
 function {name} ({arg}) {
     return {args} => {
         return {body}
     }
 }
-""" |> String.replace "{name}" name
-    |> String.replace "{arg}" (fromPattern arg)
-    |> String.replace "{args}" (fromFunctionArgs args)
-    |> String.replace "{body}" (fromExpression body)
+"""
+        |> String.replace "{name}" name
+        |> String.replace "{arg}" (fromPattern arg)
+        |> String.replace "{args}" (fromFunctionArgs args)
+        |> String.replace "{body}" (fromExpression body)
+
 
 
 -- EMIITTING DECLARATIONS: VARIABLES -------------------------------------------
 
 
 {-| -}
-fromVariable : String -> Expression -> List Binding -> String
-fromVariable name body bindings =
+fromVariable : String -> List Declaration -> Expression -> String
+fromVariable name bindings body =
     case bindings of
         [] ->
             variableNoBindingsTemplate name body
 
         _ ->
-            variableTemplate name body bindings
+            variableTemplate name bindings body
+
 
 {-| -}
 variableNoBindingsTemplate : String -> Expression -> String
-variableNoBindingsTemplate name body = String.trimLeft """
+variableNoBindingsTemplate name body =
+    String.trimLeft """
 var {name} = {body};
-""" |> String.replace "{name}" name
-    |> String.replace "{body}" (fromExpression body)
+"""
+        |> String.replace "{name}" name
+        |> String.replace "{body}" (fromExpression body)
+
 
 {-| -}
-variableTemplate : String -> Expression -> List Binding -> String
-variableTemplate name body bindings = String.trimLeft """
+variableTemplate : String -> List Declaration -> Expression -> String
+variableTemplate name bindings body =
+    String.trimLeft """
 var {name} = (() => {
     {bindings}
-
     return {body}
 })()
-""" |> String.replace "{name}" name
-    |> String.replace "{bindings}" (fromBindings bindings |> String.Extra.nest 4 1)
-    |> String.replace "{body}" (fromExpression body)
+"""
+        |> String.replace "{name}" name
+        |> String.replace "{bindings}" (fromBindings bindings |> String.Extra.nest 4 1)
+        |> String.replace "{body}" (fromExpression body)
+
 
 
 -- EMITTING DECLARATIONS: BINDINGS ---------------------------------------------
 
 
 {-| -}
-fromBindings : List Binding -> String
+fromBindings : List Declaration -> String
 fromBindings bindings =
-    List.map fromBinding bindings
-        |> String.join "\n"
+    List.map fromDeclaration bindings
+        |> String.join ""
 
-{-| -}
-fromBinding : Binding -> String
-fromBinding (Binding name body) =
-    "var {name} = {body};"
-        |> String.replace "{name}" (fromPattern name)
-        |> String.replace "{body}" (fromExpression body)
 
 
 -- EMITTING DECLARATIONS: VISIBILITY -------------------------------------------
@@ -261,6 +292,7 @@ fromVisibility visibility =
 
         Private ->
             ""
+
 
 
 -- EMITTING EXPRESSIONS --------------------------------------------------------
@@ -295,6 +327,7 @@ fromExpression expression =
             fromLiteral literal
 
 
+
 -- EMITTING EXPRESSIONS: ACCESS ------------------------------------------------
 
 
@@ -305,17 +338,19 @@ fromAccess expr accessors =
         |> String.replace "{expr}" (fromExpression expr)
         |> String.replace "{accessors}" (List.map fromAccessor accessors |> String.join "")
 
+
 {-| -}
-fromAccessor : (Accessor Expression) -> String
+fromAccessor : Accessor Expression -> String
 fromAccessor accessor =
     case accessor of
         Computed expr ->
             "[{expr}]"
                 |> String.replace "{expr}" (fromExpression expr)
-        
+
         Fixed key ->
-            ".{key}" 
+            ".{key}"
                 |> String.replace "{key}" key
+
 
 
 -- EMITTING EXPRESSIONS: APPLICATION -------------------------------------------
@@ -328,11 +363,13 @@ fromApplication func args =
         |> String.replace "{func}" (fromExpression func)
         |> String.replace "{args}" (fromApplicationArgs args)
 
+
 {-| -}
-fromApplicationArgs : List Expression  -> String
+fromApplicationArgs : List Expression -> String
 fromApplicationArgs args =
     List.map (\arg -> "(" ++ fromExpression arg ++ ")") args
         |> String.join " "
+
 
 
 -- EMITTING EXPRESSIONS: CONDITIONAL -------------------------------------------
@@ -345,6 +382,7 @@ fromConditional predicate true false =
         |> String.replace "{predicate}" (fromExpression predicate)
         |> String.replace "{true}" (fromExpression true)
         |> String.replace "{false}" (fromExpression false)
+
 
 
 -- EMITTING EXPRESSIONS: IDENTIFIER --------------------------------------------
@@ -363,14 +401,14 @@ fromIdentifier identifier =
                 |> String.replace "{name}" name
 
         Operator Pipe ->
-            "$Function.pipe" 
+            "$Function.pipe"
 
         Operator Compose ->
             "$Function.compose"
 
         Operator Discard ->
             "$Function.discard"
-    
+
         Operator Add ->
             "$Math.add"
 
@@ -424,6 +462,7 @@ fromIdentifier identifier =
                 |> String.replace "{fieldName}" fieldName
 
 
+
 -- EMITTING EXPRESSIONS: INFIX -------------------------------------------------
 
 
@@ -435,7 +474,7 @@ fromInfix op lhs rhs =
             fromApplication rhs [ lhs ]
 
         Compose ->
-            fromApplication 
+            fromApplication
                 (Expression.scoped [ "$Function" ] "compose")
                 [ lhs, rhs ]
 
@@ -443,7 +482,7 @@ fromInfix op lhs rhs =
             "{lhs}, {rhs}"
                 |> String.replace "{lhs}" (fromExpression lhs)
                 |> String.replace "{rhs}" (fromExpression rhs)
-    
+
         Add ->
             "{lhs} + {rhs}"
                 |> String.replace "{lhs}" (fromExpression lhs)
@@ -525,24 +564,27 @@ fromInfix op lhs rhs =
                 |> String.replace "{rhs}" (fromExpression rhs)
 
 
+
 -- EMITTING EXPRESSIONS: LAMBDA ------------------------------------------------
 
 
 {-| -}
-fromLambda : List (Pattern) -> Expression -> String
+fromLambda : List Pattern -> Expression -> String
 fromLambda args body =
     "{args} => {body}"
         |> String.replace "{args}" (fromLambdaArgs args)
         |> String.replace "{body}" (fromExpression body)
 
+
 {-| -}
-fromLambdaArgs : List (Pattern) -> String
+fromLambdaArgs : List Pattern -> String
 fromLambdaArgs args =
     List.map (\arg -> "(" ++ fromPattern arg ++ ")") args
         |> String.join " => "
 
+
 {-| -}
-fromPattern : (Pattern) -> String
+fromPattern : Pattern -> String
 fromPattern pattern =
     case pattern of
         ArrayDestructure patterns ->
@@ -561,29 +603,33 @@ fromPattern pattern =
             "_{name}"
                 |> String.replace "{name}" (Maybe.withDefault "" name)
 
+
 {-| -}
-fromArrayDestructure : List (Pattern) -> String
+fromArrayDestructure : List Pattern -> String
 fromArrayDestructure patterns =
     "[ {patterns} ]"
         |> String.replace "{patterns}" (List.map fromPattern patterns |> String.join ", ")
 
+
 {-| -}
-fromObjectDestructure : List ( String, Maybe (Pattern) ) -> String
+fromObjectDestructure : List ( String, Maybe Pattern ) -> String
 fromObjectDestructure patterns =
     "{ {patterns} }"
         |> String.replace "{patterns}" (List.map fromObjectDestructurePattern patterns |> String.join ", ")
 
+
 {-| -}
-fromObjectDestructurePattern : ( String, Maybe (Pattern) ) -> String
+fromObjectDestructurePattern : ( String, Maybe Pattern ) -> String
 fromObjectDestructurePattern pattern =
     case pattern of
         ( key, Just nestedPattern ) ->
             "{key}: {pattern}"
                 |> String.replace "{key}" key
                 |> String.replace "{pattern}" (fromPattern nestedPattern)
-            
+
         ( key, Nothing ) ->
             key
+
 
 
 -- EMITTING EXPRESSIONS: LITERAL -----------------------------------------------
@@ -597,7 +643,11 @@ fromLiteral literal =
             fromArray elements
 
         Boolean bool ->
-            if bool then "true" else "false"
+            if bool then
+                "true"
+
+            else
+                "false"
 
         Number n ->
             String.fromFloat n
@@ -608,6 +658,7 @@ fromLiteral literal =
         String s ->
             "'" ++ s ++ "'"
 
+
 {-| -}
 fromPrimitiveLiteral : Literal Never -> String
 fromPrimitiveLiteral literal =
@@ -616,7 +667,11 @@ fromPrimitiveLiteral literal =
             ""
 
         Boolean bool ->
-            if bool then "true" else "false"
+            if bool then
+                "true"
+
+            else
+                "false"
 
         Number n ->
             String.fromFloat n
@@ -634,11 +689,13 @@ fromArray elements =
     "[ {elements} ]"
         |> String.replace "{elements}" (List.map fromExpression elements |> String.join ", ")
 
+
 {-| -}
 fromObject : List ( String, Expression ) -> String
 fromObject entries =
     "{ {entries} }"
         |> String.replace "{entries}" (List.map fromObjectField entries |> String.join ", ")
+
 
 {-| -}
 fromObjectField : ( String, Expression ) -> String

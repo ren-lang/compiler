@@ -1,87 +1,97 @@
-module Ren.Data.Declaration exposing 
-    ( Declaration(..), Visibility, Binding
+module Ren.Data.Declaration exposing
+    ( Declaration(..), Visibility
     , function, variable
-    , name, visibility
+    , name, body, visibility
     , expose, conceal
     , referencesName, referencesScopedName, referencesModule
     , fromJSON, decoder
     , fromSource, parser
     )
 
-{-| ## Table of Contents
+{-|
 
-* Types
-    * [Declaration](#Declaration)
-    * [Visibility](#Visibility)
-    * [Binding](#Binding)
-    * [function](#function)
-    * [variable](#variable)
-* Helpers
-    * Constructors
-        * [function](#function)
-        * [variable](#variable)
-    * Getters
-        * [name](#name)
-        * [visibility](#visibility)
-    * Visibility Helpers
-        * [expose](#expose)
-        * [conceal](#conceal)
-    * Queries
-        * [referencesName](#referencesName)
-        * [referencesScopedName](#referencesScopedName)
-        * [referencesModule](#referencesModule)
-* Parsing
-    * [fromJSON](#fromJSON)
-    * [decoder](#decoder)
-    * [fromSource](#fromSource)
-    * [parser](#parser)
+
+## Table of Contents
+
+  - Types
+      - [Declaration](#Declaration)
+      - [Visibility](#Visibility)
+      - [function](#function)
+      - [variable](#variable)
+  - Helpers
+      - Constructors
+          - [function](#function)
+          - [variable](#variable)
+      - Getters
+          - [name](#name)
+          - [body](#body)
+          - [visibility](#visibility)
+      - Visibility Helpers
+          - [expose](#expose)
+          - [conceal](#conceal)
+      - Queries
+          - [referencesName](#referencesName)
+          - [referencesScopedName](#referencesScopedName)
+          - [referencesModule](#referencesModule)
+  - Parsing
+      - [fromJSON](#fromJSON)
+      - [decoder](#decoder)
+      - [fromSource](#fromSource)
+      - [parser](#parser)
 
 ---
+
+
 ## Types
 
-@docs Declaration, Visibility, Binding
+@docs Declaration, Visibility
 
 ---
+
+
 ## Helpers
+
 
 ### Constructors
 
 @docs function, variable
 
+
 ### Getters
 
-@docs name, visibility
+@docs name, body, visibility
+
 
 ### Visibility Helpers
 
 @docs expose, conceal
+
 
 ### Queries
 
 @docs referencesName, referencesScopedName, referencesModule
 
 ---
+
+
 ## Parsing
 
 @docs fromJSON, decoder
 @docs fromSource, parser
 
-
 -}
-
 
 -- IMPORTS ---------------------------------------------------------------------
 
-
 import Json.Decode exposing (Decoder)
 import Json.Decode.Extra
-import Parser exposing (Parser, (|=), (|.))
+import Parser exposing ((|.), (|=), Parser)
 import Parser.Extra
-import Ren.Data.Declaration.Binding as Binding
 import Ren.Data.Declaration.Visibility as Visibility
 import Ren.Data.Expression as Expression exposing (Expression)
-import Ren.Data.Expression.Pattern as Pattern
+import Ren.Data.Expression.Pattern as Pattern exposing (Pattern)
 import Ren.Data.Keywords as Keywords
+
 
 
 -- TYPES -----------------------------------------------------------------------
@@ -89,54 +99,53 @@ import Ren.Data.Keywords as Keywords
 
 {-| -}
 type Declaration
-    = Function 
+    = Function
         { comment : List String
         , visibility : Visibility
-        , name : String
+        , name : Pattern
         , args : List Expression.Pattern
+        , bindings : List Declaration
         , body : Expression
-        , bindings : List Binding
         }
     | Variable
         { comment : List String
         , visibility : Visibility
-        , name : String
+        , name : Pattern
+        , bindings : List Declaration
         , body : Expression
-        , bindings : List Binding
         }
 
-{-| -}
-type alias Visibility
-    = Visibility.Visibility
 
 {-| -}
-type alias Binding
-    = Binding.Binding
+type alias Visibility =
+    Visibility.Visibility
+
 
 
 -- CONSTRUCTORS ----------------------------------------------------------------
 
 
 {-| -}
-function : List String -> Visibility -> String -> List Expression.Pattern -> Expression -> List Binding -> Declaration
-function comment visibility_ name_ args body bindings =
+function : List String -> Visibility -> String -> List Expression.Pattern -> List Declaration -> Expression -> Declaration
+function comment visibility_ name_ args bindings body_ =
     Function
         { comment = comment
         , visibility = visibility_
-        , name = name_
+        , name = Pattern.Name name_
         , args = args
-        , body = body
+        , body = body_
         , bindings = bindings
         }
 
+
 {-| -}
-variable : List String -> Visibility -> String -> Expression -> List Binding -> Declaration
-variable comment visibility_ name_ body bindings =
+variable : List String -> Visibility -> Pattern -> List Declaration -> Expression -> Declaration
+variable comment visibility_ name_ bindings body_ =
     Variable
         { comment = comment
         , visibility = visibility_
         , name = name_
-        , body = body
+        , body = body_
         , bindings = bindings
         }
 
@@ -146,7 +155,7 @@ variable comment visibility_ name_ body bindings =
 
 
 {-| -}
-name : Declaration -> String
+name : Declaration -> Pattern
 name declaration =
     case declaration of
         Function data ->
@@ -154,6 +163,18 @@ name declaration =
 
         Variable data ->
             data.name
+
+
+{-| -}
+body : Declaration -> Expression
+body declaration =
+    case declaration of
+        Function data ->
+            data.body
+
+        Variable data ->
+            data.body
+
 
 {-| -}
 visibility : Declaration -> Visibility
@@ -164,6 +185,7 @@ visibility declaration =
 
         Variable data ->
             data.visibility
+
 
 
 -- VISIBILITY HELPERS ----------------------------------------------------------
@@ -179,6 +201,7 @@ expose declaration =
         Variable data ->
             Variable { data | visibility = Visibility.Public }
 
+
 {-| -}
 conceal : Declaration -> Declaration
 conceal declaration =
@@ -190,56 +213,47 @@ conceal declaration =
             Variable { data | visibility = Visibility.Private }
 
 
+
 -- QUERIES ---------------------------------------------------------------------
 
 
 {-| -}
 referencesName : String -> Declaration -> Bool
 referencesName name_ declaration =
-    let
-        bindingReferencesName (Binding.Binding _ expr) =
-            Expression.referencesName name_ expr
-    in
     case declaration of
-        Function { body, bindings } ->
-            Expression.referencesName name_ body 
-                || List.any bindingReferencesName bindings
+        Function data ->
+            Expression.referencesName name_ data.body
+                || List.any (referencesName name_) data.bindings
 
-        Variable { body, bindings } ->
-            Expression.referencesName name_ body 
-                || List.any bindingReferencesName bindings
+        Variable data ->
+            Expression.referencesName name_ data.body
+                || List.any (referencesName name_) data.bindings
+
 
 {-| -}
 referencesScopedName : List String -> String -> Declaration -> Bool
 referencesScopedName namespace_ name_ declaration =
-    let
-        bindingReferencesScopedName (Binding.Binding _ expr) =
-            Expression.referencesScopedName namespace_ name_ expr
-    in
     case declaration of
-        Function { body, bindings } ->
-            Expression.referencesScopedName namespace_ name_ body 
-                || List.any bindingReferencesScopedName bindings
+        Function data ->
+            Expression.referencesScopedName namespace_ name_ data.body
+                || List.any (referencesScopedName namespace_ name_) data.bindings
 
-        Variable { body, bindings } ->
-            Expression.referencesScopedName namespace_ name_ body 
-                || List.any bindingReferencesScopedName bindings
+        Variable data ->
+            Expression.referencesScopedName namespace_ name_ data.body
+                || List.any (referencesScopedName namespace_ name_) data.bindings
+
 
 {-| -}
 referencesModule : List String -> Declaration -> Bool
 referencesModule namespace_ declaration =
-    let
-        bindingReferencesModule (Binding.Binding _ expr) =
-            Expression.referencesModule namespace_ expr
-    in
     case declaration of
-        Function { body, bindings } ->
-            Expression.referencesModule namespace_ body 
-                || List.any bindingReferencesModule bindings
+        Function data ->
+            Expression.referencesModule namespace_ data.body
+                || List.any (referencesModule namespace_) data.bindings
 
-        Variable { body, bindings } ->
-            Expression.referencesModule namespace_ body 
-                || List.any bindingReferencesModule bindings
+        Variable data ->
+            Expression.referencesModule namespace_ data.body
+                || List.any (referencesModule namespace_) data.bindings
 
 
 
@@ -251,6 +265,7 @@ fromJSON : Json.Decode.Value -> Result Json.Decode.Error Declaration
 fromJSON json =
     Json.Decode.decodeValue decoder json
 
+
 {-| -}
 decoder : Decoder Declaration
 decoder =
@@ -258,6 +273,13 @@ decoder =
         [ functionDecoder
         , variableDecoder
         ]
+
+
+{-| -}
+lazyDecoder : Decoder Declaration
+lazyDecoder =
+    Json.Decode.lazy (\_ -> decoder)
+
 
 
 -- PARSING JSON: DECLARATION.FUNCTION ------------------------------------------
@@ -276,12 +298,13 @@ functionDecoder =
             (Json.Decode.field "args" <|
                 Json.Decode.list Pattern.decoder
             )
-            (Json.Decode.field "body" Expression.decoder)
             (Json.Decode.field "bindings" <|
-                Json.Decode.list Binding.decoder
+                Json.Decode.list lazyDecoder
             )
+            (Json.Decode.field "body" Expression.decoder)
 
-    
+
+
 -- PARSING JSON: DECLARATION.VARIABLE ------------------------------------------
 
 
@@ -294,11 +317,12 @@ variableDecoder =
                 Json.Decode.list Json.Decode.string
             )
             (Json.Decode.field "visibility" Visibility.decoder)
-            (Json.Decode.field "name" Json.Decode.string)
-            (Json.Decode.field "body" Expression.decoder)
+            (Json.Decode.field "name" Pattern.decoder)
             (Json.Decode.field "bindings" <|
-                Json.Decode.list Binding.decoder
+                Json.Decode.list lazyDecoder
             )
+            (Json.Decode.field "body" Expression.decoder)
+
 
 
 -- PARSING SOURCE --------------------------------------------------------------
@@ -309,6 +333,7 @@ fromSource : String -> Result (List Parser.DeadEnd) Declaration
 fromSource source =
     Parser.run parser source
 
+
 {-| -}
 parser : Parser Declaration
 parser =
@@ -316,6 +341,13 @@ parser =
         [ functionParser
         , variableParser
         ]
+
+
+{-| -}
+lazyParser : Parser Declaration
+lazyParser =
+    Parser.lazy (\_ -> parser)
+
 
 
 -- PARSING SOURCE: DECLARATION.FUNCTION ----------------------------------------
@@ -353,12 +385,39 @@ functionParser =
         |. Parser.Extra.spaces
         |. Parser.symbol "=>"
         |. Parser.spaces
-        |= Expression.parser
-        |. Parser.spaces
-        |= bindingsParser
-        |> Parser.backtrackable
+        |> Parser.andThen
+            (\func ->
+                Parser.oneOf
+                    [ Parser.succeed func
+                        |. Parser.symbol "{"
+                        |. Parser.spaces
+                        |= Parser.loop []
+                            (\bindings ->
+                                Parser.oneOf
+                                    [ Parser.succeed (\binding -> binding :: bindings)
+                                        |= lazyParser
+                                        |. Parser.spaces
+                                        |> Parser.map Parser.Loop
+                                    , Parser.succeed (List.reverse bindings)
+                                        |> Parser.map Parser.Done
+                                    ]
+                            )
+                        |. Parser.spaces
+                        |. Parser.keyword "ret"
+                        |. Parser.spaces
+                        |= Expression.parser
+                        |. Parser.spaces
+                        |. Parser.symbol "}"
+                        |> Parser.backtrackable
+                    , Parser.succeed func
+                        |= Parser.succeed []
+                        |= Expression.parser
+                        |> Parser.backtrackable
+                    ]
+            )
 
-    
+
+
 -- PARSING SOURCE: DECLARATION.VARIABLE ----------------------------------------
 
 
@@ -372,40 +431,41 @@ variableParser =
         |. Parser.Extra.spaces
         |. Parser.keyword "let"
         |. Parser.Extra.spaces
-        |= Parser.variable
-            { start = Char.isLower
-            , inner = Char.isAlphaNum
-            , reserved = Keywords.all
-            }
+        |= Pattern.parser
         |. Parser.Extra.spaces
         |. Parser.symbol "="
         |. Parser.spaces
-        |= Expression.parser
-        |. Parser.spaces
-        |= bindingsParser
-        |> Parser.backtrackable
+        |> Parser.andThen
+            (\var ->
+                Parser.oneOf
+                    [ Parser.succeed var
+                        |. Parser.symbol "{"
+                        |. Parser.spaces
+                        |= Parser.loop []
+                            (\bindings ->
+                                Parser.oneOf
+                                    [ Parser.succeed (\binding -> binding :: bindings)
+                                        |= lazyParser
+                                        |. Parser.spaces
+                                        |> Parser.map Parser.Loop
+                                    , Parser.succeed (List.reverse bindings)
+                                        |> Parser.map Parser.Done
+                                    ]
+                            )
+                        |. Parser.spaces
+                        |. Parser.keyword "ret"
+                        |. Parser.spaces
+                        |= Expression.parser
+                        |. Parser.spaces
+                        |. Parser.symbol "}"
+                        |> Parser.backtrackable
+                    , Parser.succeed var
+                        |= Parser.succeed []
+                        |= Expression.parser
+                        |> Parser.backtrackable
+                    ]
+            )
 
-
--- PARSING SOURCE: BINDING -----------------------------------------------------
-
-
-{-| -}
-bindingsParser : Parser (List Binding)
-bindingsParser =
-    Parser.oneOf
-        [ Parser.succeed identity
-            |. Parser.keyword "where"
-            |. Parser.spaces
-            |= Parser.sequence
-                { start = ""
-                , separator = "and"
-                , end = ""
-                , item = Binding.parser
-                , spaces = Parser.spaces
-                , trailing = Parser.Forbidden
-                }
-        , Parser.succeed []
-        ]
 
 
 -- PARSING SOURCE: COMMENT -----------------------------------------------------
@@ -414,7 +474,7 @@ bindingsParser =
 {-| -}
 commentParser : Parser (List String)
 commentParser =
-    Parser.loop [] 
+    Parser.loop []
         (\comments ->
             Parser.oneOf
                 [ Parser.succeed (\comment -> comment :: comments)

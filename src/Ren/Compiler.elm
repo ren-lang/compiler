@@ -1,4 +1,4 @@
-module Ren.Compiler exposing 
+module Ren.Compiler exposing
     ( run
     , Module, Declaration, Expression
     , parse, parseDeclaration, parseExpression
@@ -7,38 +7,44 @@ module Ren.Compiler exposing
     , Target(..), emit, emitDeclaration, emitExpression
     )
 
+{-|
 
-{-| ## Table of Contents
 
-* Running The Compiler
-    * [run](#run)
-* Types
-    * [Module](#Module)
-    * [Declaration](#Declaration)
-    * [Expression](#Expression)
-* Parsing
-    * [parse](#parse)
-    * [parseDeclaration](#parseDeclaration)
-    * [parseExpression](#parseExpression)
-    * [decode](#decode)
-    * [decodeDeclaration](#decodeDeclaration)
-    * [decodeExpression](#decodeExpression)
-* Optimisation
-    * [optimise](#optimise)
-    * [optimiseDeclaration](#optimiseDeclaration)
-    * [optimiseExpression](#optimiseExpression)
-* Emitting Target Code
-    * [Target](#Target)
-    * [emit](#emit)
-    * [emitDeclaration](#emitDeclaration)
-    * [emitExpression](#emitExpression)
+## Table of Contents
+
+  - Running The Compiler
+      - [run](#run)
+  - Types
+      - [Module](#Module)
+      - [Declaration](#Declaration)
+      - [Expression](#Expression)
+  - Parsing
+      - [parse](#parse)
+      - [parseDeclaration](#parseDeclaration)
+      - [parseExpression](#parseExpression)
+      - [decode](#decode)
+      - [decodeDeclaration](#decodeDeclaration)
+      - [decodeExpression](#decodeExpression)
+  - Optimisation
+      - [optimise](#optimise)
+      - [optimiseDeclaration](#optimiseDeclaration)
+      - [optimiseExpression](#optimiseExpression)
+  - Emitting Target Code
+      - [Target](#Target)
+      - [emit](#emit)
+      - [emitDeclaration](#emitDeclaration)
+      - [emitExpression](#emitExpression)
 
 ---
+
+
 ## Running The Compiler
 
 @docs run
 
 ---
+
+
 ## Types
 
 This module aliases the main types that you might be interested in working with.
@@ -52,26 +58,30 @@ The alises are provided here as a convenience so you only need to import
 @docs Module, Declaration, Expression
 
 ---
+
+
 ## Parsing
 
 @docs parse, parseDeclaration, parseExpression
 @docs decode, decodeDeclaration, decodeExpression
 
 ---
+
+
 ## Optimisation
 
 @docs optimise, optimiseDeclaration, optimiseExpression
 
 ---
+
+
 ## Emitting Target Code
 
 @docs Target, emit, emitDeclaration, emitExpression
 
 -}
 
-
 -- IMPORTS ---------------------------------------------------------------------
-
 
 import Json.Decode
 import Parser
@@ -84,6 +94,7 @@ import Ren.Data.Expression as Expression
 import Ren.Data.Module as Module
 
 
+
 -- RUNNING THE COMPILER --------------------------------------------------------
 
 
@@ -94,21 +105,26 @@ and then emit the module as an ES6 JavaScript module.
 You can recreate this function yourself from a composition of the other functions
 exposed in this module:
 
-    import Ren.Compiler exposing 
-        ( parse
-        , optimise
-        , emit, Target(..)
-        )
+    import Ren.Compiler
+        exposing
+            ( Target(..)
+            , emit
+            , optimise
+            , parse
+            )
 
-    run = parse 
-        >> Result.map optimise 
-        >> Result.map (emit ES6)
+    run =
+        parse
+            >> Result.map optimise
+            >> Result.map (emit ES6)
+
 -}
 run : String -> Result (List Parser.DeadEnd) String
 run source =
     parse source
-        |> Result.map optimise 
+        |> Result.map optimise
         |> Result.map (emit ES6)
+
 
 
 -- TYPES -----------------------------------------------------------------------
@@ -125,6 +141,7 @@ basic module might look like:
 -}
 type alias Module =
     Module.Module
+
 
 {-| Declarations can either be functions (declared with the `fun` keyword), or
 variables (declared with the `let` keyword). Additionally, declarations may be
@@ -143,9 +160,11 @@ marked as public exports with the `pub` keyword. Here are some declarations:
 type alias Declaration =
     Declaration.Declaration
 
+
 {-| -}
 type alias Expression =
     Expression.Expression
+
 
 
 -- COMPILER STAGES: PARSING ----------------------------------------------------
@@ -156,30 +175,36 @@ parse : String -> Result (List Parser.DeadEnd) Module
 parse =
     Module.fromSource
 
+
 {-| -}
 parseDeclaration : String -> Result (List Parser.DeadEnd) Declaration
 parseDeclaration =
     Declaration.fromSource
+
 
 {-| -}
 parseExpression : String -> Result (List Parser.DeadEnd) Expression
 parseExpression =
     Expression.fromSource
 
+
 {-| -}
 decode : Json.Decode.Value -> Result Json.Decode.Error Module
 decode =
     Module.fromJSON
+
 
 {-| -}
 decodeDeclaration : Json.Decode.Value -> Result Json.Decode.Error Declaration
 decodeDeclaration =
     Declaration.fromJSON
 
+
 {-| -}
 decodeExpression : Json.Decode.Value -> Result Json.Decode.Error Expression
 decodeExpression =
     Expression.fromJSON
+
 
 
 -- COMPILER STAGES: OPTIMISATION ------------------------------------------------
@@ -196,10 +221,12 @@ optimiseDeclaration : Declaration -> Declaration
 optimiseDeclaration =
     Declaration.optimise
 
+
 {-| -}
 optimiseExpression : Expression -> Expression
 optimiseExpression =
     Expression.optimise
+
 
 
 -- COMPILER STAGES: EMITTING ---------------------------------------------------
@@ -209,6 +236,7 @@ optimiseExpression =
 type Target
     = ES6
 
+
 {-| -}
 emit : Target -> Module -> String
 emit target =
@@ -216,12 +244,14 @@ emit target =
         ES6 ->
             ES6.fromModule
 
+
 {-| -}
 emitDeclaration : Target -> Declaration -> String
 emitDeclaration target =
     case target of
         ES6 ->
             ES6.fromDeclaration
+
 
 {-| -}
 emitExpression : Target -> Expression -> String
