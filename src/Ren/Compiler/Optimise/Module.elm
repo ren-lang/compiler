@@ -8,7 +8,6 @@ module Ren.Compiler.Optimise.Module exposing
 
 -- IMPORTS ---------------------------------------------------------------------
 
-import Maybe.Extra
 import Ren.Compiler.Optimise.Declaration as Declaration
 import Ren.Data.Declaration as Declaration exposing (Declaration(..))
 import Ren.Data.Declaration.Visibility exposing (Visibility(..))
@@ -36,13 +35,20 @@ optimise =
 apply : List (Module -> Maybe Module) -> Module -> Module
 apply optimisations module_ =
     case optimisations of
-        head :: tail ->
-            List.foldr Maybe.Extra.andThenAttempt (head module_) tail
+        _ :: _ ->
+            module_
+                |> List.foldl or (always Nothing) optimisations
                 |> Maybe.map (apply optimisations)
                 |> Maybe.withDefault module_
 
         [] ->
             module_
+
+
+{-| -}
+or : (Module -> Maybe Module) -> (Module -> Maybe Module) -> Module -> Maybe Module
+or f g m =
+    f m |> Maybe.map Just |> Maybe.withDefault (g m)
 
 
 

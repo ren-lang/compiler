@@ -12,7 +12,6 @@ module Ren.Compiler.Optimise.Declaration exposing
 
 -- IMPORTS ---------------------------------------------------------------------
 
-import Maybe.Extra
 import Ren.Compiler.Optimise.Expression as Expression
 import Ren.Data.Declaration as Declaration exposing (Declaration(..))
 import Ren.Data.Declaration.Binding exposing (Binding(..))
@@ -38,13 +37,20 @@ optimise =
 apply : List (Declaration -> Maybe Declaration) -> Declaration -> Declaration
 apply optimisations declaration =
     case optimisations of
-        head :: tail ->
-            List.foldr Maybe.Extra.andThenAttempt (head declaration) tail
+        _ :: _ ->
+            declaration
+                |> List.foldr or (always Nothing) optimisations
                 |> Maybe.map (apply optimisations)
                 |> Maybe.withDefault declaration
 
         [] ->
             declaration
+
+
+{-| -}
+or : (Declaration -> Maybe Declaration) -> (Declaration -> Maybe Declaration) -> Declaration -> Maybe Declaration
+or f g d =
+    f d |> Maybe.map Just |> Maybe.withDefault (g d)
 
 
 
