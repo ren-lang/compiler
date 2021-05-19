@@ -1,20 +1,28 @@
-module Ren.Data.Expression.Literal exposing 
+module Ren.Data.Expression.Literal exposing
     ( Literal(..)
     , coerceToNumber, coerceToInteger, coerceToString
     , decoder, primitiveDecoder
     , parser, primitiveParser
     )
 
+{-|
+
+@docs Literal
+@docs coerceToNumber, coerceToInteger, coerceToString
+@docs decoder, primitiveDecoder
+@docs parser, primitiveParser
+
+-}
 
 -- IMPORTS ---------------------------------------------------------------------
-
 
 import Dict exposing (Dict)
 import Json.Decode exposing (Decoder)
 import Json.Decode.Extra
-import Parser exposing (Parser, (|=), (|.))
+import Parser exposing ((|.), (|=), Parser)
 import Parser.Extra
 import Ren.Data.Keywords as Keywords
+
 
 
 -- TYPES -----------------------------------------------------------------------
@@ -27,6 +35,7 @@ type Literal expression
     | Number Float
     | Object (Dict String expression)
     | String String
+
 
 
 -- HELPERS ---------------------------------------------------------------------
@@ -54,6 +63,7 @@ coerceToNumber literal =
         String s ->
             String.toFloat s
 
+
 {-| -}
 coerceToInteger : Literal expression -> Maybe Int
 coerceToInteger literal =
@@ -72,18 +82,21 @@ coerceToInteger literal =
             Just 0
 
         Number f ->
-            Basics.floor f |> \i ->
-                if isIntegerFloat f i then
-                    Just i
+            Basics.floor f
+                |> (\i ->
+                        if isIntegerFloat f i then
+                            Just i
 
-                else
-                    Nothing
+                        else
+                            Nothing
+                   )
 
         Object _ ->
             Nothing
 
         String s ->
             String.toInt s
+
 
 {-| -}
 coerceToString : Literal expression -> Maybe String
@@ -108,6 +121,7 @@ coerceToString literal =
             Just s
 
 
+
 -- PARSING JSON ----------------------------------------------------------------
 
 
@@ -122,6 +136,7 @@ decoder expressionDecoder =
         , stringLiteralDecoder
         ]
 
+
 {-| -}
 primitiveDecoder : Decoder (Literal expression)
 primitiveDecoder =
@@ -130,6 +145,7 @@ primitiveDecoder =
         , numberLiteralDecoder
         , stringLiteralDecoder
         ]
+
 
 {-| -}
 arrayLiteralDecoder : Decoder expression -> Decoder (Literal expression)
@@ -140,12 +156,14 @@ arrayLiteralDecoder expressionDecoder =
                 Json.Decode.list expressionDecoder
             )
 
+
 {-| -}
 booleanLiteralDecoder : Decoder (Literal expression)
 booleanLiteralDecoder =
     Json.Decode.Extra.taggedObject "Literal.Boolean" <|
         Json.Decode.map Boolean
             (Json.Decode.field "boolean" Json.Decode.bool)
+
 
 {-| -}
 objectLiteralDecoder : Decoder expression -> Decoder (Literal expression)
@@ -156,17 +174,20 @@ objectLiteralDecoder expressionDecoder =
                 Json.Decode.dict expressionDecoder
             )
 
+
 numberLiteralDecoder : Decoder (Literal expression)
 numberLiteralDecoder =
     Json.Decode.Extra.taggedObject "Literal.Number" <|
         Json.Decode.map Number
             (Json.Decode.field "number" Json.Decode.float)
 
+
 stringLiteralDecoder : Decoder (Literal expression)
 stringLiteralDecoder =
     Json.Decode.Extra.taggedObject "Literal.String" <|
         Json.Decode.map String
             (Json.Decode.field "string" Json.Decode.string)
+
 
 
 -- PARSING SOURCE --------------------------------------------------------------
@@ -183,6 +204,7 @@ parser toExpression expressionParser =
         , stringLiteralParser
         ]
 
+
 {-| -}
 primitiveParser : Parser (Literal expression)
 primitiveParser =
@@ -191,6 +213,7 @@ primitiveParser =
         , numberLiteralParser
         , stringLiteralParser
         ]
+
 
 {-| -}
 arrayLiteralParser : Parser expression -> Parser (Literal expression)
@@ -205,6 +228,7 @@ arrayLiteralParser expressionParser =
             , trailing = Parser.Forbidden
             }
 
+
 {-| -}
 booleanLiteralParser : Parser (Literal expression)
 booleanLiteralParser =
@@ -215,6 +239,7 @@ booleanLiteralParser =
             , Parser.succeed False
                 |. Parser.keyword "false"
             ]
+
 
 {-| -}
 numberLiteralParser : Parser (Literal expression)
@@ -231,16 +256,18 @@ numberLiteralParser =
     Parser.succeed Number
         |= Parser.oneOf
             [ Parser.succeed Basics.negate
-                |. Parser.symbol "-" 
+                |. Parser.symbol "-"
                 |= Parser.number numberConfig
             , Parser.number numberConfig
             ]
         -- This is necessary to ensure we don't parse "123abc" as "Number 123"
         |. Parser.oneOf
-            [ Parser.chompIf (Char.isAlpha)
+            [ Parser.chompIf Char.isAlpha
                 |> Parser.andThen (\_ -> Parser.problem "")
             , Parser.succeed ()
             ]
+        |> Parser.backtrackable
+
 
 {-| -}
 objectLiteralParser : (String -> expression) -> Parser expression -> Parser (Literal expression)
@@ -250,7 +277,7 @@ objectLiteralParser toExpression expressionParser =
             { start = "{"
             , separator = ","
             , end = "}"
-            , item = 
+            , item =
                 Parser.oneOf
                     [ Parser.succeed Tuple.pair
                         |= Parser.variable
@@ -273,6 +300,7 @@ objectLiteralParser toExpression expressionParser =
             , spaces = Parser.spaces
             , trailing = Parser.Forbidden
             }
+
 
 {-| -}
 stringLiteralParser : Parser (Literal expression)
