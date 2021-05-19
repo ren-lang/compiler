@@ -47,6 +47,24 @@ suite =
                     [ local "a" ]
                 )
             )
+        , shouldSucceed "if a then b else c"
+            (Conditional
+                (local "a")
+                (local "b")
+                (local "c")
+            )
+        , shouldSucceed "if f a then b else c"
+            (Conditional
+                (Application (local "f") [ local "a" ])
+                (local "b")
+                (local "c")
+            )
+        , shouldSucceed "if a then f b else c"
+            (Conditional
+                (local "a")
+                (Application (local "f") [ local "b" ])
+                (local "c")
+            )
         ]
 
 
