@@ -35,6 +35,11 @@ suite =
                 )
                 [ local "b" ]
             )
+        , shouldSucceed "f ()"
+            (Application
+                (local "f")
+                [ Literal Undefined ]
+            )
         , shouldSucceed "a |> f"
             (Infix Pipe
                 (local "a")
