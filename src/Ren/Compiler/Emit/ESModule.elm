@@ -1,4 +1,4 @@
-module Ren.Compiler.Emit.ES6 exposing
+module Ren.Compiler.Emit.ESModule exposing
     ( fromDeclaration
     , fromExpression
     , fromModule
