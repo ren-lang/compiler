@@ -1,5 +1,5 @@
 module Ren.Data.Expression exposing
-    ( Expression(..), Accessor, Identifier, Literal, Operator, Pattern
+    ( Expression(..), Accessor, Identifier, Operator, Pattern, Literal
     , local, scoped, operator, field
     , array, boolean, number, int, object, string
     , operatorFromName, operatorToName, operatorFromSymbol, operatorToSymbol
@@ -8,68 +8,81 @@ module Ren.Data.Expression exposing
     , fromSource, parser
     )
 
-{-| ## Table of Contents
+{-|
 
-* Types
-    * [Expression](#Expression)
-    * [Accessor](#Accessor)
-    * [Identifier](#Identifier)
-    * [Literal](#Literal)
-    * [Operator](#Operator)
-    * [Pattern](#Pattern)
-* Helpers
-    * Identifier Helpers
-        * [local](#local)
-        * [scoped](#scoped)
-        * [operator](#operator)
-        * [field](#field)
-    * Literal Helpers
-        * [array](#array)
-        * [boolean](#boolean)
-        * [number](#number)
-        * [int](#int)
-        * [object](#object)
-        * [string](#string)
-    * Operator Helpers
-        * [operatorFromName](#operatorFromName)
-        * [operatorToName](#operatorToName)
-        * [operatorFromSymbol](#operatorFromSymbol)
-        * [operatorToSymbol](#operatorToSymbol)
-    * Queries
-        * [referencesName](#referencesName)
-        * [referencesScopedName](#referencesScopedName)
-        * [refernecesModule](#referencesModule)
-* Parsing
-    * [fromJSON](#fromJSON)
-    * [decoder](#decoder)
-    * [fromSource](#fromSource)
-    * [parser](#parser)
+
+## Table of Contents
+
+  - Types
+      - [Expression](#Expression)
+      - [Accessor](#Accessor)
+      - [Identifier](#Identifier)
+      - [Literal](#Literal)
+      - [Operator](#Operator)
+      - [Pattern](#Pattern)
+  - Helpers
+      - Identifier Helpers
+          - [local](#local)
+          - [scoped](#scoped)
+          - [operator](#operator)
+          - [field](#field)
+      - Literal Helpers
+          - [array](#array)
+          - [boolean](#boolean)
+          - [number](#number)
+          - [int](#int)
+          - [object](#object)
+          - [string](#string)
+      - Operator Helpers
+          - [operatorFromName](#operatorFromName)
+          - [operatorToName](#operatorToName)
+          - [operatorFromSymbol](#operatorFromSymbol)
+          - [operatorToSymbol](#operatorToSymbol)
+      - Queries
+          - [referencesName](#referencesName)
+          - [referencesScopedName](#referencesScopedName)
+          - [refernecesModule](#referencesModule)
+  - Parsing
+      - [fromJSON](#fromJSON)
+      - [decoder](#decoder)
+      - [fromSource](#fromSource)
+      - [parser](#parser)
 
 ---
+
+
 ## Types
 
 @docs Expression, Accessor, Identifier, Operator, Pattern, Literal
 
 ---
+
+
 ## Helpers
+
 
 ### Identifier Helpers
 
 @docs local, scoped, operator, field
 
+
 ### Literal Helpers
 
 @docs array, boolean, number, int, object, string
 
+
 ### Operator Helpers
 
 @docs operatorFromName, operatorToName, operatorFromSymbol, operatorToSymbol
+
 
 ### Queries
 
 @docs referencesName, referencesScopedName, referencesModule
 
 ---
+
+
 ## Parsing
 
 @docs fromJSON, decoder
@@ -77,25 +90,22 @@ module Ren.Data.Expression exposing
 
 -}
 
-
 -- IMPORTS ---------------------------------------------------------------------
-
 
 import Dict
 import Json.Decode exposing (Decoder)
 import Json.Decode.Extra
-import Parser exposing (Parser, (|=), (|.))
+import Parser exposing ((|.), (|=), Parser)
 import Pratt
 import Ren.Data.Expression.Accessor as Accessor
-import Ren.Data.Expression.Identifier as Identifier
-import Ren.Data.Expression.Identifier exposing (Identifier)
+import Ren.Data.Expression.Identifier as Identifier exposing (Identifier)
 import Ren.Data.Expression.Literal as Literal
 import Ren.Data.Expression.Operator as Operator
 import Ren.Data.Expression.Pattern as Pattern
 
 
--- TYPES -----------------------------------------------------------------------
 
+-- TYPES -----------------------------------------------------------------------
 
 
 {-| -}
@@ -109,6 +119,7 @@ type Expression
     | Lambda (List Pattern) Expression
     | Literal Literal
 
+
 {-| An `Accessor` is what we use to access fields or indecies of an object or
 array. They can be fixed as in:
 
@@ -116,16 +127,17 @@ array. They can be fixed as in:
 
 Or they can be computed:
 
-    foo["baz"]
+    foo [ "baz" ]
 
 In fact, array indexing is just a computed accessor with a `Number` literal as
 the computed expression:
 
-    arr[0]
+    arr [ 0 ]
 
 -}
 type alias Accessor =
     Accessor.Accessor Expression
+
 
 {-| An `Identifier` is what we use when we need to refer to something by its name.
 Lower case names are `Local` identifiers:
@@ -150,16 +162,19 @@ And so can object fields:
 type alias Identifier =
     Identifier.Identifier
 
+
 {-| We support the typical literals that you might expect. Like JavaScript we have
 a single Number literal to cover both Integers and Floats, rather than making them
 distinct:
 
     1
+
     0.99
 
 There are boolean literals:
 
     true
+
     false
 
 String literals can use either single or double quotes:
@@ -182,42 +197,44 @@ As do object literals:
 type alias Literal =
     Literal.Literal Expression
 
+
 {-| Unlike a language like Haskell or PureScript, we don't allow custom operators.
 Below is a list of all the operators Ren has, and their names. Refer to the
 language docs if you want to know what all of these do!
 
     -- Functions
-    |>  Pipe   
+    |>  Pipe
     >>  Compose
     ;   Discard
 
     -- Maths
-    +   Add    
-    -   Sub    
-    *   Mul    
-    /   Div    
-    ^   Pow    
-    %   Mod   
+    +   Add
+    -   Sub
+    *   Mul
+    /   Div
+    ^   Pow
+    %   Mod
 
-    -- Comparison 
-    ==  Eq     
-    !=  NotEq  
-    <   Lt     
-    <=  Lte    
-    >   Gt     
-    >=  Gte   
+    -- Comparison
+    ==  Eq
+    !=  NotEq
+    <   Lt
+    <=  Lte
+    >   Gt
+    >=  Gte
 
-    -- Logic 
-    &   And    
-    |   Or   
+    -- Logic
+    &   And
+    |   Or
 
-    -- Arrays  
-    ::  Cons   
+    -- Arrays
+    ::  Cons
     ++  Join
 
 -}
 type alias Operator =
     Operator.Operator
+
 
 {-| Patterns are used in function arguments and encompass a few different things.
 Simple name bindings are patterns:
@@ -234,7 +251,7 @@ And we can nest patterns inside these destructuring patterns as you might expect
     fun { foo: { bar } } => ...
     fun [ bar, { baz } ] => ...
 
-And finally there is the wildcard pattern when you want to *ignore* an argument
+And finally there is the wildcard pattern when you want to _ignore_ an argument
 but still require it to exist:
 
     fun _ => ...
@@ -249,150 +266,325 @@ type alias Pattern =
     Pattern.Pattern
 
 
+
 -- IDENITIFER HELPERS ----------------------------------------------------------
 
 
-{-| Create an `Identifier` expression from a local name. -}
+{-| Create an `Identifier` expression from a local name.
+-}
 local : String -> Expression
 local name =
     Identifier <| Identifier.Local name
 
-{-| Create an `Identifier` expression from a list of namespaces and a name. -}
+
+{-| Create an `Identifier` expression from a list of namespaces and a name.
+-}
 scoped : List String -> String -> Expression
 scoped namespace name =
     Identifier <| Identifier.Scoped namespace name
 
-{-| Create an `Identifier` expression from an `Operator`. -}
+
+{-| Create an `Identifier` expression from an `Operator`.
+-}
 operator : Operator -> Expression
 operator op =
     Identifier <| Identifier.Operator op
 
-{-| Create an `Identifier` expression from a record field name. -}
+
+{-| Create an `Identifier` expression from a record field name.
+-}
 field : String -> Expression
 field name =
     Identifier <| Identifier.Field name
 
 
+
 -- OPERATOR HELPERS ------------------------------------------------------------
 
 
-{-| Convert an `Operator` to its symbollic representation in Ren code. -}
+{-| Convert an `Operator` to its symbollic representation in Ren code.
+-}
 operatorToSymbol : Operator -> String
 operatorToSymbol op =
     case op of
-        Operator.Pipe      -> "|>"
-        Operator.Compose   -> ">>"
-        Operator.Discard   -> ";"
-        Operator.Add       -> "+"
-        Operator.Sub       -> "-"
-        Operator.Mul       -> "*"
-        Operator.Div       -> "/"
-        Operator.Pow       -> "^"
-        Operator.Mod       -> "%"
-        Operator.Eq        -> "=="
-        Operator.NotEq     -> "!="
-        Operator.Lt        -> "<"
-        Operator.Lte       -> "<="
-        Operator.Gt        -> ">"
-        Operator.Gte       -> ">="
-        Operator.And       -> "&"
-        Operator.Or        -> "|"
-        Operator.Cons      -> "::"
-        Operator.Join      -> "++"
+        Operator.Pipe ->
+            "|>"
 
-{-| Create an `Operator` from its symbollic representation in Ren code. -}
+        Operator.Compose ->
+            ">>"
+
+        Operator.Discard ->
+            ";"
+
+        Operator.Add ->
+            "+"
+
+        Operator.Sub ->
+            "-"
+
+        Operator.Mul ->
+            "*"
+
+        Operator.Div ->
+            "/"
+
+        Operator.Pow ->
+            "^"
+
+        Operator.Mod ->
+            "%"
+
+        Operator.Eq ->
+            "=="
+
+        Operator.NotEq ->
+            "!="
+
+        Operator.Lt ->
+            "<"
+
+        Operator.Lte ->
+            "<="
+
+        Operator.Gt ->
+            ">"
+
+        Operator.Gte ->
+            ">="
+
+        Operator.And ->
+            "&"
+
+        Operator.Or ->
+            "|"
+
+        Operator.Cons ->
+            "::"
+
+        Operator.Join ->
+            "++"
+
+
+{-| Create an `Operator` from its symbollic representation in Ren code.
+-}
 operatorFromSymbol : String -> Maybe Operator
 operatorFromSymbol op =
     case op of
-        "|>"   -> Just Operator.Pipe
-        ">>"   -> Just Operator.Compose
-        ";"    -> Just Operator.Discard
-        "+"    -> Just Operator.Add
-        "-"    -> Just Operator.Sub
-        "*"    -> Just Operator.Mul
-        "/"    -> Just Operator.Div
-        "^"    -> Just Operator.Pow
-        "%"    -> Just Operator.Mod
-        "=="   -> Just Operator.Eq
-        "!="   -> Just Operator.NotEq
-        "<"    -> Just Operator.Lt
-        "<="   -> Just Operator.Lte
-        ">"    -> Just Operator.Gt
-        ">="   -> Just Operator.Gte
-        "&"    -> Just Operator.And
-        "|"    -> Just Operator.Or
-        "::"   -> Just Operator.Cons
-        "++"   -> Just Operator.Join
-        _      -> Nothing
+        "|>" ->
+            Just Operator.Pipe
+
+        ">>" ->
+            Just Operator.Compose
+
+        ";" ->
+            Just Operator.Discard
+
+        "+" ->
+            Just Operator.Add
+
+        "-" ->
+            Just Operator.Sub
+
+        "*" ->
+            Just Operator.Mul
+
+        "/" ->
+            Just Operator.Div
+
+        "^" ->
+            Just Operator.Pow
+
+        "%" ->
+            Just Operator.Mod
+
+        "==" ->
+            Just Operator.Eq
+
+        "!=" ->
+            Just Operator.NotEq
+
+        "<" ->
+            Just Operator.Lt
+
+        "<=" ->
+            Just Operator.Lte
+
+        ">" ->
+            Just Operator.Gt
+
+        ">=" ->
+            Just Operator.Gte
+
+        "&" ->
+            Just Operator.And
+
+        "|" ->
+            Just Operator.Or
+
+        "::" ->
+            Just Operator.Cons
+
+        "++" ->
+            Just Operator.Join
+
+        _ ->
+            Nothing
+
 
 {-| Convert an `Operator` to its (unqualified) name. This is the name that is
-used in the Elm source code. -}
+used in the Elm source code.
+-}
 operatorToName : Operator -> String
 operatorToName op =
     case op of
-        Operator.Pipe      -> "Pipe"
-        Operator.Compose   -> "Compose"
-        Operator.Discard   -> "Discard"
-        Operator.Add       -> "Add"
-        Operator.Sub       -> "Sub"
-        Operator.Mul       -> "Mul"
-        Operator.Div       -> "Div"
-        Operator.Pow       -> "Pow"
-        Operator.Mod       -> "Mod"
-        Operator.Eq        -> "Eq"
-        Operator.NotEq     -> "NotEq"
-        Operator.Lt        -> "Lt"
-        Operator.Lte       -> "Lte"
-        Operator.Gt        -> "Gt"
-        Operator.Gte       -> "Gte"
-        Operator.And       -> "And"
-        Operator.Or        -> "Or"
-        Operator.Cons      -> "Cons"
-        Operator.Join      -> "Join"
+        Operator.Pipe ->
+            "Pipe"
 
-{-| Create an `Operator` from its name used the in Elm source code. -}
+        Operator.Compose ->
+            "Compose"
+
+        Operator.Discard ->
+            "Discard"
+
+        Operator.Add ->
+            "Add"
+
+        Operator.Sub ->
+            "Sub"
+
+        Operator.Mul ->
+            "Mul"
+
+        Operator.Div ->
+            "Div"
+
+        Operator.Pow ->
+            "Pow"
+
+        Operator.Mod ->
+            "Mod"
+
+        Operator.Eq ->
+            "Eq"
+
+        Operator.NotEq ->
+            "NotEq"
+
+        Operator.Lt ->
+            "Lt"
+
+        Operator.Lte ->
+            "Lte"
+
+        Operator.Gt ->
+            "Gt"
+
+        Operator.Gte ->
+            "Gte"
+
+        Operator.And ->
+            "And"
+
+        Operator.Or ->
+            "Or"
+
+        Operator.Cons ->
+            "Cons"
+
+        Operator.Join ->
+            "Join"
+
+
+{-| Create an `Operator` from its name used the in Elm source code.
+-}
 operatorFromName : String -> Maybe Operator
 operatorFromName op =
     case op of
-        "Pipe"      -> Just Operator.Pipe
-        "Compose"   -> Just Operator.Compose
-        "Discard"   -> Just Operator.Discard
-        "Add"       -> Just Operator.Add
-        "Sub"       -> Just Operator.Sub
-        "Mul"       -> Just Operator.Mul
-        "Div"       -> Just Operator.Div
-        "Pow"       -> Just Operator.Pow
-        "Mod"       -> Just Operator.Mod
-        "Eq"        -> Just Operator.Eq
-        "NotEq"     -> Just Operator.NotEq
-        "Lt"        -> Just Operator.Lt
-        "Lte"       -> Just Operator.Lte
-        "Gt"        -> Just Operator.Gt
-        "Gte"       -> Just Operator.Gte
-        "And"       -> Just Operator.And
-        "Or"        -> Just Operator.Or
-        "Cons"      -> Just Operator.Cons
-        "Join"      -> Just Operator.Join
-        _           -> Nothing
+        "Pipe" ->
+            Just Operator.Pipe
+
+        "Compose" ->
+            Just Operator.Compose
+
+        "Discard" ->
+            Just Operator.Discard
+
+        "Add" ->
+            Just Operator.Add
+
+        "Sub" ->
+            Just Operator.Sub
+
+        "Mul" ->
+            Just Operator.Mul
+
+        "Div" ->
+            Just Operator.Div
+
+        "Pow" ->
+            Just Operator.Pow
+
+        "Mod" ->
+            Just Operator.Mod
+
+        "Eq" ->
+            Just Operator.Eq
+
+        "NotEq" ->
+            Just Operator.NotEq
+
+        "Lt" ->
+            Just Operator.Lt
+
+        "Lte" ->
+            Just Operator.Lte
+
+        "Gt" ->
+            Just Operator.Gt
+
+        "Gte" ->
+            Just Operator.Gte
+
+        "And" ->
+            Just Operator.And
+
+        "Or" ->
+            Just Operator.Or
+
+        "Cons" ->
+            Just Operator.Cons
+
+        "Join" ->
+            Just Operator.Join
+
+        _ ->
+            Nothing
+
 
 
 -- LITERAL HELPRES -------------------------------------------------------------
 
 
-{-| Create an array literal expression from an Elm list of expressions. -}
+{-| Create an array literal expression from an Elm list of expressions.
+-}
 array : List Expression -> Expression
 array elements =
     Literal <| Literal.Array elements
 
-{-| Create a boolean literal expression from an Elm Bool. -}
+
+{-| Create a boolean literal expression from an Elm Bool.
+-}
 boolean : Bool -> Expression
 boolean b =
     Literal <| Literal.Boolean b
 
-{-| Create a number literal expression from an Elm Float. -}
+
+{-| Create a number literal expression from an Elm Float.
+-}
 number : Float -> Expression
 number f =
     Literal <| Literal.Number f
+
 
 {-| Create a number literal expression from an Elm Int. Remember numbers in
 Ren are always floating-point, so this will convert the argument to an Elm
@@ -402,15 +594,20 @@ int : Int -> Expression
 int i =
     Literal <| Literal.Number (Basics.toFloat i)
 
-{-| Create an object literal expression from an Elm list of key/value piars. -}
+
+{-| Create an object literal expression from an Elm list of key/value piars.
+-}
 object : List ( String, Expression ) -> Expression
 object fields =
     Literal <| Literal.Object <| Dict.fromList fields
 
-{-| Create a string literal expression from an Elm string. -}
+
+{-| Create a string literal expression from an Elm string.
+-}
 string : String -> Expression
 string s =
     Literal <| Literal.String s
+
 
 
 -- QUERIES ---------------------------------------------------------------------
@@ -432,7 +629,7 @@ referencesName name_ expression =
                                 False
                     )
                     accessors
-    
+
         Application func args ->
             referencesName name_ func
                 || List.any (referencesName name_) args
@@ -452,7 +649,7 @@ referencesName name_ expression =
             False
 
         Infix _ lhs rhs ->
-            referencesName name_ lhs 
+            referencesName name_ lhs
                 || referencesName name_ rhs
 
         Lambda _ body ->
@@ -460,6 +657,7 @@ referencesName name_ expression =
 
         Literal _ ->
             False
+
 
 {-| -}
 referencesScopedName : List String -> String -> Expression -> Bool
@@ -477,7 +675,7 @@ referencesScopedName namespace_ name_ expression =
                                 False
                     )
                     accessors
-    
+
         Application func args ->
             referencesScopedName namespace_ name_ func
                 || List.any (referencesScopedName namespace_ name_) args
@@ -497,7 +695,7 @@ referencesScopedName namespace_ name_ expression =
             False
 
         Infix _ lhs rhs ->
-            referencesScopedName namespace_ name_ lhs 
+            referencesScopedName namespace_ name_ lhs
                 || referencesScopedName namespace_ name_ rhs
 
         Lambda _ body ->
@@ -505,6 +703,7 @@ referencesScopedName namespace_ name_ expression =
 
         Literal _ ->
             False
+
 
 {-| -}
 referencesModule : List String -> Expression -> Bool
@@ -522,7 +721,7 @@ referencesModule namespace_ expression =
                                 False
                     )
                     accessors
-    
+
         Application func args ->
             referencesModule namespace_ func
                 || List.any (referencesModule namespace_) args
@@ -539,67 +738,67 @@ referencesModule namespace_ expression =
             ns == namespace_
 
         Identifier (Identifier.Operator Operator.Pipe) ->
-            ["$Function"] == namespace_
+            [ "$Function" ] == namespace_
 
         Identifier (Identifier.Operator Operator.Compose) ->
-            ["$Function"] == namespace_
+            [ "$Function" ] == namespace_
 
         Identifier (Identifier.Operator Operator.Discard) ->
-            ["$Function"] == namespace_
+            [ "$Function" ] == namespace_
 
         Identifier (Identifier.Operator Operator.Add) ->
-            ["$Math"] == namespace_
+            [ "$Math" ] == namespace_
 
         Identifier (Identifier.Operator Operator.Sub) ->
-            ["$Math"] == namespace_
+            [ "$Math" ] == namespace_
 
         Identifier (Identifier.Operator Operator.Mul) ->
-            ["$Math"] == namespace_
+            [ "$Math" ] == namespace_
 
         Identifier (Identifier.Operator Operator.Div) ->
-            ["$Math"] == namespace_
+            [ "$Math" ] == namespace_
 
         Identifier (Identifier.Operator Operator.Pow) ->
-            ["$Math"] == namespace_
+            [ "$Math" ] == namespace_
 
         Identifier (Identifier.Operator Operator.Mod) ->
-            ["$Math"] == namespace_
+            [ "$Math" ] == namespace_
 
         Identifier (Identifier.Operator Operator.Eq) ->
-            ["$Comparison"] == namespace_
+            [ "$Comparison" ] == namespace_
 
         Identifier (Identifier.Operator Operator.NotEq) ->
-            ["$Comparison"] == namespace_
+            [ "$Comparison" ] == namespace_
 
         Identifier (Identifier.Operator Operator.Lt) ->
-            ["$Comparison"] == namespace_
+            [ "$Comparison" ] == namespace_
 
         Identifier (Identifier.Operator Operator.Lte) ->
-            ["$Comparison"] == namespace_
+            [ "$Comparison" ] == namespace_
 
         Identifier (Identifier.Operator Operator.Gt) ->
-            ["$Comparison"] == namespace_
+            [ "$Comparison" ] == namespace_
 
         Identifier (Identifier.Operator Operator.Gte) ->
-            ["$Comparison"] == namespace_
+            [ "$Comparison" ] == namespace_
 
         Identifier (Identifier.Operator Operator.And) ->
-            ["$Logic"] == namespace_
+            [ "$Logic" ] == namespace_
 
         Identifier (Identifier.Operator Operator.Or) ->
-            ["$Logic"] == namespace_
+            [ "$Logic" ] == namespace_
 
         Identifier (Identifier.Operator Operator.Cons) ->
-            ["$Array"] == namespace_
+            [ "$Array" ] == namespace_
 
         Identifier (Identifier.Operator Operator.Join) ->
-            ["$Array"] == namespace_
+            [ "$Array" ] == namespace_
 
         Identifier _ ->
             False
 
         Infix _ lhs rhs ->
-            referencesModule namespace_ lhs 
+            referencesModule namespace_ lhs
                 || referencesModule namespace_ rhs
 
         Lambda _ body ->
@@ -609,18 +808,22 @@ referencesModule namespace_ expression =
             False
 
 
+
 -- PARSING JSON ----------------------------------------------------------------
 
 
 {-| Parse an `Expression` from an Elm JSON `Value`. You might find this handy if
-you're working with some tooling that emits a Ren AST as JSON. -}
+you're working with some tooling that emits a Ren AST as JSON.
+-}
 fromJSON : Json.Decode.Value -> Result Json.Decode.Error Expression
 fromJSON json =
     Json.Decode.decodeValue decoder json
 
+
 {-| The decoder used in [`fromJSON`](#fromJSON). This might be handy if you have
 a JSON string rather than an Elm `Value` and you want to decode it using
-`Json.Decode.decodeString`. -}
+`Json.Decode.decodeString`.
+-}
 decoder : Decoder Expression
 decoder =
     Json.Decode.oneOf
@@ -634,10 +837,12 @@ decoder =
         , literalDecoder
         ]
 
+
 {-| -}
 lazyDecoder : Decoder Expression
 lazyDecoder =
     Json.Decode.lazy (\_ -> decoder)
+
 
 
 -- PARSING JSON: EXPRESSION.ACCESS ---------------------------------------------
@@ -649,9 +854,11 @@ accessDecoder =
     Json.Decode.Extra.taggedObject "Expression.Access" <|
         Json.Decode.map2 Access
             (Json.Decode.field "expression" lazyDecoder)
-            (Json.Decode.field "accessors" <| 
+            (Json.Decode.field "accessors" <|
                 Json.Decode.list (Accessor.decoder lazyDecoder)
             )
+
+
 
 -- PARSING JSON: EXPRESSION.APPLICATION ----------------------------------------
 
@@ -667,6 +874,7 @@ applicationDecoder =
             )
 
 
+
 -- PARSING JSON: EXPRESSION.COMMENT --------------------------------------------
 
 
@@ -676,6 +884,7 @@ commentDecoder =
     Json.Decode.Extra.taggedObject "Expression.Comment" <|
         Json.Decode.map Comment
             (Json.Decode.field "comment" Json.Decode.string)
+
 
 
 -- PARSING JSON: EXPRESSION.CONDITIONAL ----------------------------------------
@@ -691,6 +900,7 @@ conditionalDecoder =
             (Json.Decode.field "else" lazyDecoder)
 
 
+
 -- PARSING JSON: EXPRESSION.IDENITIFER -----------------------------------------
 
 
@@ -700,6 +910,7 @@ identifierDecoder =
     Json.Decode.Extra.taggedObject "Expression.Identifier" <|
         Json.Decode.map Identifier
             (Json.Decode.field "identifier" Identifier.decoder)
+
 
 
 -- PARSING JSON: EXPRESSION.INFIX ----------------------------------------------
@@ -713,6 +924,7 @@ infixDecoder =
             (Json.Decode.field "operator" Operator.decoder)
             (Json.Decode.field "lhs" lazyDecoder)
             (Json.Decode.field "rhs" lazyDecoder)
+
 
 
 -- PARSING JSON: EXPRESSION.LAMBDA ---------------------------------------------
@@ -729,6 +941,7 @@ lambdaDecoder =
             (Json.Decode.field "body" lazyDecoder)
 
 
+
 -- PARSING JSON: EXPRESSION.LITERAL --------------------------------------------
 
 
@@ -742,34 +955,38 @@ literalDecoder =
             )
 
 
+
 -- PARSING SOURCE CODE ---------------------------------------------------------
 
 
 {-| Parse an `Expression` from some Ren source code. It doesn't seem all that
 likely you'll need to use this over `Declaration.fromSource` or `Module.fromSource`
-but just in case it is, here you go. -}
+but just in case it is, here you go.
+-}
 fromSource : String -> Result (List Parser.DeadEnd) Expression
 fromSource src =
     Parser.run parser src
 
+
 {-| The parse used in `fromSource`. It's unclear why you'd need this, but it's
-exposed just in case you do. -}
+exposed just in case you do.
+-}
 parser : Parser Expression
 parser =
     Pratt.expression
         { oneOf =
-            [ Pratt.literal commentParser
-            , conditionalParser
+            [ conditionalParser
             , applicationParser
             , accessParser
             , lambdaParser
-            , parenthesisedParser
             , Pratt.literal literalParser
+            , parenthesisedParser
             , Pratt.literal identifierParser
             ]
         , andThenOneOf = Operator.parser Infix
         , spaces = Parser.spaces
         }
+
 
 {-| -}
 parenthesisedParser : Pratt.Config Expression -> Parser Expression
@@ -782,10 +999,12 @@ parenthesisedParser prattConfig =
         |. Parser.symbol ")"
         |> Parser.backtrackable
 
+
 {-| -}
 lazyParser : Parser Expression
 lazyParser =
     Parser.lazy (\_ -> parser)
+
 
 
 -- PARSING SOURCE: EXPRESSION.ACCESS -------------------------------------------
@@ -796,9 +1015,9 @@ accessParser : Pratt.Config Expression -> Parser Expression
 accessParser prattConfig =
     Parser.succeed (\expr accessor accessors -> Access expr (accessor :: accessors))
         |= Parser.oneOf
-            [ parenthesisedParser prattConfig
+            [ literalParser
+            , parenthesisedParser prattConfig
             , identifierParser
-            , literalParser
             ]
         |= Accessor.parser lazyParser
         |= Parser.loop []
@@ -814,6 +1033,7 @@ accessParser prattConfig =
         |> Parser.backtrackable
 
 
+
 -- PARSING SOURCE: EXPRESSION.APPLICATION --------------------------------------
 
 
@@ -822,41 +1042,44 @@ applicationParser : Pratt.Config Expression -> Parser Expression
 applicationParser prattConfig =
     Parser.succeed (\function arg args -> Application function (arg :: args))
         |= Parser.oneOf
-            [ parenthesisedParser prattConfig
-            , accessParser prattConfig
+            [ accessParser prattConfig
+            , parenthesisedParser prattConfig
             , identifierParser
             ]
         |. Parser.spaces
         |= Parser.oneOf
-            [ parenthesisedParser prattConfig
-            , accessParser prattConfig
-            , identifierParser
-            , lambdaParser prattConfig
+            [ accessParser prattConfig
             , literalParser
+            , lambdaParser prattConfig
+            , parenthesisedParser prattConfig
+            , identifierParser
             ]
         |. Parser.spaces
-        |= Parser.loop [] (\args ->
-            Parser.oneOf
-                [ Parser.succeed (\arg -> arg :: args)
-                    |= applicationArgumentParser prattConfig
-                    |. Parser.spaces
-                    |> Parser.map Parser.Loop
-                , Parser.succeed (List.reverse args)
-                    |> Parser.map Parser.Done
-                ]
-        )
+        |= Parser.loop []
+            (\args ->
+                Parser.oneOf
+                    [ Parser.succeed (\arg -> arg :: args)
+                        |= applicationArgumentParser prattConfig
+                        |. Parser.spaces
+                        |> Parser.map Parser.Loop
+                    , Parser.succeed (List.reverse args)
+                        |> Parser.map Parser.Done
+                    ]
+            )
         |> Parser.backtrackable
+
 
 {-| -}
 applicationArgumentParser : Pratt.Config Expression -> Parser Expression
 applicationArgumentParser prattConfig =
     Parser.oneOf
-        [ parenthesisedParser prattConfig
-        , accessParser prattConfig
+        [ accessParser prattConfig
         , lambdaParser prattConfig
+        , literalParser
         , identifierParser
-        , literalParser 
+        , parenthesisedParser prattConfig
         ]
+
 
 
 -- PARSING SOURCE: EXPRESSION.COMMENT ------------------------------------------
@@ -868,6 +1091,7 @@ commentParser =
     Parser.lineComment "//"
         |> Parser.getChompedString
         |> Parser.map Comment
+
 
 
 -- PARSING SOURCE: EXPRESSION.CONDITIONAL --------------------------------------
@@ -888,6 +1112,7 @@ conditionalParser prattConfig =
         |= Pratt.subExpression 0 prattConfig
 
 
+
 -- PARSING SOURCE: EXPRESSION.IDENTIFIER ---------------------------------------
 
 
@@ -896,6 +1121,7 @@ identifierParser : Parser Expression
 identifierParser =
     Parser.succeed Identifier
         |= Identifier.parser
+
 
 
 -- PARSING SOURCE: EXPRESSION.LAMBDA -------------------------------------------
@@ -924,6 +1150,7 @@ lambdaParser prattConfig =
         |= Pratt.subExpression 0 prattConfig
 
 
+
 -- PARSING SOURCE: EXPRESSION.LITERAL ------------------------------------------
 
 
@@ -931,6 +1158,6 @@ lambdaParser prattConfig =
 literalParser : Parser Expression
 literalParser =
     Parser.succeed Literal
-        |= Literal.parser 
+        |= Literal.parser
             (\name -> Identifier (Identifier.Local name))
             lazyParser

@@ -23,6 +23,7 @@ suite =
         , numberLiteralSuite
         , objectLiteralSuite
         , stringLiteralSuite
+        , undefinedLiteralSuite
         ]
 
 
@@ -75,6 +76,13 @@ stringLiteralSuite =
         , singleQuoteNestedDoubleQuotesStringLiteralTest
         , singleQuoteEscapedSingleQuotesStringLiteralTest
         , singleQuoteUnbalancedStringLiteralTest
+        ]
+
+
+undefinedLiteralSuite : Test
+undefinedLiteralSuite =
+    describe "Literal.Undefined"
+        [ undefinedLiteralTest
         ]
 
 
@@ -530,4 +538,27 @@ singleQuoteUnbalancedStringLiteralTest =
         (\_ ->
             Parser.run Literal.primitiveParser input
                 |> Expect.err
+        )
+
+
+
+-- UNDEFINED LITERALS ----------------------------------------------------------
+
+
+undefinedLiteralTest : Test
+undefinedLiteralTest =
+    let
+        title =
+            "Empty parentheses mean `undefined`."
+
+        input =
+            "()"
+
+        expected =
+            Ok <| Literal.Undefined
+    in
+    test title
+        (\_ ->
+            Parser.run (Literal.parser Expression.local Expression.parser) input
+                |> Expect.equal expected
         )
