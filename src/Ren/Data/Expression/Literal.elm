@@ -35,6 +35,7 @@ type Literal expression
     | Number Float
     | Object (Dict String expression)
     | String String
+    | Undefined
 
 
 
@@ -62,6 +63,9 @@ coerceToNumber literal =
 
         String s ->
             String.toFloat s
+
+        Undefined ->
+            Just 0
 
 
 {-| -}
@@ -97,6 +101,9 @@ coerceToInteger literal =
         String s ->
             String.toInt s
 
+        Undefined ->
+            Just 0
+
 
 {-| -}
 coerceToString : Literal expression -> Maybe String
@@ -120,6 +127,9 @@ coerceToString literal =
         String s ->
             Just s
 
+        Undefined ->
+            Just "undefined"
+
 
 
 -- PARSING JSON ----------------------------------------------------------------
@@ -134,6 +144,7 @@ decoder expressionDecoder =
         , objectLiteralDecoder expressionDecoder
         , numberLiteralDecoder
         , stringLiteralDecoder
+        , undefinedLiteralDecoder
         ]
 
 
@@ -189,6 +200,12 @@ stringLiteralDecoder =
             (Json.Decode.field "string" Json.Decode.string)
 
 
+undefinedLiteralDecoder : Decoder (Literal expression)
+undefinedLiteralDecoder =
+    Json.Decode.Extra.taggedObject "Literal.Undefined" <|
+        Json.Decode.succeed Undefined
+
+
 
 -- PARSING SOURCE --------------------------------------------------------------
 
@@ -202,6 +219,7 @@ parser toExpression expressionParser =
         , objectLiteralParser toExpression expressionParser
         , numberLiteralParser
         , stringLiteralParser
+        , undefinedLiteralParser
         ]
 
 
@@ -310,3 +328,11 @@ stringLiteralParser =
             [ Parser.Extra.string '"'
             , Parser.Extra.string '\''
             ]
+
+
+{-| -}
+undefinedLiteralParser : Parser (Literal expression)
+undefinedLiteralParser =
+    Parser.succeed Undefined
+        |. Parser.symbol "()"
+        |> Parser.backtrackable

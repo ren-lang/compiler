@@ -658,6 +658,9 @@ fromLiteral literal =
         String s ->
             "'" ++ s ++ "'"
 
+        Undefined ->
+            "undefined"
+
 
 {-| -}
 fromPrimitiveLiteral : Literal Never -> String
@@ -681,6 +684,9 @@ fromPrimitiveLiteral literal =
 
         String s ->
             "'" ++ s ++ "'"
+
+        Undefined ->
+            "undefined"
 
 
 {-| -}
