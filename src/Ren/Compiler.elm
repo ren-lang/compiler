@@ -1,5 +1,5 @@
 module Ren.Compiler exposing
-    ( run
+    ( compile, compileTo
     , Module, Declaration, Expression
     , parse, parseDeclaration, parseExpression
     , decode, decodeDeclaration, decodeExpression
@@ -13,7 +13,8 @@ module Ren.Compiler exposing
 ## Table of Contents
 
   - Running The Compiler
-      - [run](#run)
+      - [compile](#compile)
+      - [compileTo](#compileTo)
   - Types
       - [Module](#Module)
       - [Declaration](#Declaration)
@@ -40,7 +41,7 @@ module Ren.Compiler exposing
 
 ## Running The Compiler
 
-@docs run
+@docs compile, compileTo
 
 ---
 
@@ -85,7 +86,8 @@ The alises are provided here as a convenience so you only need to import
 
 import Json.Decode
 import Parser
-import Ren.Compiler.Emit.ES6 as ES6
+import Ren.Compiler.Emit.CommonJS as CommonJS
+import Ren.Compiler.Emit.ESModule as ESModule
 import Ren.Compiler.Optimise.Declaration as Declaration
 import Ren.Compiler.Optimise.Expression as Expression
 import Ren.Compiler.Optimise.Module as Module
@@ -113,17 +115,25 @@ exposed in this module:
             , parse
             )
 
-    run =
+    compile =
         parse
             >> Result.map optimise
-            >> Result.map (emit ES6)
+            >> Result.map (emit ESModule)
 
 -}
-run : String -> Result (List Parser.DeadEnd) String
-run source =
+compile : String -> Result (List Parser.DeadEnd) String
+compile source =
     parse source
         |> Result.map optimise
-        |> Result.map (emit ES6)
+        |> Result.map (emit ESModule)
+
+
+{-| -}
+compileTo : Target -> String -> Result (List Parser.DeadEnd) String
+compileTo target source =
+    parse source
+        |> Result.map optimise
+        |> Result.map (emit target)
 
 
 
@@ -234,28 +244,38 @@ optimiseExpression =
 
 {-| -}
 type Target
-    = ES6
+    = ESModule
+    | CommonJS
 
 
 {-| -}
 emit : Target -> Module -> String
 emit target =
     case target of
-        ES6 ->
-            ES6.fromModule
+        ESModule ->
+            ESModule.fromModule
+
+        CommonJS ->
+            CommonJS.fromModule
 
 
 {-| -}
 emitDeclaration : Target -> Declaration -> String
 emitDeclaration target =
     case target of
-        ES6 ->
-            ES6.fromDeclaration
+        ESModule ->
+            ESModule.fromDeclaration
+
+        CommonJS ->
+            CommonJS.fromDeclaration
 
 
 {-| -}
 emitExpression : Target -> Expression -> String
 emitExpression target =
     case target of
-        ES6 ->
-            ES6.fromExpression
+        ESModule ->
+            ESModule.fromExpression
+
+        CommonJS ->
+            CommonJS.fromExpression
