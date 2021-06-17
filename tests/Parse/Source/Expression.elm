@@ -30,8 +30,10 @@ suite =
             )
         , shouldSucceed "(f a) b"
             (Application
-                (Application (local "f")
-                    [ local "a" ]
+                (SubExpression
+                    (Application (local "f")
+                        [ local "a" ]
+                    )
                 )
                 [ local "b" ]
             )
@@ -69,6 +71,20 @@ suite =
                 (local "a")
                 (Application (local "f") [ local "b" ])
                 (local "c")
+            )
+        , shouldSucceed "3 + (if a then b else c) - 1"
+            (Infix Sub
+                (Infix Add
+                    (Literal (Number 3))
+                    (SubExpression
+                        (Conditional
+                            (Identifier (Local "a"))
+                            (Identifier (Local "b"))
+                            (Identifier (Local "c"))
+                        )
+                    )
+                )
+                (Literal (Number 1))
             )
         ]
 
