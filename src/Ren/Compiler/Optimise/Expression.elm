@@ -25,6 +25,7 @@ optimise =
     Transform.transformAll recursiveTransformation
         (Transform.orList
             [ constantFold
+            , parenStrip
             ]
         )
 
@@ -83,6 +84,10 @@ recursiveTransformation transform expression =
 
         Literal literal ->
             Literal literal
+
+        SubExpression expr ->
+            SubExpression (transform expr)
+
 
 
 -- OPTIMISATIONS: CONSTANT FOLDING ---------------------------------------------
@@ -310,6 +315,40 @@ constantFold expression =
         Infix Join (Literal (Array a)) (Literal (Array b)) ->
             Just (a ++ b)
                 |> Maybe.map Expression.array
+
+        _ ->
+            Nothing
+
+
+
+-- OPTIMISATIONS: PARENTHESES STRIPPING ---------------------------------------------
+
+
+{-| -}
+parenStrip : Expression -> Maybe Expression
+parenStrip expression =
+    case expression of
+
+        -- When the subexpression is a single (simple) term,
+        -- remove the parentheses.
+        SubExpression expr ->
+            case expr of
+                Access expr_ accessors ->
+                    Just (Access expr_ accessors)
+
+                Comment comment ->
+                    Just (Comment comment)
+
+                Identifier id ->
+                    Just (Identifier id)
+
+                Literal literal ->
+                    Just (Literal literal)
+
+                SubExpression expr_ ->
+                    Just (SubExpression  expr_)
+
+                _ -> Nothing
 
         _ ->
             Nothing
