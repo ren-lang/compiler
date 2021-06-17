@@ -1,10 +1,6 @@
-module Ren.Compiler.Optimise.Expression exposing
-    ( optimise
-    )
-
+module Ren.Compiler.Optimise.Expression exposing (optimise)
 
 -- IMPORTS ---------------------------------------------------------------------
-
 
 import Dict
 import List.Extra
@@ -16,6 +12,7 @@ import Ren.Data.Expression.Operator exposing (Operator(..))
 import Transform
 
 
+
 -- RUNNING OPTIMISATIONS -------------------------------------------------------
 
 
@@ -25,9 +22,10 @@ optimise =
     Transform.transformAll recursiveTransformation
         (Transform.orList
             [ constantFold
-            , parenStrip
+            , stripParentheses
             ]
         )
+
 
 {-| -}
 recursiveTransformation : (Expression -> Expression) -> Expression -> Expression
@@ -35,11 +33,11 @@ recursiveTransformation transform expression =
     case expression of
         Access expr accessors ->
             Access
-                (transform expr) 
+                (transform expr)
                 (List.map
                     (\accessor ->
                         case accessor of
-                            Computed e -> 
+                            Computed e ->
                                 Computed (transform e)
 
                             Fixed s ->
@@ -55,7 +53,7 @@ recursiveTransformation transform expression =
 
         Comment comment ->
             Comment comment
-    
+
         Conditional predicate true false ->
             Conditional
                 (transform predicate)
@@ -77,7 +75,7 @@ recursiveTransformation transform expression =
         Literal (Array elements) ->
             Literal
                 (Array <| List.map transform elements)
-        
+
         Literal (Object fields) ->
             Literal
                 (Object <| Dict.map (always transform) fields)
@@ -98,47 +96,45 @@ constantFold : Expression -> Maybe Expression
 constantFold expression =
     case expression of
         -- ACCESS --------------------------------------------------------------
-
         -- Attempt to access an array literal by coercing the computed literal
         -- to an integer and then indexing the array with that string.
-        Access (Literal (Array elements)) (Computed (Literal n) :: []) ->
+        Access (Literal (Array elements)) ((Computed (Literal n)) :: []) ->
             Literal.coerceToInteger n
                 |> Maybe.andThen (\i -> List.Extra.at i elements)
 
         -- Attempt to access an array literal by coercing the computed literal
         -- to an integer and then indexing the array with that string, then turn
         -- that back into a `Access` expression using the remaining accessors.
-        Access (Literal (Array elements)) (Computed (Literal n) :: accessors) ->
+        Access (Literal (Array elements)) ((Computed (Literal n)) :: accessors) ->
             Literal.coerceToInteger n
                 |> Maybe.andThen (\i -> List.Extra.at i elements)
                 |> Maybe.map (\arr -> Access arr accessors)
 
         -- Attempt to access an object literal with a fixed string key.
-        Access (Literal (Object fields)) (Fixed key :: []) ->
+        Access (Literal (Object fields)) ((Fixed key) :: []) ->
             Dict.get key fields
 
         -- Attempt to access an object literal with a fixed string key, then turn
         -- that back into a `Access` expression using the remaining accessors.
-        Access (Literal (Object fields)) (Fixed key :: accessors) ->
+        Access (Literal (Object fields)) ((Fixed key) :: accessors) ->
             Dict.get key fields
                 |> Maybe.map (\obj -> Access obj accessors)
 
         -- Attempt to access an object literal by coercing the computed literal
         -- to a string and then indexing the object with that string, then turn
         -- that back into a `Access` expression using the remaining accessors.
-        Access (Literal (Object fields)) (Computed (Literal s) :: []) ->
+        Access (Literal (Object fields)) ((Computed (Literal s)) :: []) ->
             Maybe.map2 Dict.get (Literal.coerceToString s) (Just fields)
                 |> Maybe.andThen identity
 
         -- Attempt to access an object literal by coercing the computed literal
         -- to a string and then indexing the object with that string.
-        Access (Literal (Object fields)) (Computed (Literal s) :: accessors) ->
+        Access (Literal (Object fields)) ((Computed (Literal s)) :: accessors) ->
             Maybe.map2 Dict.get (Literal.coerceToString s) (Just fields)
                 |> Maybe.andThen identity
                 |> Maybe.map (\obj -> Access obj accessors)
 
         -- APPLICATION ---------------------------------------------------------
-
         -- When using the function form of an object field accessor `.field obj`
         -- we can simplify that to just plain dot notation as long as the argument
         -- is an identifier (eg not a complicated expression)
@@ -154,7 +150,6 @@ constantFold expression =
                 |> Just
 
         -- CONDITIONAL ---------------------------------------------------------
-
         -- Discard the 'false' branch if the predicate to an 'if .. then .. else'
         -- is the boolean literal `true`.
         Conditional (Literal (Boolean True)) true _ ->
@@ -162,12 +157,11 @@ constantFold expression =
 
         -- Discard the 'true' branch if the predicate to an 'if .. then .. else'
         -- is the boolean literal `false`.
-        Conditional (Literal (Boolean (False))) _ false ->
+        Conditional (Literal (Boolean False)) _ false ->
             Just false
 
         -- INFIX ---------------------------------------------------------------
-
-        -- The pipe operator can always be transformed to simple function 
+        -- The pipe operator can always be transformed to simple function
         -- application.
         Infix Pipe lhs (Application f args) ->
             Application f (args ++ [ lhs ])
@@ -203,7 +197,7 @@ constantFold expression =
         -- If that fails, fallback to string concatenation instead.
         Infix Add (Literal (Number x)) (Literal y) ->
             let
-                addNumbers a b = 
+                addNumbers a b =
                     Maybe.map2 (+) (Just a) (Literal.coerceToNumber b)
                         |> Maybe.map Expression.number
 
@@ -211,15 +205,21 @@ constantFold expression =
                     Maybe.map2 (++) (Just <| String.fromFloat a) (Literal.coerceToString b)
                         |> Maybe.map Expression.string
             in
-            addNumbers x y 
-                |> (\n -> if n == Nothing then addStrings x y else n)
+            addNumbers x y
+                |> (\n ->
+                        if n == Nothing then
+                            addStrings x y
+
+                        else
+                            n
+                   )
 
         -- When the right operand of the Add operator is a number, attempt to
         -- coerce the left operand to a number as well and add the two together.
         -- If that fails, fallback to string concatenation instead.
         Infix Add (Literal x) (Literal (Number y)) ->
             let
-                addNumbers a b = 
+                addNumbers a b =
                     Maybe.map2 (+) (Literal.coerceToNumber a) (Just b)
                         |> Maybe.map Expression.number
 
@@ -227,8 +227,14 @@ constantFold expression =
                     Maybe.map2 (++) (Literal.coerceToString a) (Just <| String.fromFloat b)
                         |> Maybe.map Expression.string
             in
-            addNumbers x y 
-                |> (\n -> if n == Nothing then addStrings x y else n)
+            addNumbers x y
+                |> (\n ->
+                        if n == Nothing then
+                            addStrings x y
+
+                        else
+                            n
+                   )
 
         -- When the left operand of the Add operator is anything but a number,
         -- coerce both operands to strings and concatenate them.
@@ -321,34 +327,34 @@ constantFold expression =
 
 
 
--- OPTIMISATIONS: PARENTHESES STRIPPING ---------------------------------------------
+-- OPTIMISATIONS: PARENTHESES STRIPPING ----------------------------------------
 
 
-{-| -}
-parenStrip : Expression -> Maybe Expression
-parenStrip expression =
+{-| This optimisation strips superfluous parentheses from expressions like
+`f (a)` or `((1))`.
+-}
+stripParentheses : Expression -> Maybe Expression
+stripParentheses expression =
     case expression of
+        SubExpression (Access expr accessors) ->
+            Access expr accessors
+                |> Just
 
-        -- When the subexpression is a single (simple) term,
-        -- remove the parentheses.
-        SubExpression expr ->
-            case expr of
-                Access expr_ accessors ->
-                    Just (Access expr_ accessors)
+        SubExpression (Comment comment) ->
+            Comment comment
+                |> Just
 
-                Comment comment ->
-                    Just (Comment comment)
+        SubExpression (Identifier id) ->
+            Identifier id
+                |> Just
 
-                Identifier id ->
-                    Just (Identifier id)
+        SubExpression (Literal literal) ->
+            Literal literal
+                |> Just
 
-                Literal literal ->
-                    Just (Literal literal)
-
-                SubExpression expr_ ->
-                    Just (SubExpression  expr_)
-
-                _ -> Nothing
+        SubExpression (SubExpression expr) ->
+            SubExpression expr
+                |> Just
 
         _ ->
             Nothing
