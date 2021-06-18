@@ -326,6 +326,8 @@ fromExpression expression =
         Literal literal ->
             fromLiteral literal
 
+        SubExpression expr ->
+            fromSubExpression expr
 
 
 -- EMITTING EXPRESSIONS: ACCESS ------------------------------------------------
@@ -709,3 +711,14 @@ fromObjectField ( key, val ) =
     "{key}: {val}"
         |> String.replace "{key}" key
         |> String.replace "{val}" (fromExpression val)
+
+
+
+-- EMITTING EXPRESSIONS: SUBEXPRESSION -----------------------------------------------
+
+
+{-| -}
+fromSubExpression : Expression -> String
+fromSubExpression expression =
+    "({expr})"
+        |> String.replace "{expr}" (fromExpression expression)

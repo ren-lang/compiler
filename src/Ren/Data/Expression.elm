@@ -118,6 +118,7 @@ type Expression
     | Infix Operator Expression Expression
     | Lambda (List Pattern) Expression
     | Literal Literal
+    | SubExpression Expression
 
 
 {-| An `Accessor` is what we use to access fields or indecies of an object or
@@ -658,6 +659,9 @@ referencesName name_ expression =
         Literal _ ->
             False
 
+        SubExpression expr ->
+            referencesName name_ expr
+
 
 {-| -}
 referencesScopedName : List String -> String -> Expression -> Bool
@@ -703,6 +707,9 @@ referencesScopedName namespace_ name_ expression =
 
         Literal _ ->
             False
+
+        SubExpression expr ->
+            referencesScopedName namespace_ name_ expr
 
 
 {-| -}
@@ -806,6 +813,9 @@ referencesModule namespace_ expression =
 
         Literal _ ->
             False
+
+        SubExpression expr ->
+            referencesModule namespace_ expr
 
 
 
@@ -991,7 +1001,7 @@ parser =
 {-| -}
 parenthesisedParser : Pratt.Config Expression -> Parser Expression
 parenthesisedParser prattConfig =
-    Parser.succeed identity
+    Parser.succeed SubExpression
         |. Parser.symbol "("
         |. Parser.spaces
         |= Pratt.subExpression 0 prattConfig
