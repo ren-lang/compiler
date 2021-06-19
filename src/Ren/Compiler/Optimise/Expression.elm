@@ -263,8 +263,12 @@ constantFold expression =
                 |> Maybe.map Expression.boolean
 
         Infix Eq (Identifier a) (Identifier b) ->
-            Just (a == b)
-                |> Maybe.map Expression.boolean
+            if a == b then
+                Expression.boolean True
+                    |> Just
+            
+            else
+                Nothing
 
         Infix NotEq (Literal x) (Literal y) ->
             Just (x /= y)
