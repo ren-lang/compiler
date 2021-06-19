@@ -2,7 +2,7 @@
 
 This is the compiler for the [Ren]() programmer language, distributed as an Elm
 package. If you want to write and run Ren code, you should take a look at the
-[cli](https://github.com/ren-lang/cli) instead.
+[playground](https://github.com/ren-lang/playground) instead.
 
 ## What is this package for?
 
