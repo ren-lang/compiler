@@ -156,7 +156,7 @@ isDeclarationUsed declarations declaration =
                 List.any (\n -> Declaration.referencesName n d) names
         in
         declarations
-            |> List.filter (Declaration.name >> (==) name)
+            |> List.filter (Declaration.name >> (/=) name)
             |> List.any referencesAny
 
 
