@@ -8,7 +8,6 @@ module Ren.Compiler.Emit.ESModule exposing
 
 import Dict
 import Ren.Data.Declaration exposing (Declaration(..))
-import Ren.Data.Declaration.Binding exposing (Binding(..))
 import Ren.Data.Declaration.Visibility exposing (Visibility(..))
 import Ren.Data.Expression as Expression exposing (Expression(..), Identifier)
 import Ren.Data.Expression.Accessor exposing (Accessor(..))
@@ -328,6 +327,7 @@ fromExpression expression =
 
         SubExpression expr ->
             fromSubExpression expr
+
 
 
 -- EMITTING EXPRESSIONS: ACCESS ------------------------------------------------

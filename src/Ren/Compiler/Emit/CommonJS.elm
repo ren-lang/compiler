@@ -8,7 +8,6 @@ module Ren.Compiler.Emit.CommonJS exposing
 
 import Dict
 import Ren.Data.Declaration exposing (Declaration(..))
-import Ren.Data.Declaration.Binding exposing (Binding(..))
 import Ren.Data.Declaration.Visibility exposing (Visibility(..))
 import Ren.Data.Expression as Expression exposing (Expression(..), Identifier)
 import Ren.Data.Expression.Accessor exposing (Accessor(..))
