@@ -2,9 +2,12 @@ module Parse.Source.Expression exposing (suite)
 
 -- IMPORTS ---------------------------------------------------------------------
 
-import Expect
 import Fuzz exposing (..)
-import Parser
+import Parse.Source.Helpers
+    exposing
+        ( shouldFail
+        , shouldSucceed
+        )
 import Ren.Data.Expression as Expression exposing (..)
 import Ren.Data.Expression.Accessor exposing (..)
 import Ren.Data.Expression.Identifier exposing (..)
@@ -21,14 +24,16 @@ import Test exposing (..)
 suite : Test
 suite =
     describe "Expression parsing."
-        [ shouldSucceed "f a b"
+        [ shouldSucceed Expression.parser
+            "f a b"
             (Application
                 (local "f")
                 [ local "a"
                 , local "b"
                 ]
             )
-        , shouldSucceed "(f a) b"
+        , shouldSucceed Expression.parser
+            "(f a) b"
             (Application
                 (SubExpression
                     (Application (local "f")
@@ -37,42 +42,67 @@ suite =
                 )
                 [ local "b" ]
             )
-        , shouldSucceed "f ()"
+        , shouldSucceed Expression.parser
+            "f ()"
             (Application
                 (local "f")
                 [ Literal Undefined ]
             )
-        , shouldSucceed "a |> f"
+        , shouldSucceed Expression.parser
+            "a |> f"
             (Infix Pipe
                 (local "a")
                 (local "f")
             )
-        , shouldSucceed "b |> f a"
+        , shouldSucceed Expression.parser
+            "b |> f a"
             (Infix Pipe
                 (local "b")
                 (Application (local "f")
                     [ local "a" ]
                 )
             )
-        , shouldSucceed "if a then b else c"
+        , shouldSucceed Expression.parser
+            "if a then b else c"
             (Conditional
                 (local "a")
                 (local "b")
                 (local "c")
             )
-        , shouldSucceed "if f a then b else c"
+        , shouldSucceed Expression.parser
+            "if f a then b else c"
             (Conditional
                 (Application (local "f") [ local "a" ])
                 (local "b")
                 (local "c")
             )
-        , shouldSucceed "if a then f b else c"
+        , shouldSucceed Expression.parser
+            "if a then f b else c"
             (Conditional
                 (local "a")
                 (Application (local "f") [ local "b" ])
                 (local "c")
             )
-        , shouldSucceed "3 + (if a then b else c) - 1"
+        , shouldSucceed Expression.parser
+            "if f a then f b else f c"
+            (Conditional
+                (Application (local "f") [ local "a" ])
+                (Application (local "f") [ local "b" ])
+                (Application (local "f") [ local "c" ])
+            )
+        , shouldSucceed Expression.parser
+            "if f a then f b else if f c then f d else f e"
+            (Conditional
+                (Application (local "f") [ local "a" ])
+                (Application (local "f") [ local "b" ])
+                (Conditional
+                    (Application (local "f") [ local "c" ])
+                    (Application (local "f") [ local "d" ])
+                    (Application (local "f") [ local "e" ])
+                )
+            )
+        , shouldSucceed Expression.parser
+            "3 + (if a then b else c) - 1"
             (Infix Sub
                 (Infix Add
                     (Literal (Number 3))
@@ -87,25 +117,3 @@ suite =
                 (Literal (Number 1))
             )
         ]
-
-
-
--- UTILS -----------------------------------------------------------------------
-
-
-shouldSucceed : String -> Expression -> Test
-shouldSucceed input expected =
-    test input
-        (\_ ->
-            Parser.run Expression.parser input
-                |> Expect.equal (Ok expected)
-        )
-
-
-shouldFail : String -> Test
-shouldFail input =
-    test input
-        (\_ ->
-            Parser.run Expression.parser input
-                |> Expect.err
-        )
