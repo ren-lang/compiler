@@ -242,7 +242,7 @@ arrayLiteralParser expressionParser =
             , separator = ","
             , end = "]"
             , item = expressionParser
-            , spaces = Parser.spaces
+            , spaces = Parser.Extra.ignorables
             , trailing = Parser.Forbidden
             }
 
@@ -303,9 +303,9 @@ objectLiteralParser toExpression expressionParser =
                             , inner = Char.isAlphaNum
                             , reserved = Keywords.all
                             }
-                        |. Parser.spaces
+                        |. Parser.Extra.ignorables
                         |. Parser.symbol ":"
-                        |. Parser.spaces
+                        |. Parser.Extra.ignorables
                         |= expressionParser
                         |> Parser.backtrackable
                     , Parser.succeed (\name -> ( name, toExpression name ))
@@ -315,7 +315,7 @@ objectLiteralParser toExpression expressionParser =
                             , reserved = Keywords.all
                             }
                     ]
-            , spaces = Parser.spaces
+            , spaces = Parser.Extra.ignorables
             , trailing = Parser.Forbidden
             }
 

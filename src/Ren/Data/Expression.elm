@@ -967,9 +967,9 @@ parenthesisedParser : Pratt.Config Expression -> Parser Expression
 parenthesisedParser prattConfig =
     Parser.succeed SubExpression
         |. Parser.symbol "("
-        |. Parser.spaces
+        |. Parser.Extra.ignorables
         |= Pratt.subExpression 0 prattConfig
-        |. Parser.spaces
+        |. Parser.Extra.ignorables
         |. Parser.symbol ")"
         |> Parser.backtrackable
 
@@ -1020,7 +1020,7 @@ applicationParser prattConfig =
             , parenthesisedParser prattConfig
             , identifierParser
             ]
-        |. Parser.spaces
+        |. Parser.Extra.ignorables
         |= Parser.oneOf
             [ accessParser prattConfig
             , literalParser
@@ -1028,13 +1028,13 @@ applicationParser prattConfig =
             , parenthesisedParser prattConfig
             , identifierParser
             ]
-        |. Parser.spaces
+        |. Parser.Extra.ignorables
         |= Parser.loop []
             (\args ->
                 Parser.oneOf
                     [ Parser.succeed (\arg -> arg :: args)
                         |= applicationArgumentParser prattConfig
-                        |. Parser.spaces
+                        |. Parser.Extra.ignorables
                         |> Parser.map Parser.Loop
                     , Parser.succeed (List.reverse args)
                         |> Parser.map Parser.Done
@@ -1064,13 +1064,13 @@ conditionalParser : Pratt.Config Expression -> Parser Expression
 conditionalParser prattConfig =
     Parser.succeed Conditional
         |. Parser.keyword "if"
-        |. Parser.spaces
+        |. Parser.Extra.ignorables
         |= Pratt.subExpression 0 prattConfig
         |. Parser.keyword "then"
-        |. Parser.spaces
+        |. Parser.Extra.ignorables
         |= Pratt.subExpression 0 prattConfig
         |. Parser.keyword "else"
-        |. Parser.spaces
+        |. Parser.Extra.ignorables
         |= Pratt.subExpression 0 prattConfig
 
 
@@ -1094,21 +1094,21 @@ lambdaParser : Pratt.Config Expression -> Parser Expression
 lambdaParser prattConfig =
     Parser.succeed Lambda
         |. Parser.keyword "fun"
-        |. Parser.spaces
+        |. Parser.Extra.ignorables
         |= Parser.sequence
             { start = ""
             , separator = " "
             , end = ""
             , item =
                 Parser.succeed identity
-                    |. Parser.spaces
+                    |. Parser.Extra.ignorables
                     |= Pattern.parser
             , spaces = Parser.succeed ()
             , trailing = Parser.Optional
             }
-        |. Parser.spaces
+        |. Parser.Extra.ignorables
         |. Parser.symbol "=>"
-        |. Parser.spaces
+        |. Parser.Extra.ignorables
         |= Pratt.subExpression 0 prattConfig
 
 

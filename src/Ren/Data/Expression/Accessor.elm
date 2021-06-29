@@ -4,14 +4,14 @@ module Ren.Data.Expression.Accessor exposing
     , parser
     )
 
-
 -- IMPORTS ---------------------------------------------------------------------
-
 
 import Json.Decode exposing (Decoder)
 import Json.Decode.Extra
-import Parser exposing (Parser, (|=), (|.))
+import Parser exposing ((|.), (|=), Parser)
+import Parser.Extra
 import Set
+
 
 
 -- TYPES -----------------------------------------------------------------------
@@ -21,6 +21,7 @@ import Set
 type Accessor expression
     = Computed expression
     | Fixed String
+
 
 
 -- PARSING JSON ----------------------------------------------------------------
@@ -33,6 +34,7 @@ decoder expressionDecoder =
         , fixedAccessorDecoder
         ]
 
+
 {-| -}
 computedAccessorDecoder : Decoder expression -> Decoder (Accessor expression)
 computedAccessorDecoder expressionDecoder =
@@ -40,12 +42,14 @@ computedAccessorDecoder expressionDecoder =
         Json.Decode.map Computed
             (Json.Decode.field "key" expressionDecoder)
 
+
 {-| -}
 fixedAccessorDecoder : Decoder (Accessor expression)
 fixedAccessorDecoder =
     Json.Decode.Extra.taggedObject "Accessor.Fixed" <|
         Json.Decode.map Fixed
             (Json.Decode.field "key" Json.Decode.string)
+
 
 
 -- PARSING SOURCE --------------------------------------------------------------
@@ -59,15 +63,17 @@ parser expressionParser =
         , fixedAccessorParser
         ]
 
+
 {-| -}
 computedAccessorParser : Parser expression -> Parser (Accessor expression)
 computedAccessorParser expressionParser =
     Parser.succeed Computed
         |. Parser.symbol "["
-        |. Parser.spaces 
+        |. Parser.Extra.ignorables
         |= expressionParser
-        |. Parser.spaces
+        |. Parser.Extra.ignorables
         |. Parser.symbol "]"
+
 
 {-| -}
 fixedAccessorParser : Parser (Accessor expression)

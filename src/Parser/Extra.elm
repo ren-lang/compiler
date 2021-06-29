@@ -1,10 +1,9 @@
 module Parser.Extra exposing (..)
 
-
 -- IMPORTS ---------------------------------------------------------------------
 
+import Parser exposing ((|.), (|=), Parser)
 
-import Parser exposing ((|=), (|.), Parser)
 
 
 -- PRIMITIVE PARSERS -----------------------------------------------------------
@@ -17,7 +16,7 @@ string quoteChar =
         quoteString =
             String.fromChar quoteChar
 
-        isNotEndOrEscape c = 
+        isNotEndOrEscape c =
             c /= quoteChar && c /= '\\'
     in
     Parser.succeed identity
@@ -30,18 +29,26 @@ string quoteChar =
                         |= Parser.oneOf
                             [ Parser.succeed "\n" |. Parser.token "n"
                             , Parser.succeed "\t" |. Parser.token "t"
-                            , Parser.succeed "\r" |. Parser.token "r"
-                            , Parser.succeed quoteString  |. Parser.token quoteString
+                            , Parser.succeed "\u{000D}" |. Parser.token "r"
+                            , Parser.succeed quoteString |. Parser.token quoteString
                             ]
                         |> Parser.map Parser.Loop
                     , Parser.succeed (List.reverse chunks |> String.join "")
                         |. Parser.token quoteString
                         |> Parser.map Parser.Done
                     , Parser.getChompedString (Parser.chompWhile isNotEndOrEscape)
-                        |> Parser.andThen (\s -> if s == "" then Parser.problem "" else Parser.succeed (s :: chunks))
+                        |> Parser.andThen
+                            (\s ->
+                                if s == "" then
+                                    Parser.problem ""
+
+                                else
+                                    Parser.succeed (s :: chunks)
+                            )
                         |> Parser.map Parser.Loop
                     ]
             )
+
 
 
 -- WHITESPACE PARSERS ----------------------------------------------------------
@@ -51,20 +58,24 @@ spaces : Parser ()
 spaces =
     Parser.chompWhile (\c -> c == ' ')
 
+
 whitespace : Parser ()
 whitespace =
-    Parser.chompWhile (\c -> c == ' ' || c == '\t' || c == '\r' || c == '\n')
+    Parser.chompWhile (\c -> c == ' ' || c == '\t' || c == '\u{000D}' || c == '\n')
+
 
 newline : Parser ()
 newline =
     Parser.oneOf
-        [ Parser.token "\r\n"
+        [ Parser.token "\u{000D}\n"
         , Parser.token "\n"
         ]
 
+
 newlines : Parser ()
 newlines =
-    Parser.chompWhile (\c -> c == '\n' || c == '\r')
+    Parser.chompWhile (\c -> c == '\n' || c == '\u{000D}')
+
 
 
 -- COMMENTS --------------------------------------------------------------------
@@ -77,12 +88,29 @@ comment start =
         |> Parser.getChompedString
 
 
+
+-- IGNORABLES ------------------------------------------------------------------
+
+
+ignorables : Parser ()
+ignorables =
+    Parser.oneOf
+        [ Parser.spaces
+            |. Parser.lineComment "//"
+            |> Parser.backtrackable
+        , Parser.spaces
+        ]
+
+
+
 -- DEADENDS --------------------------------------------------------------------
+
 
 {-| -}
 deadEndsToString : List Parser.DeadEnd -> String
 deadEndsToString deadEnds =
     List.foldl (++) "" (List.map deadEndToString deadEnds)
+
 
 {-| -}
 deadEndToString : Parser.DeadEnd -> String
