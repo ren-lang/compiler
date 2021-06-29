@@ -121,8 +121,7 @@ parser toExpression =
     , toExpression Add |> Pratt.infixLeft 6 (Parser.symbol "+")
     , toExpression Sub |> Pratt.infixLeft 6 (Parser.symbol "-")
     , toExpression Mul |> Pratt.infixLeft 7 (Parser.symbol "*")
-
-    -- , toExpression Div |> Pratt.infixLeft 7 (Parser.symbol "/")
+    , toExpression Div |> Pratt.infixLeft 7 (Parser.symbol "/")
     , toExpression Pow |> Pratt.infixRight 8 (Parser.symbol "^")
     , toExpression Mod |> Pratt.infixRight 8 (Parser.symbol "%")
     ]
