@@ -100,16 +100,14 @@ import Ren.Data.Keywords as Keywords
 {-| -}
 type Declaration
     = Function
-        { comment : List String
-        , visibility : Visibility
+        { visibility : Visibility
         , name : Pattern
         , args : List Expression.Pattern
         , bindings : List Declaration
         , body : Expression
         }
     | Variable
-        { comment : List String
-        , visibility : Visibility
+        { visibility : Visibility
         , name : Pattern
         , bindings : List Declaration
         , body : Expression
@@ -126,11 +124,10 @@ type alias Visibility =
 
 
 {-| -}
-function : List String -> Visibility -> String -> List Expression.Pattern -> List Declaration -> Expression -> Declaration
-function comment visibility_ name_ args bindings body_ =
+function : Visibility -> String -> List Expression.Pattern -> List Declaration -> Expression -> Declaration
+function visibility_ name_ args bindings body_ =
     Function
-        { comment = comment
-        , visibility = visibility_
+        { visibility = visibility_
         , name = Pattern.Name name_
         , args = args
         , body = body_
@@ -139,11 +136,10 @@ function comment visibility_ name_ args bindings body_ =
 
 
 {-| -}
-variable : List String -> Visibility -> Pattern -> List Declaration -> Expression -> Declaration
-variable comment visibility_ name_ bindings body_ =
+variable : Visibility -> Pattern -> List Declaration -> Expression -> Declaration
+variable visibility_ name_ bindings body_ =
     Variable
-        { comment = comment
-        , visibility = visibility_
+        { visibility = visibility_
         , name = name_
         , body = body_
         , bindings = bindings
@@ -289,10 +285,7 @@ lazyDecoder =
 functionDecoder : Decoder Declaration
 functionDecoder =
     Json.Decode.Extra.taggedObject "Declaration.Function" <|
-        Json.Decode.map6 function
-            (Json.Decode.field "comment" <|
-                Json.Decode.list Json.Decode.string
-            )
+        Json.Decode.map5 function
             (Json.Decode.field "visibility" Visibility.decoder)
             (Json.Decode.field "name" Json.Decode.string)
             (Json.Decode.field "args" <|
@@ -312,10 +305,7 @@ functionDecoder =
 variableDecoder : Decoder Declaration
 variableDecoder =
     Json.Decode.Extra.taggedObject "Declaration.Variable" <|
-        Json.Decode.map5 variable
-            (Json.Decode.field "comment" <|
-                Json.Decode.list Json.Decode.string
-            )
+        Json.Decode.map4 variable
             (Json.Decode.field "visibility" Visibility.decoder)
             (Json.Decode.field "name" Pattern.decoder)
             (Json.Decode.field "bindings" <|
@@ -366,7 +356,6 @@ bindingParser =
 functionParser : Parser Declaration
 functionParser =
     Parser.succeed function
-        |= commentParser
         |. Parser.Extra.newlines
         |= Visibility.parser
         |. Parser.Extra.spaces
@@ -393,29 +382,29 @@ functionParser =
             )
         |. Parser.Extra.spaces
         |. Parser.symbol "=>"
-        |. Parser.spaces
+        |. Parser.Extra.ignorables
         |> Parser.andThen
             (\func ->
                 Parser.oneOf
                     [ Parser.succeed func
                         |. Parser.symbol "{"
-                        |. Parser.spaces
+                        |. Parser.Extra.ignorables
                         |= Parser.loop []
                             (\bindings ->
                                 Parser.oneOf
                                     [ Parser.succeed (\binding -> binding :: bindings)
                                         |= bindingParser
-                                        |. Parser.spaces
+                                        |. Parser.Extra.ignorables
                                         |> Parser.map Parser.Loop
                                     , Parser.succeed (List.reverse bindings)
                                         |> Parser.map Parser.Done
                                     ]
                             )
-                        |. Parser.spaces
+                        |. Parser.Extra.ignorables
                         |. Parser.keyword "ret"
-                        |. Parser.spaces
+                        |. Parser.Extra.ignorables
                         |= Expression.parser
-                        |. Parser.spaces
+                        |. Parser.Extra.ignorables
                         |. Parser.symbol "}"
                         |> Parser.backtrackable
                     , Parser.succeed func
@@ -431,7 +420,6 @@ functionParser =
 functionBindingParser : Parser Declaration
 functionBindingParser =
     Parser.succeed function
-        |= commentParser
         |. Parser.Extra.newlines
         |= Parser.succeed Visibility.Private
         |. Parser.Extra.spaces
@@ -458,29 +446,29 @@ functionBindingParser =
             )
         |. Parser.Extra.spaces
         |. Parser.symbol "=>"
-        |. Parser.spaces
+        |. Parser.Extra.ignorables
         |> Parser.andThen
             (\func ->
                 Parser.oneOf
                     [ Parser.succeed func
                         |. Parser.symbol "{"
-                        |. Parser.spaces
+                        |. Parser.Extra.ignorables
                         |= Parser.loop []
                             (\bindings ->
                                 Parser.oneOf
                                     [ Parser.succeed (\binding -> binding :: bindings)
                                         |= bindingParser
-                                        |. Parser.spaces
+                                        |. Parser.Extra.ignorables
                                         |> Parser.map Parser.Loop
                                     , Parser.succeed (List.reverse bindings)
                                         |> Parser.map Parser.Done
                                     ]
                             )
-                        |. Parser.spaces
+                        |. Parser.Extra.ignorables
                         |. Parser.keyword "ret"
-                        |. Parser.spaces
+                        |. Parser.Extra.ignorables
                         |= Expression.parser
-                        |. Parser.spaces
+                        |. Parser.Extra.ignorables
                         |. Parser.symbol "}"
                         |> Parser.backtrackable
                     , Parser.succeed func
@@ -500,7 +488,6 @@ functionBindingParser =
 variableParser : Parser Declaration
 variableParser =
     Parser.succeed variable
-        |= commentParser
         |. Parser.Extra.newlines
         |= Visibility.parser
         |. Parser.Extra.spaces
@@ -509,29 +496,29 @@ variableParser =
         |= Pattern.parser
         |. Parser.Extra.spaces
         |. Parser.symbol "="
-        |. Parser.spaces
+        |. Parser.Extra.ignorables
         |> Parser.andThen
             (\var ->
                 Parser.oneOf
                     [ Parser.succeed var
                         |. Parser.symbol "{"
-                        |. Parser.spaces
+                        |. Parser.Extra.ignorables
                         |= Parser.loop []
                             (\bindings ->
                                 Parser.oneOf
                                     [ Parser.succeed (\binding -> binding :: bindings)
                                         |= bindingParser
-                                        |. Parser.spaces
+                                        |. Parser.Extra.ignorables
                                         |> Parser.map Parser.Loop
                                     , Parser.succeed (List.reverse bindings)
                                         |> Parser.map Parser.Done
                                     ]
                             )
-                        |. Parser.spaces
+                        |. Parser.Extra.ignorables
                         |. Parser.keyword "ret"
-                        |. Parser.spaces
+                        |. Parser.Extra.ignorables
                         |= Expression.parser
-                        |. Parser.spaces
+                        |. Parser.Extra.ignorables
                         |. Parser.symbol "}"
                         |> Parser.backtrackable
                     , Parser.succeed var
@@ -546,7 +533,6 @@ variableParser =
 variableBindingParser : Parser Declaration
 variableBindingParser =
     Parser.succeed variable
-        |= commentParser
         |. Parser.Extra.newlines
         |= Parser.succeed Visibility.Private
         |. Parser.Extra.spaces
@@ -555,29 +541,29 @@ variableBindingParser =
         |= Pattern.parser
         |. Parser.Extra.spaces
         |. Parser.symbol "="
-        |. Parser.spaces
+        |. Parser.Extra.ignorables
         |> Parser.andThen
             (\var ->
                 Parser.oneOf
                     [ Parser.succeed var
                         |. Parser.symbol "{"
-                        |. Parser.spaces
+                        |. Parser.Extra.ignorables
                         |= Parser.loop []
                             (\bindings ->
                                 Parser.oneOf
                                     [ Parser.succeed (\binding -> binding :: bindings)
                                         |= bindingParser
-                                        |. Parser.spaces
+                                        |. Parser.Extra.ignorables
                                         |> Parser.map Parser.Loop
                                     , Parser.succeed (List.reverse bindings)
                                         |> Parser.map Parser.Done
                                     ]
                             )
-                        |. Parser.spaces
+                        |. Parser.Extra.ignorables
                         |. Parser.keyword "ret"
-                        |. Parser.spaces
+                        |. Parser.Extra.ignorables
                         |= Expression.parser
-                        |. Parser.spaces
+                        |. Parser.Extra.ignorables
                         |. Parser.symbol "}"
                         |> Parser.backtrackable
                     , Parser.succeed var
@@ -586,22 +572,3 @@ variableBindingParser =
                         |> Parser.backtrackable
                     ]
             )
-
-
-
--- PARSING SOURCE: COMMENT -----------------------------------------------------
-
-
-{-| -}
-commentParser : Parser (List String)
-commentParser =
-    Parser.loop []
-        (\comments ->
-            Parser.oneOf
-                [ Parser.succeed (\comment -> comment :: comments)
-                    |= Parser.Extra.comment "//"
-                    |> Parser.map Parser.Loop
-                , Parser.succeed (List.reverse comments)
-                    |> Parser.map Parser.Done
-                ]
-        )
