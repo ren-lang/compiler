@@ -171,27 +171,6 @@ constantFold expression =
             Application (Identifier id) [ lhs ]
                 |> Just
 
-        -- When we're sure the left operand of the discard operator cannot
-        -- perform side effects, we can simply remove it from the AST as it must
-        -- be a no-op.
-        Infix Discard (Comment _) rhs ->
-            Just rhs
-
-        Infix Discard (Lambda _ _) rhs ->
-            Just rhs
-
-        Infix Discard (Literal (Boolean _)) rhs ->
-            Just rhs
-
-        Infix Discard (Literal (Number _)) rhs ->
-            Just rhs
-
-        Infix Discard (Literal (String _)) rhs ->
-            Just rhs
-
-        Infix Discard (Identifier _) rhs ->
-            Just rhs
-
         -- When the left operand of the Add operator is a number, attempt to
         -- coerce the right operand to a number as well and add the two together.
         -- If that fails, fallback to string concatenation instead.
@@ -266,7 +245,7 @@ constantFold expression =
             if a == b then
                 Expression.boolean True
                     |> Just
-            
+
             else
                 Nothing
 

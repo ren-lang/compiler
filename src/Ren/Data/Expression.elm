@@ -206,7 +206,6 @@ language docs if you want to know what all of these do!
     -- Functions
     |>  Pipe
     >>  Compose
-    ;   Discard
 
     -- Maths
     +   Add
@@ -314,9 +313,6 @@ operatorToSymbol op =
         Operator.Compose ->
             ">>"
 
-        Operator.Discard ->
-            ";"
-
         Operator.Add ->
             "+"
 
@@ -376,9 +372,6 @@ operatorFromSymbol op =
 
         ">>" ->
             Just Operator.Compose
-
-        ";" ->
-            Just Operator.Discard
 
         "+" ->
             Just Operator.Add
@@ -444,9 +437,6 @@ operatorToName op =
         Operator.Compose ->
             "Compose"
 
-        Operator.Discard ->
-            "Discard"
-
         Operator.Add ->
             "Add"
 
@@ -506,9 +496,6 @@ operatorFromName op =
 
         "Compose" ->
             Just Operator.Compose
-
-        "Discard" ->
-            Just Operator.Discard
 
         "Add" ->
             Just Operator.Add
@@ -748,9 +735,6 @@ referencesModule namespace_ expression =
             [ "$Function" ] == namespace_
 
         Identifier (Identifier.Operator Operator.Compose) ->
-            [ "$Function" ] == namespace_
-
-        Identifier (Identifier.Operator Operator.Discard) ->
             [ "$Function" ] == namespace_
 
         Identifier (Identifier.Operator Operator.Add) ->

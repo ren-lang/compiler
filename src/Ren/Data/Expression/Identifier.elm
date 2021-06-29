@@ -4,16 +4,15 @@ module Ren.Data.Expression.Identifier exposing
     , parser
     )
 
-
 -- IMPORTS ---------------------------------------------------------------------
-
 
 import Json.Decode exposing (Decoder)
 import Json.Decode.Extra
-import Parser exposing (Parser, (|=), (|.))
+import Parser exposing ((|.), (|=), Parser)
 import Ren.Data.Expression.Operator as Operator exposing (Operator)
 import Ren.Data.Keywords as Keywords
 import Set
+
 
 
 -- TYPES -----------------------------------------------------------------------
@@ -25,6 +24,7 @@ type Identifier
     | Scoped (List String) String
     | Operator Operator
     | Field String
+
 
 
 -- PARSING JSON ----------------------------------------------------------------
@@ -40,12 +40,14 @@ decoder =
         , fieldIdentifierDecoder
         ]
 
+
 {-| -}
 localIdentifierDecoder : Decoder Identifier
 localIdentifierDecoder =
     Json.Decode.Extra.taggedObject "Identifier.Local" <|
         Json.Decode.map Local
             (Json.Decode.field "name" Json.Decode.string)
+
 
 {-| -}
 scopedIdentifierDecoder : Decoder Identifier
@@ -57,6 +59,7 @@ scopedIdentifierDecoder =
             )
             (Json.Decode.field "name" Json.Decode.string)
 
+
 {-| -}
 operatorIdentifierDecoder : Decoder Identifier
 operatorIdentifierDecoder =
@@ -64,12 +67,14 @@ operatorIdentifierDecoder =
         Json.Decode.map Operator
             (Json.Decode.field "operator" Operator.decoder)
 
+
 {-| -}
 fieldIdentifierDecoder : Decoder Identifier
 fieldIdentifierDecoder =
     Json.Decode.Extra.taggedObject "Identifier.Field" <|
         Json.Decode.map Field
             (Json.Decode.field "name" Json.Decode.string)
+
 
 
 -- PARSING SOURCE --------------------------------------------------------------
@@ -85,6 +90,7 @@ parser =
         , fieldIdentifierParser
         ]
 
+
 {-| -}
 localIdentifierParser : Parser Identifier
 localIdentifierParser =
@@ -95,6 +101,7 @@ localIdentifierParser =
             , reserved = Keywords.all
             }
 
+
 {-| -}
 scopedIdentifierParser : Parser Identifier
 scopedIdentifierParser =
@@ -103,11 +110,12 @@ scopedIdentifierParser =
             { start = ""
             , separator = "."
             , end = ""
-            , item = Parser.variable
-                { start = Char.isUpper
-                , inner = Char.isAlphaNum
-                , reserved = Set.empty
-                }
+            , item =
+                Parser.variable
+                    { start = Char.isUpper
+                    , inner = Char.isAlphaNum
+                    , reserved = Set.empty
+                    }
             , spaces = Parser.succeed ()
             , trailing = Parser.Mandatory
             }
@@ -117,33 +125,34 @@ scopedIdentifierParser =
             , reserved = Keywords.all
             }
 
+
 {-| -}
 operatorIdentifierParser : Parser Identifier
 operatorIdentifierParser =
     Parser.succeed Operator
         |. Parser.symbol "("
         |= Parser.oneOf
-            [ Parser.succeed Operator.Pipe    |. Parser.symbol "|>"
+            [ Parser.succeed Operator.Pipe |. Parser.symbol "|>"
             , Parser.succeed Operator.Compose |. Parser.symbol ">>"
-            , Parser.succeed Operator.Eq      |. Parser.symbol "=="
-            , Parser.succeed Operator.NotEq   |. Parser.symbol "!="
-            , Parser.succeed Operator.Lte     |. Parser.symbol "<="
-            , Parser.succeed Operator.Gte     |. Parser.symbol ">="
-            , Parser.succeed Operator.And     |. Parser.symbol "&&"
-            , Parser.succeed Operator.Or      |. Parser.symbol "||"
-            , Parser.succeed Operator.Cons    |. Parser.symbol "::"
-            , Parser.succeed Operator.Join    |. Parser.symbol "++"
-            , Parser.succeed Operator.Discard |. Parser.symbol ";"
-            , Parser.succeed Operator.Lt      |. Parser.symbol "<"
-            , Parser.succeed Operator.Gt      |. Parser.symbol ">"
-            , Parser.succeed Operator.Add     |. Parser.symbol "+"
-            , Parser.succeed Operator.Sub     |. Parser.symbol "-"
-            , Parser.succeed Operator.Mul     |. Parser.symbol "*"
-            , Parser.succeed Operator.Div     |. Parser.symbol "/"
-            , Parser.succeed Operator.Pow     |. Parser.symbol "^"
-            , Parser.succeed Operator.Mod     |. Parser.symbol "%"
+            , Parser.succeed Operator.Eq |. Parser.symbol "=="
+            , Parser.succeed Operator.NotEq |. Parser.symbol "!="
+            , Parser.succeed Operator.Lte |. Parser.symbol "<="
+            , Parser.succeed Operator.Gte |. Parser.symbol ">="
+            , Parser.succeed Operator.And |. Parser.symbol "&&"
+            , Parser.succeed Operator.Or |. Parser.symbol "||"
+            , Parser.succeed Operator.Cons |. Parser.symbol "::"
+            , Parser.succeed Operator.Join |. Parser.symbol "++"
+            , Parser.succeed Operator.Lt |. Parser.symbol "<"
+            , Parser.succeed Operator.Gt |. Parser.symbol ">"
+            , Parser.succeed Operator.Add |. Parser.symbol "+"
+            , Parser.succeed Operator.Sub |. Parser.symbol "-"
+            , Parser.succeed Operator.Mul |. Parser.symbol "*"
+            , Parser.succeed Operator.Div |. Parser.symbol "/"
+            , Parser.succeed Operator.Pow |. Parser.symbol "^"
+            , Parser.succeed Operator.Mod |. Parser.symbol "%"
             ]
         |. Parser.symbol ")"
+
 
 {-| -}
 fieldIdentifierParser : Parser Identifier
@@ -155,4 +164,3 @@ fieldIdentifierParser =
             , inner = Char.isAlphaNum
             , reserved = Keywords.all
             }
-

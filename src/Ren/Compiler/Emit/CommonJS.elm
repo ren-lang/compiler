@@ -408,9 +408,6 @@ fromIdentifier identifier =
         Operator Compose ->
             "$Function.compose"
 
-        Operator Discard ->
-            "$Function.discard"
-
         Operator Add ->
             "$Math.add"
 
@@ -479,11 +476,6 @@ fromInfix op lhs rhs =
             fromApplication
                 (Expression.scoped [ "$Function" ] "compose")
                 [ lhs, rhs ]
-
-        Discard ->
-            "{lhs}, {rhs}"
-                |> String.replace "{lhs}" (fromExpression lhs)
-                |> String.replace "{rhs}" (fromExpression rhs)
 
         Add ->
             "{lhs} + {rhs}"
