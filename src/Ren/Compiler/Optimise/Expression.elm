@@ -51,9 +51,6 @@ recursiveTransformation transform expression =
                 (transform func)
                 (List.map transform args)
 
-        Comment comment ->
-            Comment comment
-
         Conditional predicate true false ->
             Conditional
                 (transform predicate)
@@ -321,10 +318,6 @@ stripParentheses expression =
     case expression of
         SubExpression (Access expr accessors) ->
             Access expr accessors
-                |> Just
-
-        SubExpression (Comment comment) ->
-            Comment comment
                 |> Just
 
         SubExpression (Identifier id) ->

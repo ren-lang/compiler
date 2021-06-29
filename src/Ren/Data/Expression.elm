@@ -96,6 +96,7 @@ import Dict
 import Json.Decode exposing (Decoder)
 import Json.Decode.Extra
 import Parser exposing ((|.), (|=), Parser)
+import Parser.Extra
 import Pratt
 import Ren.Data.Expression.Accessor as Accessor
 import Ren.Data.Expression.Identifier as Identifier exposing (Identifier)
@@ -112,7 +113,6 @@ import Ren.Data.Expression.Pattern as Pattern
 type Expression
     = Access Expression (List Accessor)
     | Application Expression (List Expression)
-    | Comment String
     | Conditional Expression Expression Expression
     | Identifier Identifier
     | Infix Operator Expression Expression
@@ -622,9 +622,6 @@ referencesName name_ expression =
             referencesName name_ func
                 || List.any (referencesName name_) args
 
-        Comment _ ->
-            False
-
         Conditional predicate true false ->
             referencesName name_ predicate
                 || referencesName name_ true
@@ -671,9 +668,6 @@ referencesScopedName namespace_ name_ expression =
             referencesScopedName namespace_ name_ func
                 || List.any (referencesScopedName namespace_ name_) args
 
-        Comment _ ->
-            False
-
         Conditional predicate true false ->
             referencesScopedName namespace_ name_ predicate
                 || referencesScopedName namespace_ name_ true
@@ -719,9 +713,6 @@ referencesModule namespace_ expression =
         Application func args ->
             referencesModule namespace_ func
                 || List.any (referencesModule namespace_) args
-
-        Comment _ ->
-            False
 
         Conditional predicate true false ->
             referencesModule namespace_ predicate
@@ -823,7 +814,6 @@ decoder =
     Json.Decode.oneOf
         [ accessDecoder
         , applicationDecoder
-        , commentDecoder
         , conditionalDecoder
         , identifierDecoder
         , infixDecoder
@@ -866,18 +856,6 @@ applicationDecoder =
             (Json.Decode.field "arguments" <|
                 Json.Decode.list lazyDecoder
             )
-
-
-
--- PARSING JSON: EXPRESSION.COMMENT --------------------------------------------
-
-
-{-| -}
-commentDecoder : Decoder Expression
-commentDecoder =
-    Json.Decode.Extra.taggedObject "Expression.Comment" <|
-        Json.Decode.map Comment
-            (Json.Decode.field "comment" Json.Decode.string)
 
 
 
@@ -967,19 +945,21 @@ exposed just in case you do.
 -}
 parser : Parser Expression
 parser =
-    Pratt.expression
-        { oneOf =
-            [ conditionalParser
-            , applicationParser
-            , accessParser
-            , lambdaParser
-            , Pratt.literal literalParser
-            , parenthesisedParser
-            , Pratt.literal identifierParser
-            ]
-        , andThenOneOf = Operator.parser Infix
-        , spaces = Parser.spaces
-        }
+    Parser.succeed identity
+        |. Parser.Extra.ignorables
+        |= Pratt.expression
+            { oneOf =
+                [ conditionalParser
+                , applicationParser
+                , accessParser
+                , lambdaParser
+                , Pratt.literal literalParser
+                , parenthesisedParser
+                , Pratt.literal identifierParser
+                ]
+            , andThenOneOf = Operator.parser Infix
+            , spaces = Parser.Extra.ignorables
+            }
 
 
 {-| -}
@@ -1073,18 +1053,6 @@ applicationArgumentParser prattConfig =
         , identifierParser
         , parenthesisedParser prattConfig
         ]
-
-
-
--- PARSING SOURCE: EXPRESSION.COMMENT ------------------------------------------
-
-
-{-| -}
-commentParser : Parser Expression
-commentParser =
-    Parser.lineComment "//"
-        |> Parser.getChompedString
-        |> Parser.map Comment
 
 
 

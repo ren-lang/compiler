@@ -307,9 +307,6 @@ fromExpression expression =
         Application func args ->
             fromApplication func args
 
-        Comment comment ->
-            comment
-
         Conditional predicate true false ->
             fromConditional predicate true false
 
