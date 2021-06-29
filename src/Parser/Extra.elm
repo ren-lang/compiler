@@ -94,12 +94,17 @@ comment start =
 
 ignorables : Parser ()
 ignorables =
-    Parser.oneOf
-        [ Parser.spaces
-            |. Parser.lineComment "//"
-            |> Parser.backtrackable
-        , Parser.spaces
-        ]
+    Parser.spaces
+        |. Parser.loop ()
+            (\_ ->
+                Parser.oneOf
+                    [ Parser.lineComment "//"
+                        |. Parser.spaces
+                        |> Parser.map Parser.Loop
+                    , Parser.succeed ()
+                        |> Parser.map Parser.Done
+                    ]
+            )
 
 
 
