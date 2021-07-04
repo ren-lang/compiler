@@ -322,6 +322,9 @@ fromExpression expression =
         Literal literal ->
             fromLiteral literal
 
+        Match expr cases ->
+            fromMatch expr cases
+
         SubExpression expr ->
             fromSubExpression expr
 
@@ -703,7 +706,84 @@ fromObjectField ( key, val ) =
 
 
 
--- EMITTING EXPRESSIONS: SUBEXPRESSION -----------------------------------------------
+-- EMITTING EXPRESSIONS: MATCH -------------------------------------------------
+
+
+{-| -}
+fromMatch : Expression -> List ( Pattern, Expression ) -> String
+fromMatch expr cases =
+    String.trimLeft """
+(($) => {
+    {cases}
+})({expr}) 
+"""
+        |> String.replace "{expr}" (fromExpression expr)
+        |> String.replace "{cases}" (fromCases cases |> String.Extra.nest 4 1)
+
+
+fromCases : List ( Pattern, Expression ) -> String
+fromCases cases =
+    List.map fromCase cases
+        |> String.join "\n"
+
+
+fromCase : ( Pattern, Expression ) -> String
+fromCase ( pattern, expr ) =
+    case pattern of
+        ArrayDestructure patterns ->
+            String.trimLeft """
+if (Array.isArray($) && $.length >= {length}) {
+    var {destructure} = $
+    return {expr}
+}          
+"""
+                |> String.replace "{length}" (String.fromInt <| List.length patterns)
+                |> String.replace "{destructure}" (fromArrayDestructure patterns)
+                |> String.replace "{expr}" (fromExpression expr)
+
+        Name name ->
+            String.trimLeft """
+if ($ === {name}) {
+    return {expr}
+}
+"""
+                |> String.replace "{name}" name
+                |> String.replace "{expr}" (fromExpression expr)
+
+        ObjectDestructure patterns ->
+            String.trimLeft """
+if (typeof $ === 'object' && {names}) {
+    var {destructure} = $
+    return {expr}
+}          
+"""
+                |> String.replace "{names}" (fromObjectDestructureNames patterns)
+                |> String.replace "{destructure}" (fromObjectDestructure patterns)
+                |> String.replace "{expr}" (fromExpression expr)
+
+        Value literal ->
+            String.trimLeft """
+if ($ === {literal}) {
+    return {expr}
+}
+"""
+                |> String.replace "{literal}" (fromPrimitiveLiteral literal)
+                |> String.replace "{expr}" (fromExpression expr)
+
+        Wildcard _ ->
+            "return {expr}"
+                |> String.replace "{expr}" (fromExpression expr)
+
+
+{-| -}
+fromObjectDestructureNames : List ( String, Maybe Pattern ) -> String
+fromObjectDestructureNames patterns =
+    List.map (\( name, _ ) -> name ++ " in $") patterns
+        |> String.join " && "
+
+
+
+-- EMITTING EXPRESSIONS: SUBEXPRESSION -----------------------------------------
 
 
 {-| -}

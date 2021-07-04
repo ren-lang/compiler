@@ -80,6 +80,11 @@ recursiveTransformation transform expression =
         Literal literal ->
             Literal literal
 
+        Match expr patterns ->
+            Match
+                (transform expr)
+                (List.map (Tuple.mapSecond transform) patterns)
+
         SubExpression expr ->
             SubExpression (transform expr)
 
