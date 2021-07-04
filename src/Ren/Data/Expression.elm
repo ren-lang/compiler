@@ -1176,8 +1176,6 @@ matchParser prattConfig =
         |. Parser.Extra.ignorables
         |= lazyParser
         |. Parser.Extra.ignorables
-        |. Parser.symbol "{"
-        |. Parser.Extra.ignorables
         |= Parser.loop []
             (\cases ->
                 Parser.oneOf
@@ -1191,8 +1189,6 @@ matchParser prattConfig =
                         |= Pratt.subExpression 0 prattConfig
                         |> Parser.map Parser.Loop
                     , Parser.succeed (List.reverse cases)
-                        |. Parser.Extra.ignorables
-                        |. Parser.symbol "}"
                         |> Parser.map Parser.Done
                     ]
             )
