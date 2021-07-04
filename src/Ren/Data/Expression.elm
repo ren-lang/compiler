@@ -118,6 +118,7 @@ type Expression
     | Infix Operator Expression Expression
     | Lambda (List Pattern) Expression
     | Literal Literal
+    | Match Expression (List ( Pattern, Expression ))
     | SubExpression Expression
 
 
@@ -643,6 +644,10 @@ referencesName name_ expression =
         Literal _ ->
             False
 
+        Match expr cases ->
+            referencesName name_ expr
+                || List.any (Tuple.second >> referencesName name_) cases
+
         SubExpression expr ->
             referencesName name_ expr
 
@@ -688,6 +693,10 @@ referencesScopedName namespace_ name_ expression =
 
         Literal _ ->
             False
+
+        Match expr cases ->
+            referencesScopedName namespace_ name_ expr
+                || List.any (Tuple.second >> referencesScopedName namespace_ name_) cases
 
         SubExpression expr ->
             referencesScopedName namespace_ name_ expr
@@ -789,6 +798,10 @@ referencesModule namespace_ expression =
         Literal _ ->
             False
 
+        Match expr cases ->
+            referencesModule namespace_ expr
+                || List.any (Tuple.second >> referencesModule namespace_) cases
+
         SubExpression expr ->
             referencesModule namespace_ expr
 
@@ -819,6 +832,7 @@ decoder =
         , infixDecoder
         , lambdaDecoder
         , literalDecoder
+        , matchDecoder
         ]
 
 
@@ -928,6 +942,30 @@ literalDecoder =
 
 
 
+-- PARSING JSON: EXPRESSION.MATCH ----------------------------------------------
+
+
+{-| -}
+matchDecoder : Decoder Expression
+matchDecoder =
+    Json.Decode.Extra.taggedObject "Expression.Match" <|
+        Json.Decode.map2 Match
+            (Json.Decode.field "expression" lazyDecoder)
+            (Json.Decode.field "cases" <|
+                Json.Decode.list caseDecoder
+            )
+
+
+{-| -}
+caseDecoder : Decoder ( Pattern, Expression )
+caseDecoder =
+    Json.Decode.Extra.taggedObject "Expression.Match.Case" <|
+        Json.Decode.map2 Tuple.pair
+            (Json.Decode.field "pattern" Pattern.decoder)
+            (Json.Decode.field "expression" lazyDecoder)
+
+
+
 -- PARSING SOURCE CODE ---------------------------------------------------------
 
 
@@ -953,6 +991,7 @@ parser =
                 , applicationParser
                 , accessParser
                 , lambdaParser
+                , matchParser
                 , Pratt.literal literalParser
                 , parenthesisedParser
                 , Pratt.literal identifierParser
@@ -1123,3 +1162,37 @@ literalParser =
         |= Literal.parser
             (\name -> Identifier (Identifier.Local name))
             lazyParser
+
+
+
+-- PARSING SOURCE: EXPRESSION.MATCH --------------------------------------------
+
+
+{-| -}
+matchParser : Pratt.Config Expression -> Parser Expression
+matchParser prattConfig =
+    Parser.succeed Match
+        |. Parser.keyword "match"
+        |. Parser.Extra.ignorables
+        |= lazyParser
+        |. Parser.Extra.ignorables
+        |. Parser.symbol "{"
+        |. Parser.Extra.ignorables
+        |= Parser.loop []
+            (\cases ->
+                Parser.oneOf
+                    [ Parser.succeed (\pattern expr -> ( pattern, expr ) :: cases)
+                        |. Parser.keyword "case"
+                        |. Parser.Extra.ignorables
+                        |= Pattern.parser
+                        |. Parser.Extra.ignorables
+                        |. Parser.symbol "=>"
+                        |. Parser.Extra.ignorables
+                        |= Pratt.subExpression 0 prattConfig
+                        |> Parser.map Parser.Loop
+                    , Parser.succeed (List.reverse cases)
+                        |. Parser.Extra.ignorables
+                        |. Parser.symbol "}"
+                        |> Parser.map Parser.Done
+                    ]
+            )
