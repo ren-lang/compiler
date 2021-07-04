@@ -4,8 +4,7 @@ module Parse.Source.Declaration exposing (suite)
 
 import Parse.Source.Helpers
     exposing
-        ( shouldFail
-        , shouldSucceed
+        ( shouldSucceed
         )
 import Ren.Data.Declaration as Declaration exposing (..)
 import Ren.Data.Declaration.Visibility exposing (..)
@@ -28,8 +27,7 @@ suite =
         [ shouldSucceed Declaration.parser
             "let x = 10"
             (Variable
-                { comment = []
-                , visibility = Private
+                { visibility = Private
                 , name = Name "x"
                 , bindings = []
                 , body = Expression.number 10
@@ -38,8 +36,7 @@ suite =
         , shouldSucceed Declaration.parser
             "pub let x = 10"
             (Variable
-                { comment = []
-                , visibility = Public
+                { visibility = Public
                 , name = Name "x"
                 , bindings = []
                 , body = Expression.number 10
@@ -53,13 +50,11 @@ suite =
             }
             """
             (Variable
-                { comment = []
-                , visibility = Private
+                { visibility = Private
                 , name = Name "x"
                 , bindings =
                     [ Variable
-                        { comment = []
-                        , visibility = Private
+                        { visibility = Private
                         , name = Name "y"
                         , bindings = []
                         , body = Expression.number 10
@@ -71,8 +66,7 @@ suite =
         , shouldSucceed Declaration.parser
             "fun foo = x => f x"
             (Function
-                { comment = []
-                , visibility = Private
+                { visibility = Private
                 , name = Name "foo"
                 , args = [ Name "x" ]
                 , bindings = []
@@ -88,14 +82,12 @@ suite =
             }
             """
             (Function
-                { comment = []
-                , visibility = Private
+                { visibility = Private
                 , name = Name "foo"
                 , args = [ Name "x" ]
                 , bindings =
                     [ Variable
-                        { comment = []
-                        , visibility = Private
+                        { visibility = Private
                         , name = Name "y"
                         , bindings = []
                         , body = Expression.number 10

@@ -5,8 +5,7 @@ module Parse.Source.Expression exposing (suite)
 import Fuzz exposing (..)
 import Parse.Source.Helpers
     exposing
-        ( shouldFail
-        , shouldSucceed
+        ( shouldSucceed
         )
 import Ren.Data.Expression as Expression exposing (..)
 import Ren.Data.Expression.Accessor exposing (..)
