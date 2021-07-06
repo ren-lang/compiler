@@ -727,19 +727,65 @@ fromCases cases =
         |> String.join "\n"
 
 
+fromArrayDestructureCase : List Pattern -> Expression -> String
+fromArrayDestructureCase patterns expr =
+    let
+        equalityChecks =
+            patterns
+                |> List.indexedMap
+                    (\i pattern ->
+                        case pattern of
+                            Value value ->
+                                ("$[{i}] === " ++ fromPrimitiveLiteral value)
+                                    |> String.replace "{i}" (String.fromInt i)
+                                    |> Just
+
+                            _ ->
+                                Nothing
+                    )
+                |> List.filterMap identity
+                |> (\equalityChecks_ ->
+                        if List.isEmpty equalityChecks_ then
+                            ""
+
+                        else
+                            " && " ++ String.join " && " equalityChecks_
+                   )
+
+        bindings =
+            patterns
+                |> List.indexedMap
+                    (\i pattern ->
+                        case pattern of
+                            Name name ->
+                                "var {name} = $[{i}]"
+                                    |> String.replace "{name}" name
+                                    |> String.replace "{i}" (String.fromInt i)
+                                    |> Just
+
+                            _ ->
+                                Nothing
+                    )
+                |> List.filterMap identity
+                |> String.join "\n"
+    in
+    String.trimLeft """
+if (Array.isArray($) && $.length == {length}{equalityChecks}) {
+    {bindings}
+    return {expr}
+}          
+"""
+        |> String.replace "{length}" (String.fromInt <| List.length patterns)
+        |> String.replace "{equalityChecks}" equalityChecks
+        |> String.replace "{bindings}" (bindings |> String.Extra.nest 4 1)
+        |> String.replace "{expr}" (fromExpression expr)
+
+
 fromCase : ( Pattern, Expression ) -> String
 fromCase ( pattern, expr ) =
     case pattern of
         ArrayDestructure patterns ->
-            String.trimLeft """
-if (Array.isArray($) && $.length >= {length}) {
-    var {destructure} = $
-    return {expr}
-}          
-"""
-                |> String.replace "{length}" (String.fromInt <| List.length patterns)
-                |> String.replace "{destructure}" (fromArrayDestructure patterns)
-                |> String.replace "{expr}" (fromExpression expr)
+            fromArrayDestructureCase patterns expr
 
         Name name ->
             String.trimLeft """
