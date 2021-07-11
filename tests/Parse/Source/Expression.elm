@@ -115,4 +115,65 @@ suite =
                 )
                 (Literal (Number 1))
             )
+        , shouldSucceed Expression.parser
+            "when foo is 10 => ()"
+            (Match (Identifier (Local "foo"))
+                [ ( Value (Number 10)
+                  , Nothing
+                  , Literal Undefined
+                  )
+                ]
+            )
+        , shouldSucceed Expression.parser
+            "when foo is [ x, y ] => ()"
+            (Match (Identifier (Local "foo"))
+                [ ( ArrayDestructure
+                        [ Name "x", Name "y" ]
+                  , Nothing
+                  , Literal Undefined
+                  )
+                ]
+            )
+        , shouldSucceed Expression.parser
+            "when foo is [ x, y ] if x > y => ()"
+            (Match (Identifier (Local "foo"))
+                [ ( ArrayDestructure [ Name "x", Name "y" ]
+                  , Infix Gt (Identifier (Local "x")) (Identifier (Local "y"))
+                        |> Just
+                  , Literal Undefined
+                  )
+                ]
+            )
+        , shouldSucceed Expression.parser
+            "when foo is [ x, y ] if x > y => () else => ()"
+            (Match (Identifier (Local "foo"))
+                [ ( ArrayDestructure [ Name "x", Name "y" ]
+                  , Infix Gt (Identifier (Local "x")) (Identifier (Local "y"))
+                        |> Just
+                  , Literal Undefined
+                  )
+                , ( Wildcard Nothing
+                  , Nothing
+                  , Literal Undefined
+                  )
+                ]
+            )
+        , shouldSucceed Expression.parser
+            "when foo is [ x, y ] if x > y => () is 10 => () else => ()"
+            (Match (Identifier (Local "foo"))
+                [ ( ArrayDestructure [ Name "x", Name "y" ]
+                  , Infix Gt (Identifier (Local "x")) (Identifier (Local "y"))
+                        |> Just
+                  , Literal Undefined
+                  )
+                , ( Value (Number 10)
+                  , Nothing
+                  , Literal Undefined
+                  )
+                , ( Wildcard Nothing
+                  , Nothing
+                  , Literal Undefined
+                  )
+                ]
+            )
         ]
