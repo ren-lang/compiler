@@ -709,8 +709,7 @@ fromObjectField ( key, val ) =
 -- EMITTING EXPRESSIONS: MATCH -------------------------------------------------
 
 
-{-| -}
-fromMatch : Expression -> List ( Pattern, Expression ) -> String
+fromMatch : Expression -> List ( Pattern, Maybe Expression, Expression ) -> String
 fromMatch expr cases =
     String.trimLeft """
 (($) => {
@@ -721,25 +720,18 @@ fromMatch expr cases =
         |> String.replace "{cases}" (fromCases cases |> String.Extra.nest 4 1)
 
 
-fromCases : List ( Pattern, Expression ) -> String
+fromCases : List ( Pattern, Maybe Expression, Expression ) -> String
 fromCases cases =
     List.map fromCase cases
         |> String.join "\n"
+        |> String.Extra.indent 4 1
 
 
-fromCase : ( Pattern, Expression ) -> String
-fromCase ( pattern, expr ) =
+fromCase : ( Pattern, Maybe Expression, Expression ) -> String
+fromCase ( pattern, guard, expr ) =
     case pattern of
         ArrayDestructure patterns ->
-            String.trimLeft """
-if (Array.isArray($) && $.length >= {length}) {
-    var {destructure} = $
-    return {expr}
-}          
-"""
-                |> String.replace "{length}" (String.fromInt <| List.length patterns)
-                |> String.replace "{destructure}" (fromArrayDestructure patterns)
-                |> String.replace "{expr}" (fromExpression expr)
+            fromArrayDestructureCase patterns guard expr
 
         Name name ->
             String.trimLeft """
@@ -770,9 +762,73 @@ if ($ === {literal}) {
                 |> String.replace "{literal}" (fromPrimitiveLiteral literal)
                 |> String.replace "{expr}" (fromExpression expr)
 
-        Wildcard name ->
-            "_{name}"
-                |> String.replace "{name}" (Maybe.withDefault "" name)
+        Wildcard _ ->
+            "return {expr}"
+                |> String.replace "{expr}" (fromExpression expr)
+
+
+fromGuard : Expression -> String
+fromGuard guard =
+    String.trimLeft """
+if {guard} break    
+"""
+        |> String.replace "{guard}" (fromExpression guard)
+
+
+fromArrayDestructureCase : List Pattern -> Maybe Expression -> Expression -> String
+fromArrayDestructureCase patterns guard expr =
+    let
+        equalityChecks =
+            patterns
+                |> List.indexedMap
+                    (\i pattern ->
+                        case pattern of
+                            Value value ->
+                                ("$[{i}] === " ++ fromPrimitiveLiteral value)
+                                    |> String.replace "{i}" (String.fromInt i)
+                                    |> Just
+
+                            _ ->
+                                Nothing
+                    )
+                |> List.filterMap identity
+                |> (\equalityChecks_ ->
+                        if List.isEmpty equalityChecks_ then
+                            ""
+
+                        else
+                            " && " ++ String.join " && " equalityChecks_
+                   )
+
+        bindings =
+            patterns
+                |> List.indexedMap
+                    (\i pattern ->
+                        case pattern of
+                            Name name ->
+                                "var {name} = $[{i}]"
+                                    |> String.replace "{name}" name
+                                    |> String.replace "{i}" (String.fromInt i)
+                                    |> Just
+
+                            _ ->
+                                Nothing
+                    )
+                |> List.filterMap identity
+                |> String.join "\n"
+    in
+    String.trimLeft """
+if (Array.isArray($) && $.length == {length}{equalityChecks}) {
+    {bindings}
+    {guard}
+    return {expr}
+}          
+"""
+        |> String.replace "{length}" (String.fromInt <| List.length patterns)
+        |> String.replace "{equalityChecks}" equalityChecks
+        |> String.replace "{bindings}" (bindings |> String.Extra.nest 4 1)
+        |> String.replace "{guard}" (Maybe.map fromGuard guard |> Maybe.withDefault "")
+        |> String.replace "{expr}" (fromExpression expr)
 
 
 {-| -}

@@ -28,8 +28,8 @@ import Set exposing (Set)
         , "ret"
         , "true"
         , "false"
-        , "match"
-        , "case"
+        , "when"
+        , "is"
         ]
 
 -}
@@ -48,8 +48,8 @@ all =
         , "ret"
         , "true"
         , "false"
-        , "match"
-        , "case"
+        , "when"
+        , "is"
         ]
 
 

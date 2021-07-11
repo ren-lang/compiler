@@ -83,7 +83,12 @@ recursiveTransformation transform expression =
         Match expr patterns ->
             Match
                 (transform expr)
-                (List.map (Tuple.mapSecond transform) patterns)
+                (List.map
+                    (\( pattern, guard, body ) ->
+                        ( pattern, Maybe.map transform guard, transform body )
+                    )
+                    patterns
+                )
 
         SubExpression expr ->
             SubExpression (transform expr)
