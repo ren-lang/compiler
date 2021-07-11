@@ -70,6 +70,7 @@ module Ren.Data.Module exposing
 import Json.Decode exposing (Decoder)
 import Json.Decode.Extra
 import Parser exposing ((|.), (|=), Parser)
+import Parser.Extra
 import Ren.Data.Declaration as Declaration exposing (Declaration)
 import Ren.Data.Declaration.Visibility exposing (Visibility(..))
 import Ren.Data.Expression.Pattern as Pattern
@@ -206,22 +207,30 @@ fromSource source =
 parser : Parser Module
 parser =
     Parser.succeed module_
-        |= Parser.sequence
-            { start = ""
-            , separator = ""
-            , end = ""
-            , spaces = Parser.spaces
-            , item = Import.parser
-            , trailing = Parser.Optional
-            }
-        |. Parser.spaces
-        |= Parser.sequence
-            { start = ""
-            , separator = ""
-            , end = ""
-            , spaces = Parser.spaces
-            , item = Declaration.parser
-            , trailing = Parser.Optional
-            }
-        |. Parser.spaces
+        |= Parser.loop []
+            (\imports_ ->
+                Parser.oneOf
+                    [ Parser.succeed (\i -> i :: imports_)
+                        |. Parser.Extra.ignorables
+                        |= Import.parser
+                        |. Parser.Extra.ignorables
+                        |> Parser.map Parser.Loop
+                    , Parser.succeed (List.reverse imports_)
+                        |> Parser.map Parser.Done
+                    ]
+            )
+        |. Parser.Extra.ignorables
+        |= Parser.loop []
+            (\declarations ->
+                Parser.oneOf
+                    [ Parser.succeed (\declaration -> declaration :: declarations)
+                        |. Parser.Extra.ignorables
+                        |= Declaration.parser
+                        |. Parser.Extra.ignorables
+                        |> Parser.map Parser.Loop
+                    , Parser.succeed (List.reverse declarations)
+                        |> Parser.map Parser.Done
+                    ]
+            )
+        |. Parser.Extra.ignorables
         |. Parser.end

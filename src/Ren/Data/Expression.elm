@@ -118,6 +118,7 @@ type Expression
     | Infix Operator Expression Expression
     | Lambda (List Pattern) Expression
     | Literal Literal
+    | Match Expression (List ( Pattern, Maybe Expression, Expression ))
     | SubExpression Expression
 
 
@@ -643,6 +644,16 @@ referencesName name_ expression =
         Literal _ ->
             False
 
+        Match expr cases ->
+            referencesName name_ expr
+                || List.any
+                    (\( _, guard, body ) ->
+                        Maybe.map (referencesName name_) guard
+                            |> Maybe.withDefault False
+                            |> (||) (referencesName name_ body)
+                    )
+                    cases
+
         SubExpression expr ->
             referencesName name_ expr
 
@@ -688,6 +699,16 @@ referencesScopedName namespace_ name_ expression =
 
         Literal _ ->
             False
+
+        Match expr cases ->
+            referencesScopedName namespace_ name_ expr
+                || List.any
+                    (\( _, guard, body ) ->
+                        Maybe.map (referencesScopedName namespace_ name_) guard
+                            |> Maybe.withDefault False
+                            |> (||) (referencesScopedName namespace_ name_ body)
+                    )
+                    cases
 
         SubExpression expr ->
             referencesScopedName namespace_ name_ expr
@@ -789,6 +810,16 @@ referencesModule namespace_ expression =
         Literal _ ->
             False
 
+        Match expr cases ->
+            referencesModule namespace_ expr
+                || List.any
+                    (\( _, guard, body ) ->
+                        Maybe.map (referencesModule namespace_) guard
+                            |> Maybe.withDefault False
+                            |> (||) (referencesModule namespace_ body)
+                    )
+                    cases
+
         SubExpression expr ->
             referencesModule namespace_ expr
 
@@ -819,6 +850,7 @@ decoder =
         , infixDecoder
         , lambdaDecoder
         , literalDecoder
+        , matchDecoder
         ]
 
 
@@ -928,6 +960,31 @@ literalDecoder =
 
 
 
+-- PARSING JSON: EXPRESSION.MATCH ----------------------------------------------
+
+
+{-| -}
+matchDecoder : Decoder Expression
+matchDecoder =
+    Json.Decode.Extra.taggedObject "Expression.Match" <|
+        Json.Decode.map2 Match
+            (Json.Decode.field "expression" lazyDecoder)
+            (Json.Decode.field "cases" <|
+                Json.Decode.list caseDecoder
+            )
+
+
+{-| -}
+caseDecoder : Decoder ( Pattern, Maybe Expression, Expression )
+caseDecoder =
+    Json.Decode.Extra.taggedObject "Expression.Match.Case" <|
+        Json.Decode.map3 (\pattern guard body -> ( pattern, guard, body ))
+            (Json.Decode.field "pattern" Pattern.decoder)
+            (Json.Decode.field "guard" <| Json.Decode.maybe lazyDecoder)
+            (Json.Decode.field "expression" lazyDecoder)
+
+
+
 -- PARSING SOURCE CODE ---------------------------------------------------------
 
 
@@ -953,6 +1010,7 @@ parser =
                 , applicationParser
                 , accessParser
                 , lambdaParser
+                , matchParser
                 , Pratt.literal literalParser
                 , parenthesisedParser
                 , Pratt.literal identifierParser
@@ -1123,3 +1181,48 @@ literalParser =
         |= Literal.parser
             (\name -> Identifier (Identifier.Local name))
             lazyParser
+
+
+
+-- PARSING SOURCE: EXPRESSION.MATCH --------------------------------------------
+
+
+{-| -}
+matchParser : Pratt.Config Expression -> Parser Expression
+matchParser prattConfig =
+    Parser.succeed Match
+        |. Parser.keyword "when"
+        |. Parser.Extra.ignorables
+        |= lazyParser
+        |. Parser.Extra.ignorables
+        |= Parser.loop []
+            (\cases ->
+                Parser.oneOf
+                    [ Parser.succeed (\pattern guard expr -> ( pattern, guard, expr ) :: cases)
+                        |. Parser.keyword "is"
+                        |. Parser.Extra.ignorables
+                        |= Pattern.parser
+                        |. Parser.Extra.ignorables
+                        |= Parser.oneOf
+                            [ Parser.succeed Just
+                                |. Parser.keyword "if"
+                                |. Parser.Extra.ignorables
+                                |= Pratt.subExpression 0 prattConfig
+                                |. Parser.Extra.ignorables
+                            , Parser.succeed Nothing
+                            ]
+                        |. Parser.symbol "=>"
+                        |. Parser.Extra.ignorables
+                        |= Pratt.subExpression 0 prattConfig
+                        |> Parser.map Parser.Loop
+                    , Parser.succeed (\expr -> ( Pattern.Wildcard Nothing, Nothing, expr ) :: cases)
+                        |. Parser.keyword "else"
+                        |. Parser.Extra.ignorables
+                        |. Parser.symbol "=>"
+                        |. Parser.Extra.ignorables
+                        |= Pratt.subExpression 0 prattConfig
+                        |> Parser.map Parser.Loop
+                    , Parser.succeed (List.reverse cases)
+                        |> Parser.map Parser.Done
+                    ]
+            )

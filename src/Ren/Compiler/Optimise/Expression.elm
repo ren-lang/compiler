@@ -80,6 +80,16 @@ recursiveTransformation transform expression =
         Literal literal ->
             Literal literal
 
+        Match expr patterns ->
+            Match
+                (transform expr)
+                (List.map
+                    (\( pattern, guard, body ) ->
+                        ( pattern, Maybe.map transform guard, transform body )
+                    )
+                    patterns
+                )
+
         SubExpression expr ->
             SubExpression (transform expr)
 
