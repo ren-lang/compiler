@@ -86,7 +86,6 @@ The alises are provided here as a convenience so you only need to import
 
 import Json.Decode
 import Parser
-import Ren.Compiler.Emit.CommonJS as CommonJS
 import Ren.Compiler.Emit.ESModule as ESModule
 import Ren.Compiler.Optimise.Declaration as Declaration
 import Ren.Compiler.Optimise.Expression as Expression
@@ -245,7 +244,6 @@ optimiseExpression =
 {-| -}
 type Target
     = ESModule
-    | CommonJS
 
 
 {-| -}
@@ -255,9 +253,6 @@ emit target =
         ESModule ->
             ESModule.fromModule
 
-        CommonJS ->
-            CommonJS.fromModule
-
 
 {-| -}
 emitDeclaration : Target -> Declaration -> String
@@ -266,9 +261,6 @@ emitDeclaration target =
         ESModule ->
             ESModule.fromDeclaration
 
-        CommonJS ->
-            CommonJS.fromDeclaration
-
 
 {-| -}
 emitExpression : Target -> Expression -> String
@@ -276,6 +268,3 @@ emitExpression target =
     case target of
         ESModule ->
             ESModule.fromExpression
-
-        CommonJS ->
-            CommonJS.fromExpression
