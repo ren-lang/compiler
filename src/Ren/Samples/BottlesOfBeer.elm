@@ -13,7 +13,7 @@ import Ren.Compiler as Ren
 source : String
 source =
     """
-import 'ren/array' as Array
+import 'ren/array' as Array exposing { forEach }
 import 'ren/debug' as Debug
 
 // The `main` function is always the entry point to your program when being run
@@ -26,7 +26,7 @@ pub fun main = _ =>  {
     fun makeVerses = n => if n >= 0 then verse n :: makeVerses (n - 1) else []
     let verses = makeVerses numberOfBottles
 
-    ret verses |> Array.forEach Debug.log
+    ret verses |> forEach Debug.log
 }
 
 // Order of declaration is not significant in Ren, so we can declare the value
@@ -40,7 +40,7 @@ fun verse = n => when n
         'No more bottles of beer on the wall, no more bottles of beer. ' +
         'Go to the store and buy some more, 99 bottles of beer on the wall.'
 
-    is _ =>
+    is _ if n > 0 =>
         bottles n + ' of beer on the wall, ' + bottles n + ' of beer. ' +
         'Take one down and pass it around, ' + bottles (n - 1) + ' of beer on the wall.'
 
