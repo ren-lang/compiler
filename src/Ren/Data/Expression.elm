@@ -1079,13 +1079,7 @@ applicationParser prattConfig =
             , identifierParser
             ]
         |. Parser.Extra.ignorables
-        |= Parser.oneOf
-            [ accessParser prattConfig
-            , literalParser
-            , lambdaParser prattConfig
-            , parenthesisedParser prattConfig
-            , identifierParser
-            ]
+        |= applicationArgumentParser prattConfig
         |. Parser.Extra.ignorables
         |= Parser.loop []
             (\args ->
@@ -1105,11 +1099,11 @@ applicationParser prattConfig =
 applicationArgumentParser : Pratt.Config Expression -> Parser Expression
 applicationArgumentParser prattConfig =
     Parser.oneOf
-        [ accessParser prattConfig
+        [ parenthesisedParser prattConfig
+        , accessParser prattConfig
         , lambdaParser prattConfig
         , literalParser
         , identifierParser
-        , parenthesisedParser prattConfig
         ]
 
 
