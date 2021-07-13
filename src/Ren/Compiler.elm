@@ -251,7 +251,7 @@ emit : Target -> Module -> String
 emit target =
     case target of
         ESModule ->
-            ESModule.fromModule
+            ESModule.emitModule
 
 
 {-| -}
@@ -259,7 +259,7 @@ emitDeclaration : Target -> Declaration -> String
 emitDeclaration target =
     case target of
         ESModule ->
-            ESModule.fromDeclaration
+            ESModule.emitDeclaration
 
 
 {-| -}
@@ -267,4 +267,4 @@ emitExpression : Target -> Expression -> String
 emitExpression target =
     case target of
         ESModule ->
-            ESModule.fromExpression
+            ESModule.emitExpression
