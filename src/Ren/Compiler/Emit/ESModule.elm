@@ -49,7 +49,6 @@ fromImport (Import ({ path, name, exposed } as import_)) =
             Pretty.string "import"
                 |> Pretty.a Pretty.space
                 |> Pretty.a (quotes path)
-                |> Pretty.a (Pretty.char ';')
 
         ( True, False ) ->
             Pretty.string "import"
@@ -63,7 +62,6 @@ fromImport (Import ({ path, name, exposed } as import_)) =
                 |> Pretty.a (Pretty.string "from")
                 |> Pretty.a Pretty.space
                 |> Pretty.a (quotes path)
-                |> Pretty.a (Pretty.char ';')
 
         ( False, True ) ->
             Pretty.string "import"
@@ -77,7 +75,6 @@ fromImport (Import ({ path, name, exposed } as import_)) =
                 |> Pretty.a (Pretty.string "from")
                 |> Pretty.a Pretty.space
                 |> Pretty.a (quotes path)
-                |> Pretty.a (Pretty.char ';')
 
         ( False, False ) ->
             Pretty.lines
