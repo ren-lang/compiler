@@ -334,12 +334,6 @@ parser =
 
 
 {-| -}
-lazyParser : Parser Declaration
-lazyParser =
-    Parser.lazy (\_ -> parser)
-
-
-{-| -}
 bindingParser : Parser Declaration
 bindingParser =
     Parser.oneOf
