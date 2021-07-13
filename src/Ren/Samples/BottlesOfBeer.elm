@@ -52,6 +52,16 @@ fun bottles = n => when n
 """
 
 
+
+-- OUTPUT ----------------------------------------------------------------------
+
+
 ast : Result (List Parser.DeadEnd) Ren.Module
 ast =
     Ren.parse source
+
+
+output : String
+output =
+    Result.map (Ren.emit Ren.ESModule) ast
+        |> Result.withDefault ""
