@@ -314,8 +314,10 @@ fromApplication expr args =
         |> Pretty.a
             (args
                 |> List.map (fromExpression >> Pretty.parens)
-                |> Pretty.softlines
+                |> Pretty.lines
             )
+        |> Pretty.group
+        |> Pretty.nest 4
 
 
 
@@ -325,14 +327,20 @@ fromApplication expr args =
 fromConditional : Expression -> Expression -> Expression -> Pretty.Doc t
 fromConditional condition true false =
     fromExpression condition
-        |> Pretty.a Pretty.space
-        |> Pretty.a (Pretty.char '?')
-        |> Pretty.a Pretty.space
-        |> Pretty.a (fromExpression true)
-        |> Pretty.a Pretty.space
-        |> Pretty.a (Pretty.char ':')
-        |> Pretty.a Pretty.space
-        |> Pretty.a (fromExpression false)
+        |> Pretty.a Pretty.line
+        |> Pretty.a
+            (Pretty.char '?'
+                |> Pretty.a Pretty.space
+                |> Pretty.a (fromExpression true)
+                |> Pretty.indent 4
+            )
+        |> Pretty.a Pretty.line
+        |> Pretty.a
+            (Pretty.char ':'
+                |> Pretty.a Pretty.space
+                |> Pretty.a (fromExpression false)
+                |> Pretty.indent 4
+            )
 
 
 
