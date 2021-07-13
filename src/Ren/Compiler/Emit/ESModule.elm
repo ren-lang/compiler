@@ -27,7 +27,7 @@ import Ren.Data.Module.Import exposing (Import(..))
 {-| -}
 emitModule : Module -> String
 emitModule =
-    fromModule >> Pretty.pretty 120
+    fromModule >> Pretty.pretty 80
 
 
 fromModule : Module -> Pretty.Doc t
@@ -93,7 +93,7 @@ fromImport (Import ({ path, name, exposed } as import_)) =
 {-| -}
 emitDeclaration : Declaration -> String
 emitDeclaration =
-    fromDeclaration >> Pretty.pretty 120
+    fromDeclaration >> Pretty.pretty 80
 
 
 fromDeclaration : Declaration -> Pretty.Doc t
@@ -130,10 +130,15 @@ fromFunction name args bindings body =
                 |> Pretty.a (Pretty.char '{')
                 |> Pretty.a Pretty.line
                 |> Pretty.a
-                    (List.map fromDeclaration bindings
-                        |> Pretty.lines
-                        |> Pretty.a Pretty.line
-                        |> Pretty.a Pretty.line
+                    ((if List.isEmpty bindings then
+                        Pretty.empty
+
+                      else
+                        List.map fromDeclaration bindings
+                            |> Pretty.lines
+                            |> Pretty.a Pretty.line
+                            |> Pretty.a Pretty.line
+                     )
                         |> Pretty.a (Pretty.string "return")
                         |> Pretty.a Pretty.space
                         |> Pretty.a (fromExpression body)
@@ -152,19 +157,27 @@ fromFunction name args bindings body =
                 |> Pretty.a (Pretty.char '{')
                 |> Pretty.a Pretty.line
                 |> Pretty.a
-                    (List.map fromDeclaration bindings
-                        |> Pretty.lines
-                        |> Pretty.a Pretty.line
-                        |> Pretty.a (Pretty.string "return")
+                    (Pretty.string "return"
                         |> Pretty.a Pretty.space
                         |> Pretty.a
                             (List.map (fromPattern >> Pretty.parens) rest
                                 |> Pretty.join (Pretty.space |> Pretty.a (Pretty.string "=>") |> Pretty.a Pretty.space)
+                                |> Pretty.a Pretty.space
+                                |> Pretty.a (Pretty.string "=>")
+                                |> Pretty.a Pretty.space
                                 |> Pretty.a (Pretty.char '{')
                                 |> Pretty.a Pretty.line
-                                |> Pretty.a Pretty.line
                                 |> Pretty.a
-                                    (Pretty.string "return"
+                                    ((if List.isEmpty bindings then
+                                        Pretty.empty
+
+                                      else
+                                        List.map fromDeclaration bindings
+                                            |> Pretty.lines
+                                            |> Pretty.a Pretty.line
+                                            |> Pretty.a Pretty.line
+                                     )
+                                        |> Pretty.a (Pretty.string "return")
                                         |> Pretty.a Pretty.space
                                         |> Pretty.a (fromExpression body)
                                         |> Pretty.indent 4
@@ -172,7 +185,9 @@ fromFunction name args bindings body =
                                 |> Pretty.a Pretty.line
                                 |> Pretty.a (Pretty.char '}')
                             )
+                        |> Pretty.indent 4
                     )
+                |> Pretty.a Pretty.line
                 |> Pretty.a (Pretty.char '}')
 
 
@@ -235,7 +250,7 @@ fromVisibility visibility =
 
 emitExpression : Expression -> String
 emitExpression =
-    fromExpression >> Pretty.pretty 120
+    fromExpression >> Pretty.pretty 80
 
 
 fromExpression : Expression -> Pretty.Doc t
@@ -298,10 +313,11 @@ fromAccessor accessor =
 fromApplication : Expression -> List Expression -> Pretty.Doc t
 fromApplication expr args =
     fromExpression expr
+        |> Pretty.a Pretty.space
         |> Pretty.a
             (args
                 |> List.map (fromExpression >> Pretty.parens)
-                |> Pretty.join Pretty.empty
+                |> Pretty.softlines
             )
 
 
@@ -631,6 +647,8 @@ fromMatch : Expression -> List ( Pattern, Maybe Expression, Expression ) -> Pret
 fromMatch expr cases =
     Pretty.char '$'
         |> Pretty.parens
+        |> Pretty.a Pretty.space
+        |> Pretty.a (Pretty.string "=>")
         |> Pretty.a Pretty.space
         |> Pretty.a (Pretty.char '{')
         |> Pretty.a Pretty.line
