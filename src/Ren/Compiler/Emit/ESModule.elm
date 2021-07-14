@@ -572,6 +572,8 @@ fromLambda args body =
     List.map (fromPattern >> Pretty.parens) args
         |> Pretty.join (Pretty.space |> Pretty.a (Pretty.string "=>") |> Pretty.a Pretty.space)
         |> Pretty.a Pretty.space
+        |> Pretty.a (Pretty.string "=>")
+        |> Pretty.a Pretty.space
         |> Pretty.a (fromExpression body)
 
 
