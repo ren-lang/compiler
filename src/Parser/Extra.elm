@@ -30,6 +30,7 @@ string quoteChar =
                             [ Parser.succeed "\n" |. Parser.token "n"
                             , Parser.succeed "\t" |. Parser.token "t"
                             , Parser.succeed "\u{000D}" |. Parser.token "r"
+                            , Parser.succeed "\\" |. Parser.token "\\"
                             , Parser.succeed quoteString |. Parser.token quoteString
                             ]
                         |> Parser.map Parser.Loop
