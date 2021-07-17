@@ -326,6 +326,8 @@ constantFold expression =
 stripParentheses : Expression -> Maybe Expression
 stripParentheses expression =
     case expression of
+        -- SUBEXPRESSION -------------------------------------------------------
+        -- Unwrap all SubExpressions with single expression contents
         SubExpression (Access expr accessors) ->
             Access expr accessors
                 |> Just
@@ -340,6 +342,85 @@ stripParentheses expression =
 
         SubExpression (SubExpression expr) ->
             SubExpression expr
+                |> Just
+
+        -- ACCESS --------------------------------------------------------------
+        -- Unwrap all SubExpressions inside Computed accessors.
+        -- Removes [(expression)] output.
+        Access expr accessors ->
+            let
+                optimiseAccessor acc =
+                    case acc of
+                        Computed (SubExpression e) ->
+                            Computed e
+
+                        _ ->
+                            acc
+            in
+            List.map optimiseAccessor accessors
+                |> (\optimisedAccessors ->
+                        if optimisedAccessors == accessors then
+                            Nothing
+
+                        else
+                            Access expr optimisedAccessors
+                                |> Just
+                   )
+
+        -- APPLICATION ---------------------------------------------------------
+        -- Unwrap all SubExpressions as arguments.
+        -- Prevents arguments being wrappped in double-parentheses.
+        Application func arguments ->
+            let
+                optimiseArgument arg =
+                    case arg of
+                        SubExpression e ->
+                            e
+
+                        _ ->
+                            arg
+            in
+            List.map optimiseArgument arguments
+                |> (\optimisedArguments ->
+                        if optimisedArguments == arguments then
+                            Nothing
+
+                        else
+                            Application func optimisedArguments
+                                |> Just
+                   )
+
+        -- CONDITIONAL ---------------------------------------------------------
+        -- Unwrap all SubExpressions as condition.
+        -- Prevents condition being wrappped in double-parentheses.
+        Conditional (SubExpression condition) trueCase falseCase ->
+            Conditional condition trueCase falseCase
+                |> Just
+
+        -- Unwrap all SubExpressions as body if true.
+        -- Prevents true body being wrappped in parentheses.
+        Conditional condition (SubExpression trueCase) falseCase ->
+            Conditional condition trueCase falseCase
+                |> Just
+
+        -- Unwrap all SubExpressions as body if false.
+        -- Prevents false body being wrappped in parentheses.
+        Conditional condition trueCase (SubExpression falseCase) ->
+            Conditional condition trueCase falseCase
+                |> Just
+
+        -- LAMBDA --------------------------------------------------------------
+        -- Unwrap SubExpression as body.
+        -- Prevents body being wrappped in parentheses.
+        Lambda patterns (SubExpression body) ->
+            Lambda patterns body
+                |> Just
+
+        -- MATCH ---------------------------------------------------------------
+        -- Unwrap all SubExpressions as arguments.
+        -- Prevents arguments being wrappped in double-parentheses.
+        Match (SubExpression expr) branches ->
+            Match expr branches
                 |> Just
 
         _ ->
