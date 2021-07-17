@@ -1,10 +1,9 @@
 module Ren.Data.Expression.Literal exposing
     ( Literal(..)
-    , TemplateSegment
+    , TemplateSegment(..)
     , coerceToNumber, coerceToInteger, coerceToString
     , decoder, primitiveDecoder
     , parser, primitiveParser
-    , templateLiteralParser
     )
 
 {-|
