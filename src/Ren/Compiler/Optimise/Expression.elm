@@ -344,7 +344,6 @@ stripParentheses expression =
             SubExpression expr
                 |> Just
 
-
         -- ACCESS --------------------------------------------------------------
         -- Unwrap all SubExpressions inside Computed accessors.
         -- Removes [(expression)] output.
@@ -354,17 +353,19 @@ stripParentheses expression =
                     case acc of
                         Computed (SubExpression e) ->
                             Computed e
+
                         _ ->
                             acc
             in
-                List.map optimiseAccessor accessors
-                    |> (\optimisedAccessors ->
-                            if optimisedAccessors == accessors then
-                                Nothing
-                            else
-                                Access expr optimisedAccessors
-                                    |> Just
-                       )
+            List.map optimiseAccessor accessors
+                |> (\optimisedAccessors ->
+                        if optimisedAccessors == accessors then
+                            Nothing
+
+                        else
+                            Access expr optimisedAccessors
+                                |> Just
+                   )
 
         -- APPLICATION ---------------------------------------------------------
         -- Unwrap all SubExpressions as arguments.
@@ -375,17 +376,19 @@ stripParentheses expression =
                     case arg of
                         SubExpression e ->
                             e
+
                         _ ->
                             arg
             in
-                List.map optimiseArgument arguments
-                    |> (\optimisedArguments ->
-                            if optimisedArguments == arguments then
-                                Nothing
-                            else
-                                Application func optimisedArguments
-                                    |> Just
-                       )
+            List.map optimiseArgument arguments
+                |> (\optimisedArguments ->
+                        if optimisedArguments == arguments then
+                            Nothing
+
+                        else
+                            Application func optimisedArguments
+                                |> Just
+                   )
 
         -- CONDITIONAL ---------------------------------------------------------
         -- Unwrap all SubExpressions as condition.
@@ -411,7 +414,7 @@ stripParentheses expression =
         -- Prevents body being wrappped in parentheses.
         Lambda patterns (SubExpression body) ->
             Lambda patterns body
-             |> Just
+                |> Just
 
         -- MATCH ---------------------------------------------------------------
         -- Unwrap all SubExpressions as arguments.
