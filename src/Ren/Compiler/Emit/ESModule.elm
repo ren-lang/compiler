@@ -615,14 +615,16 @@ fromLiteral literal =
             quotes s
 
         Template parts ->
-            (List.map
+            List.map
                 (\part ->
                     case part of
-                       Text text -> Pretty.string text
-                       Expr expr -> fromExpression expr
+                        Text text ->
+                            Pretty.string text
+
+                        Expr expr ->
+                            fromExpression expr
                 )
                 parts
-            )
                 |> Pretty.join Pretty.empty
                 |> Pretty.a (Pretty.char '`')
                 |> Pretty.surround (Pretty.char '`') (Pretty.char '`')

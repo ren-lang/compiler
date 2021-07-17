@@ -25,7 +25,7 @@ string quoteChar =
             (\chunks ->
                 Parser.oneOf
                     [ Parser.succeed (\chunk -> chunk :: chunks)
-                        |= stringEscape [quoteString]
+                        |= stringEscape [ quoteString ]
                         |> Parser.map Parser.Loop
                     , Parser.succeed (List.reverse chunks |> String.join "")
                         |. Parser.token quoteString
@@ -53,13 +53,12 @@ stringEscape escapeChars =
     Parser.succeed identity
         |. Parser.token "\\"
         |= Parser.oneOf
-            (
-                List.map mapString escapeChars
-                    ++ [ Parser.succeed "\n" |. Parser.token "n"
-                        , Parser.succeed "\t" |. Parser.token "t"
-                        , Parser.succeed "\u{000D}" |. Parser.token "r"
-                        , Parser.succeed "\\" |. Parser.token "\\"
-                        ]
+            (List.map mapString escapeChars
+                ++ [ Parser.succeed "\n" |. Parser.token "n"
+                   , Parser.succeed "\t" |. Parser.token "t"
+                   , Parser.succeed "\u{000D}" |. Parser.token "r"
+                   , Parser.succeed "\\" |. Parser.token "\\"
+                   ]
             )
 
 
