@@ -13,7 +13,7 @@ import Ren.Data.Declaration.Visibility exposing (Visibility(..))
 import Ren.Data.Expression as Expression exposing (Expression(..))
 import Ren.Data.Expression.Accessor exposing (Accessor(..))
 import Ren.Data.Expression.Identifier exposing (Identifier(..))
-import Ren.Data.Expression.Literal exposing (Literal(..))
+import Ren.Data.Expression.Literal exposing (Literal(..), TemplateSegment(..))
 import Ren.Data.Expression.Operator exposing (Operator(..))
 import Ren.Data.Expression.Pattern exposing (Pattern(..))
 import Ren.Data.Module exposing (Module(..))
@@ -614,6 +614,19 @@ fromLiteral literal =
         String s ->
             quotes s
 
+        Template parts ->
+            (List.map
+                (\part ->
+                    case part of
+                       Text text -> Pretty.string text
+                       Expr expr -> fromExpression expr
+                )
+                parts
+            )
+                |> Pretty.join Pretty.empty
+                |> Pretty.a (Pretty.char '`')
+                |> Pretty.surround (Pretty.char '`') (Pretty.char '`')
+
         Undefined ->
             Pretty.string "undefined"
 
@@ -621,7 +634,7 @@ fromLiteral literal =
 fromPrimitive : Literal Never -> Pretty.Doc t
 fromPrimitive literal =
     case literal of
-        -- Primitive literals can `Never` be an Array or an Object.
+        -- Primitive literals can `Never` be an Array, Object or Template Literal.
         Array _ ->
             Pretty.empty
 
@@ -635,12 +648,16 @@ fromPrimitive literal =
             String.fromFloat n
                 |> Pretty.string
 
-        -- Primitive literals can `Never` be an Array or an Object.
+        -- Primitive literals can `Never` be an Array, Object or Template Literal.
         Object _ ->
             Pretty.empty
 
         String s ->
             quotes s
+
+        -- Primitive literals can `Never` be an Array, Object or Template Literal.
+        Template _ ->
+            Pretty.empty
 
         Undefined ->
             Pretty.string "undefined"

@@ -1,8 +1,10 @@
 module Ren.Data.Expression.Literal exposing
     ( Literal(..)
+    , TemplateSegment
     , coerceToNumber, coerceToInteger, coerceToString
     , decoder, primitiveDecoder
     , parser, primitiveParser
+    , templateLiteralParser
     )
 
 {-|
@@ -35,8 +37,13 @@ type Literal expression
     | Number Float
     | Object (Dict String expression)
     | String String
+    | Template (List (TemplateSegment expression))
     | Undefined
 
+
+type TemplateSegment expression
+    = Text String
+    | Expr expression
 
 
 -- HELPERS ---------------------------------------------------------------------
@@ -63,6 +70,9 @@ coerceToNumber literal =
 
         String s ->
             String.toFloat s
+
+        Template _ ->
+            Nothing
 
         Undefined ->
             Just 0
@@ -101,6 +111,9 @@ coerceToInteger literal =
         String s ->
             String.toInt s
 
+        Template _ ->
+            Nothing
+
         Undefined ->
             Just 0
 
@@ -126,6 +139,9 @@ coerceToString literal =
 
         String s ->
             Just s
+
+        Template _ ->
+            Nothing
 
         Undefined ->
             Just "undefined"
@@ -219,6 +235,7 @@ parser toExpression expressionParser =
         , objectLiteralParser toExpression expressionParser
         , numberLiteralParser
         , stringLiteralParser
+        , templateLiteralParser expressionParser
         , undefinedLiteralParser
         ]
 
@@ -328,6 +345,44 @@ stringLiteralParser =
             [ Parser.Extra.string '"'
             , Parser.Extra.string '\''
             ]
+
+
+{-| -}
+templateLiteralParser : Parser expression -> Parser (Literal expression)
+templateLiteralParser expressionParser =
+    let
+        isRawText c =
+            c /= '`' && c /= '\\' && c /= '$'
+    in
+        Parser.succeed Template
+            |. Parser.symbol "`"
+            |= Parser.loop []
+                (\chunks ->
+                    Parser.oneOf
+                        [ Parser.succeed (\s -> (Text s) :: chunks)
+                            |= Parser.Extra.stringEscape ["`", "$"]
+                            |> Parser.map Parser.Loop
+                        , Parser.succeed (\expr -> (Expr expr) :: chunks)
+                            |. Parser.token "${"
+                            |= expressionParser
+                            |. Parser.token "}"
+                            |> Parser.map Parser.Loop
+                        , Parser.succeed (List.reverse chunks)
+                            |. Parser.token "`"
+                            |> Parser.map Parser.Done
+                        , Parser.getChompedString (Parser.chompWhile isRawText)
+                            |> Parser.andThen
+                                (\s ->
+                                    if s == "" then
+                                        Parser.problem ""
+
+                                    else
+                                        Parser.succeed ((Text s) :: chunks)
+                                )
+                            |> Parser.map Parser.Loop
+                        ]
+                )
+        
 
 
 {-| -}
