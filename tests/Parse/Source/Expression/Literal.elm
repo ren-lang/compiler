@@ -23,6 +23,7 @@ suite =
         , numberLiteralSuite
         , objectLiteralSuite
         , stringLiteralSuite
+        , templateLiteralSuite
         , undefinedLiteralSuite
         ]
 
@@ -76,6 +77,19 @@ stringLiteralSuite =
         , singleQuoteNestedDoubleQuotesStringLiteralTest
         , singleQuoteEscapedSingleQuotesStringLiteralTest
         , singleQuoteUnbalancedStringLiteralTest
+        ]
+
+
+templateLiteralSuite : Test
+templateLiteralSuite =
+    describe "Literal.Template"
+        [ emptyTemplateLiteralTest
+        , textOnlyTemplateLiteralTest
+        , textEscapeTemplateLiteralTest
+        , fieldOnlyTemplateLiteralTest
+        , mixedTemplateLiteralTest
+        , nestedTemplateLiteralTest
+        , quoteUnbalancedTemplateLiteralTest
         ]
 
 
@@ -537,6 +551,167 @@ singleQuoteUnbalancedStringLiteralTest =
     test title
         (\_ ->
             Parser.run Literal.primitiveParser input
+                |> Expect.err
+        )
+
+
+
+-- TEMPLATE LITERALS -----------------------------------------------------------
+
+
+emptyTemplateLiteralTest : Test
+emptyTemplateLiteralTest =
+    let
+        title =
+            "Template literals may be empty."
+
+        input =
+            "``"
+
+        expected =
+            Ok <| Literal.Template []
+    in
+    test title
+        (\_ ->
+            Parser.run (Literal.parser Expression.local Expression.parser) input
+                |> Expect.equal expected
+        )
+
+
+textOnlyTemplateLiteralTest : Test
+textOnlyTemplateLiteralTest =
+    let
+        title =
+            "Template literals may contain only text."
+
+        input =
+            "`Hello foo`"
+
+        expected =
+            Ok <| Literal.Template [ Literal.Text "Hello foo" ]
+    in
+    test title
+        (\_ ->
+            Parser.run (Literal.parser Expression.local Expression.parser) input
+                |> Expect.equal expected
+        )
+
+
+textEscapeTemplateLiteralTest : Test
+textEscapeTemplateLiteralTest =
+    let
+        title =
+            "Template literals may contain string escapes."
+
+        input =
+            "`'Hello' \"\\`foo\\`\"\\n`"
+
+        expected =
+            Ok <|
+                Literal.Template
+                    [ Literal.Text "'Hello' \""
+                    , Literal.Text "`"
+                    , Literal.Text "foo"
+                    , Literal.Text "`"
+                    , Literal.Text "\""
+                    , Literal.Text "\n"
+                    ]
+    in
+    test title
+        (\_ ->
+            Parser.run (Literal.parser Expression.local Expression.parser) input
+                |> Expect.equal expected
+        )
+
+
+fieldOnlyTemplateLiteralTest : Test
+fieldOnlyTemplateLiteralTest =
+    let
+        title =
+            "Template literals may contain only a single expression."
+
+        input =
+            "`${foo}`"
+
+        expected =
+            Ok <| Literal.Template [ Literal.Expr (Expression.local "foo") ]
+    in
+    test title
+        (\_ ->
+            Parser.run (Literal.parser Expression.local Expression.parser) input
+                |> Expect.equal expected
+        )
+
+
+mixedTemplateLiteralTest : Test
+mixedTemplateLiteralTest =
+    let
+        title =
+            "Template literals may contain both text and expressions."
+
+        input =
+            "`foo = ${bar}`"
+
+        expected =
+            Ok <|
+                Literal.Template
+                    [ Literal.Text "foo = "
+                    , Literal.Expr (Expression.local "bar")
+                    ]
+    in
+    test title
+        (\_ ->
+            Parser.run (Literal.parser Expression.local Expression.parser) input
+                |> Expect.equal expected
+        )
+
+
+nestedTemplateLiteralTest : Test
+nestedTemplateLiteralTest =
+    let
+        title =
+            "Template literals may contain other template literals."
+
+        input =
+            "`\"foo\" = ${ if bar then \"true\" else `${bar} is false`}`"
+
+        expected =
+            Ok <|
+                Literal.Template
+                    [ Literal.Text "\"foo\" = "
+                    , Literal.Expr
+                        (Expression.Conditional
+                            (Expression.local "bar")
+                            (Expression.string "true")
+                            (Expression.Literal
+                                (Literal.Template
+                                    [ Literal.Expr (Expression.local "bar")
+                                    , Literal.Text " is false"
+                                    ]
+                                )
+                            )
+                        )
+                    ]
+    in
+    test title
+        (\_ ->
+            Parser.run (Literal.parser Expression.local Expression.parser) input
+                |> Expect.equal expected
+        )
+
+
+quoteUnbalancedTemplateLiteralTest : Test
+quoteUnbalancedTemplateLiteralTest =
+    let
+        title =
+            "Template literal backticks must be balanced."
+
+        input =
+            "`foo"
+    in
+    test title
+        (\_ ->
+            Parser.run (Literal.parser Expression.local Expression.parser) input
                 |> Expect.err
         )
 
