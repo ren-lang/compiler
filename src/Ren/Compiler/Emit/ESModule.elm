@@ -623,10 +623,10 @@ fromLiteral literal =
 
                         Expr expr ->
                             fromExpression expr
+                                |> Pretty.surround (Pretty.string "${") (Pretty.char '}')
                 )
                 parts
                 |> Pretty.join Pretty.empty
-                |> Pretty.a (Pretty.char '`')
                 |> Pretty.surround (Pretty.char '`') (Pretty.char '`')
 
         Undefined ->
