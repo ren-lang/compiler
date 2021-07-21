@@ -1,14 +1,13 @@
 module Ren.Data.Expression.Literal exposing
-    ( Literal(..)
+    ( Literal(..), TemplateSegment(..)
     , coerceToNumber, coerceToInteger, coerceToString
     , decoder, primitiveDecoder
     , parser, primitiveParser
-    , TemplateSegment(..)
     )
 
 {-|
 
-@docs Literal
+@docs Literal, TemplateSegment
 @docs coerceToNumber, coerceToInteger, coerceToString
 @docs decoder, primitiveDecoder
 @docs parser, primitiveParser
