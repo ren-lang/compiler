@@ -641,6 +641,25 @@ referencesName name_ expression =
         Lambda _ body ->
             referencesName name_ body
 
+        Literal (Literal.Array elements) ->
+            List.any (referencesName name_) elements
+
+        Literal (Literal.Object entries) ->
+            Dict.toList entries
+                |> List.any (Tuple.second >> referencesName name_)
+
+        Literal (Literal.Template segments) ->
+            List.any
+                (\segment ->
+                    case segment of
+                        Literal.Text _ ->
+                            False
+
+                        Literal.Expr expr ->
+                            referencesName name_ expr
+                )
+                segments
+
         Literal _ ->
             False
 
@@ -696,6 +715,25 @@ referencesScopedName namespace_ name_ expression =
 
         Lambda _ body ->
             referencesScopedName namespace_ name_ body
+
+        Literal (Literal.Array elements) ->
+            List.any (referencesScopedName namespace_ name_) elements
+
+        Literal (Literal.Object entries) ->
+            Dict.toList entries
+                |> List.any (Tuple.second >> referencesScopedName namespace_ name_)
+
+        Literal (Literal.Template segments) ->
+            List.any
+                (\segment ->
+                    case segment of
+                        Literal.Text _ ->
+                            False
+
+                        Literal.Expr expr ->
+                            referencesScopedName namespace_ name_ expr
+                )
+                segments
 
         Literal _ ->
             False
@@ -806,6 +844,25 @@ referencesModule namespace_ expression =
 
         Lambda _ body ->
             referencesModule namespace_ body
+
+        Literal (Literal.Array elements) ->
+            List.any (referencesModule namespace_) elements
+
+        Literal (Literal.Object entries) ->
+            Dict.toList entries
+                |> List.any (Tuple.second >> referencesModule namespace_)
+
+        Literal (Literal.Template segments) ->
+            List.any
+                (\segment ->
+                    case segment of
+                        Literal.Text _ ->
+                            False
+
+                        Literal.Expr expr ->
+                            referencesModule namespace_ expr
+                )
+                segments
 
         Literal _ ->
             False

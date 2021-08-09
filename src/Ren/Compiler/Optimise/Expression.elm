@@ -77,6 +77,21 @@ recursiveTransformation transform expression =
             Literal
                 (Object <| Dict.map (always transform) fields)
 
+        Literal (Template segments) ->
+            Literal
+                (Template <|
+                    List.map
+                        (\segment ->
+                            case segment of
+                                Literal.Text text ->
+                                    Literal.Text text
+
+                                Literal.Expr expr ->
+                                    Literal.Expr (transform expr)
+                        )
+                        segments
+                )
+
         Literal literal ->
             Literal literal
 
