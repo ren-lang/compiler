@@ -207,6 +207,7 @@ fromSource source =
 parser : Parser Module
 parser =
     Parser.succeed module_
+        |. Parser.Extra.ignorables
         |= Parser.loop []
             (\imports_ ->
                 Parser.oneOf
