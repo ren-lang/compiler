@@ -2,7 +2,6 @@ module Ren.Compiler exposing
     ( compile, compileTo
     , Module, Declaration, Expression
     , parse, parseDeclaration, parseExpression
-    , decode, decodeDeclaration, decodeExpression
     , optimise, optimiseDeclaration, optimiseExpression
     , Target(..), emit, emitDeclaration, emitExpression
     )
@@ -23,9 +22,6 @@ module Ren.Compiler exposing
       - [parse](#parse)
       - [parseDeclaration](#parseDeclaration)
       - [parseExpression](#parseExpression)
-      - [decode](#decode)
-      - [decodeDeclaration](#decodeDeclaration)
-      - [decodeExpression](#decodeExpression)
   - Optimisation
       - [optimise](#optimise)
       - [optimiseDeclaration](#optimiseDeclaration)
@@ -84,15 +80,11 @@ The alises are provided here as a convenience so you only need to import
 
 -- IMPORTS ---------------------------------------------------------------------
 
-import Json.Decode
 import Parser
 import Ren.Compiler.Emit.ESModule as ESModule
-import Ren.Compiler.Optimise.Declaration as Declaration
-import Ren.Compiler.Optimise.Expression as Expression
-import Ren.Compiler.Optimise.Module as Module
-import Ren.Data.Declaration as Declaration
-import Ren.Data.Expression as Expression
-import Ren.Data.Module as Module
+import Ren.Compiler.Optimise
+import Ren.Compiler.Parse as Parse
+import Ren.Language
 
 
 
@@ -149,7 +141,7 @@ basic module might look like:
 
 -}
 type alias Module =
-    Module.Module
+    Ren.Language.Module
 
 
 {-| Declarations can either be functions (declared with the `fun` keyword), or
@@ -167,12 +159,12 @@ marked as public exports with the `pub` keyword. Here are some declarations:
 
 -}
 type alias Declaration =
-    Declaration.Declaration
+    Ren.Language.Declaration
 
 
 {-| -}
 type alias Expression =
-    Expression.Expression
+    Ren.Language.Expression
 
 
 
@@ -182,37 +174,19 @@ type alias Expression =
 {-| -}
 parse : String -> Result (List Parser.DeadEnd) Module
 parse =
-    Module.fromSource
+    Parse.moduleFromSource
 
 
 {-| -}
 parseDeclaration : String -> Result (List Parser.DeadEnd) Declaration
 parseDeclaration =
-    Declaration.fromSource
+    Parse.declarationFromSource
 
 
 {-| -}
 parseExpression : String -> Result (List Parser.DeadEnd) Expression
 parseExpression =
-    Expression.fromSource
-
-
-{-| -}
-decode : Json.Decode.Value -> Result Json.Decode.Error Module
-decode =
-    Module.fromJSON
-
-
-{-| -}
-decodeDeclaration : Json.Decode.Value -> Result Json.Decode.Error Declaration
-decodeDeclaration =
-    Declaration.fromJSON
-
-
-{-| -}
-decodeExpression : Json.Decode.Value -> Result Json.Decode.Error Expression
-decodeExpression =
-    Expression.fromJSON
+    Parse.expressionFromSource
 
 
 
@@ -221,20 +195,31 @@ decodeExpression =
 
 {-| -}
 optimise : Module -> Module
-optimise =
-    Module.optimise
+optimise { imports, declarations } =
+    { imports = imports
+    , declarations =
+        List.map (Tuple.mapSecond optimiseDeclaration) declarations
+    }
 
 
 {-| -}
 optimiseDeclaration : Declaration -> Declaration
-optimiseDeclaration =
-    Declaration.optimise
+optimiseDeclaration declaration =
+    case declaration of
+        Ren.Language.Function name args expr ->
+            Ren.Language.Function name args (optimiseExpression expr)
+
+        Ren.Language.Variable name expr ->
+            Ren.Language.Variable name (optimiseExpression expr)
+
+        Ren.Language.Enum name variants ->
+            Ren.Language.Enum name variants
 
 
 {-| -}
 optimiseExpression : Expression -> Expression
 optimiseExpression =
-    Expression.optimise
+    Ren.Compiler.Optimise.optimiseExpression
 
 
 

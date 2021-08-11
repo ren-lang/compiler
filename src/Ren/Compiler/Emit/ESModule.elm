@@ -8,16 +8,8 @@ module Ren.Compiler.Emit.ESModule exposing
 
 import Dict
 import Pretty
-import Ren.Data.Declaration exposing (Declaration(..))
-import Ren.Data.Declaration.Visibility exposing (Visibility(..))
-import Ren.Data.Expression as Expression exposing (Expression(..))
-import Ren.Data.Expression.Accessor exposing (Accessor(..))
-import Ren.Data.Expression.Identifier exposing (Identifier(..))
-import Ren.Data.Expression.Literal exposing (Literal(..), TemplateSegment(..))
-import Ren.Data.Expression.Operator exposing (Operator(..))
-import Ren.Data.Expression.Pattern exposing (Pattern(..))
-import Ren.Data.Module exposing (Module(..))
-import Ren.Data.Module.Import exposing (Import(..))
+import Pretty.Extra
+import Ren.Language exposing (..)
 
 
 
@@ -31,7 +23,7 @@ emitModule =
 
 
 fromModule : Module -> Pretty.Doc t
-fromModule (Module { imports, declarations }) =
+fromModule { imports, declarations } =
     Pretty.lines (List.map fromImport imports)
         |> Pretty.a Pretty.line
         |> Pretty.a Pretty.line
@@ -43,43 +35,34 @@ fromModule (Module { imports, declarations }) =
 
 
 fromImport : Import -> Pretty.Doc t
-fromImport (Import ({ path, name, exposed } as import_)) =
-    case ( List.isEmpty name, List.isEmpty exposed ) of
+fromImport ({ path, name, bindings } as import_) =
+    case ( List.isEmpty name, List.isEmpty bindings ) of
         ( True, True ) ->
-            Pretty.string "import"
+            Pretty.string "import "
                 |> Pretty.a Pretty.space
-                |> Pretty.a (quotes path)
+                |> Pretty.a (Pretty.Extra.singleQuotes path)
 
         ( True, False ) ->
-            Pretty.string "import"
-                |> Pretty.a Pretty.space
+            Pretty.string "import "
                 |> Pretty.a
-                    (List.map Pretty.string exposed
-                        |> Pretty.join (Pretty.char ',' |> Pretty.a Pretty.space)
+                    (List.map (String.replace "#" "$" >> Pretty.string) bindings
+                        |> Pretty.join (Pretty.string ", ")
                         |> Pretty.braces
                     )
+                |> Pretty.a (Pretty.string " from ")
                 |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.string "from")
-                |> Pretty.a Pretty.space
-                |> Pretty.a (quotes path)
+                |> Pretty.a (Pretty.Extra.singleQuotes path)
 
         ( False, True ) ->
-            Pretty.string "import"
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.char '*')
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.string "as")
-                |> Pretty.a Pretty.space
+            Pretty.string "import * as "
                 |> Pretty.a (Pretty.string <| String.join "$" name)
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.string "from")
-                |> Pretty.a Pretty.space
-                |> Pretty.a (quotes path)
+                |> Pretty.a (Pretty.string " from ")
+                |> Pretty.a (Pretty.Extra.singleQuotes path)
 
         ( False, False ) ->
             Pretty.lines
-                [ fromImport (Import { import_ | exposed = [] })
-                , fromImport (Import { import_ | name = [] })
+                [ fromImport { import_ | bindings = [] }
+                , fromImport { import_ | name = [] }
                 ]
 
 
@@ -90,27 +73,30 @@ fromImport (Import ({ path, name, exposed } as import_)) =
 {-| -}
 emitDeclaration : Declaration -> String
 emitDeclaration =
-    fromDeclaration >> Pretty.pretty 80
+    Tuple.pair Private >> fromDeclaration >> Pretty.pretty 80
 
 
-fromDeclaration : Declaration -> Pretty.Doc t
-fromDeclaration declaration =
+fromDeclaration : ( Visibility, Declaration ) -> Pretty.Doc t
+fromDeclaration ( visibility, declaration ) =
     case declaration of
-        Function { visibility, name, args, bindings, body } ->
+        Function name args body ->
             fromVisibility visibility
-                |> Pretty.a (fromFunction name args bindings body)
+                |> Pretty.a (fromFunction (Name name) args body)
 
-        Variable { visibility, name, bindings, body } ->
+        Variable name body ->
             fromVisibility visibility
-                |> Pretty.a (fromVariable name bindings body)
+                |> Pretty.a (fromVariable name body)
+
+        Enum name variants ->
+            fromEnum visibility name variants
 
 
 
 -- EMIITTING DECLARATIONS: FUNCTIONS -------------------------------------------
 
 
-fromFunction : Pattern -> List Pattern -> List Declaration -> Expression -> Pretty.Doc t
-fromFunction name args bindings body =
+fromFunction : Pattern -> List Pattern -> Expression -> Pretty.Doc t
+fromFunction name args body =
     case args of
         -- Ren doesn't allow nullary function definitions, so this case should
         -- never be hit.
@@ -118,8 +104,7 @@ fromFunction name args bindings body =
             Pretty.empty
 
         arg :: [] ->
-            Pretty.string "function"
-                |> Pretty.a Pretty.space
+            Pretty.string "function "
                 |> Pretty.a (fromPattern name)
                 |> Pretty.a Pretty.space
                 |> Pretty.a (fromPattern arg |> Pretty.parens)
@@ -127,17 +112,7 @@ fromFunction name args bindings body =
                 |> Pretty.a (Pretty.char '{')
                 |> Pretty.a Pretty.line
                 |> Pretty.a
-                    ((if List.isEmpty bindings then
-                        Pretty.empty
-
-                      else
-                        List.map fromDeclaration bindings
-                            |> Pretty.lines
-                            |> Pretty.a Pretty.line
-                            |> Pretty.a Pretty.line
-                     )
-                        |> Pretty.a (Pretty.string "return")
-                        |> Pretty.a Pretty.space
+                    (Pretty.string "return "
                         |> Pretty.a (fromExpression body)
                         |> Pretty.indent 4
                     )
@@ -145,8 +120,7 @@ fromFunction name args bindings body =
                 |> Pretty.a (Pretty.char '}')
 
         arg :: rest ->
-            Pretty.string "function"
-                |> Pretty.a Pretty.space
+            Pretty.string "function "
                 |> Pretty.a (fromPattern name)
                 |> Pretty.a Pretty.space
                 |> Pretty.a (fromPattern arg |> Pretty.parens)
@@ -154,27 +128,15 @@ fromFunction name args bindings body =
                 |> Pretty.a (Pretty.char '{')
                 |> Pretty.a Pretty.line
                 |> Pretty.a
-                    (Pretty.string "return"
-                        |> Pretty.a Pretty.space
+                    (Pretty.string "return "
                         |> Pretty.a
                             (List.map (fromPattern >> Pretty.parens) rest
-                                |> Pretty.join (Pretty.space |> Pretty.a (Pretty.string "=>") |> Pretty.a Pretty.space)
-                                |> Pretty.a Pretty.space
-                                |> Pretty.a (Pretty.string "=>")
-                                |> Pretty.a Pretty.space
+                                |> Pretty.join (Pretty.string " => ")
+                                |> Pretty.a (Pretty.string " => ")
                                 |> Pretty.a (Pretty.char '{')
                                 |> Pretty.a Pretty.line
                                 |> Pretty.a
-                                    ((if List.isEmpty bindings then
-                                        Pretty.empty
-
-                                      else
-                                        List.map fromDeclaration bindings
-                                            |> Pretty.lines
-                                            |> Pretty.a Pretty.line
-                                            |> Pretty.a Pretty.line
-                                     )
-                                        |> Pretty.a (Pretty.string "return")
+                                    (Pretty.string "return "
                                         |> Pretty.a Pretty.space
                                         |> Pretty.a (fromExpression body)
                                         |> Pretty.indent 4
@@ -192,38 +154,57 @@ fromFunction name args bindings body =
 -- EMIITTING DECLARATIONS: VARIABLES -------------------------------------------
 
 
-fromVariable : Pattern -> List Declaration -> Expression -> Pretty.Doc t
-fromVariable name bindings body =
-    if List.isEmpty bindings then
-        Pretty.string "var"
-            |> Pretty.a Pretty.space
-            |> Pretty.a (fromPattern name)
-            |> Pretty.a Pretty.space
-            |> Pretty.a (Pretty.char '=')
-            |> Pretty.a Pretty.space
-            |> Pretty.a (fromExpression body)
+fromVariable : Pattern -> Expression -> Pretty.Doc t
+fromVariable name body =
+    Pretty.string "var "
+        |> Pretty.a (fromPattern name)
+        |> Pretty.a (Pretty.string " = ")
+        |> Pretty.a (fromExpression body)
 
-    else
-        Pretty.string "var"
-            |> Pretty.a Pretty.space
-            |> Pretty.a (fromPattern name)
-            |> Pretty.a Pretty.space
-            |> Pretty.a (Pretty.char '=')
-            |> Pretty.a Pretty.space
-            |> Pretty.a (Pretty.char '{')
-            |> Pretty.a Pretty.line
-            |> Pretty.a
-                (List.map fromDeclaration bindings
-                    |> Pretty.lines
-                    |> Pretty.a Pretty.line
-                    |> Pretty.a Pretty.line
-                    |> Pretty.a (Pretty.string "return")
-                    |> Pretty.a Pretty.space
-                    |> Pretty.a (fromExpression body)
-                    |> Pretty.indent 4
-                )
-            |> Pretty.a Pretty.line
-            |> Pretty.a (Pretty.char '}')
+
+
+-- EMITTING DECLARATIONS: ENUMS ------------------------------------------------
+
+
+fromEnum : Visibility -> String -> List Variant -> Pretty.Doc t
+fromEnum visibility _ variants =
+    variants
+        |> List.map (fromVariant visibility)
+        |> Pretty.join Pretty.Extra.doubeLine
+
+
+fromVariant : Visibility -> Variant -> Pretty.Doc t
+fromVariant visibility (Variant tag slots) =
+    let
+        sanitisedTag =
+            String.replace "#" "$" tag
+
+        -- OK this boldly assumes that no single variant will have more than 26
+        -- slots. This seems like a reasonable assumption, if something breaks
+        -- because of it, they deserve it.
+        slotArgs =
+            List.range 0 (slots - 1)
+                |> List.map (\code -> Char.fromCode (97 + code) |> String.fromChar)
+    in
+    fromVisibility visibility
+        |> Pretty.a
+            (if slots <= 0 then
+                fromVariable
+                    (Name sanitisedTag)
+                    (Literal
+                        (Array [ Literal (String tag) ])
+                    )
+
+             else
+                fromFunction
+                    (Name sanitisedTag)
+                    (List.map Name slotArgs)
+                    (Literal
+                        (Array
+                            (Literal (String tag) :: List.map (Identifier << Local) slotArgs)
+                        )
+                    )
+            )
 
 
 
@@ -234,8 +215,7 @@ fromVisibility : Visibility -> Pretty.Doc t
 fromVisibility visibility =
     case visibility of
         Public ->
-            Pretty.string "export"
-                |> Pretty.a Pretty.space
+            Pretty.string "export "
 
         Private ->
             Pretty.empty
@@ -258,6 +238,9 @@ fromExpression expression =
 
         Application expr args ->
             fromApplication expr args
+
+        Block bindings expr ->
+            fromBlock bindings expr
 
         Conditional condition true false ->
             fromConditional condition true false
@@ -285,13 +268,13 @@ fromExpression expression =
 -- EMITTING EXPRESSIONS: ACCESS ------------------------------------------------
 
 
-fromAccess : Expression -> List (Accessor Expression) -> Pretty.Doc t
+fromAccess : Expression -> List Accessor -> Pretty.Doc t
 fromAccess expr accessors =
     fromExpression expr
         |> Pretty.a (Pretty.join Pretty.empty <| List.map fromAccessor accessors)
 
 
-fromAccessor : Accessor Expression -> Pretty.Doc t
+fromAccessor : Accessor -> Pretty.Doc t
 fromAccessor accessor =
     case accessor of
         Computed expr ->
@@ -299,8 +282,7 @@ fromAccessor accessor =
                 |> Pretty.brackets
 
         Fixed field ->
-            Pretty.char '.'
-                |> Pretty.a (Pretty.string field)
+            Pretty.string ("." ++ field)
 
 
 
@@ -321,6 +303,29 @@ fromApplication expr args =
 
 
 
+-- EMITTING EXPRESSIONS: BLOCK -------------------------------------------------
+
+
+fromBlock : List Declaration -> Expression -> Pretty.Doc t
+fromBlock bindings expr =
+    Pretty.string "() => {"
+        |> Pretty.a Pretty.line
+        |> Pretty.a
+            (List.map (Tuple.pair Private >> fromDeclaration) bindings
+                |> List.intersperse Pretty.Extra.doubeLine
+                |> Pretty.join Pretty.empty
+                |> Pretty.a Pretty.Extra.doubeLine
+                |> Pretty.a (Pretty.string "return ")
+                |> Pretty.a (fromExpression expr)
+                |> Pretty.indent 4
+            )
+        |> Pretty.a Pretty.line
+        |> Pretty.a (Pretty.char '}')
+        |> Pretty.parens
+        |> Pretty.a (Pretty.string "()")
+
+
+
 -- EMITTING EXPRESSIONS: CONDITIONAL -------------------------------------------
 
 
@@ -329,15 +334,13 @@ fromConditional condition true false =
     fromExpression condition
         |> Pretty.a Pretty.line
         |> Pretty.a
-            (Pretty.char '?'
-                |> Pretty.a Pretty.space
+            (Pretty.string "? "
                 |> Pretty.a (fromExpression true)
                 |> Pretty.indent 4
             )
         |> Pretty.a Pretty.line
         |> Pretty.a
-            (Pretty.char ':'
-                |> Pretty.a Pretty.space
+            (Pretty.string ": "
                 |> Pretty.a (fromExpression false)
                 |> Pretty.indent 4
             )
@@ -353,11 +356,15 @@ fromIdentifier identifier =
         Local name ->
             Pretty.string name
 
+        Constructor name ->
+            String.replace "#" "$" name
+                |> Pretty.string
+
         Scoped namespace name ->
             List.map Pretty.string namespace
                 |> Pretty.join (Pretty.char '$')
                 |> Pretty.a (Pretty.char '.')
-                |> Pretty.a (Pretty.string name)
+                |> Pretty.a (fromIdentifier name)
 
         Operator Pipe ->
             Pretty.string "$Function.pipe"
@@ -416,11 +423,7 @@ fromIdentifier identifier =
         Field field ->
             Pretty.char '$'
                 |> Pretty.parens
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.string "=>")
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.char '$')
-                |> Pretty.a (Pretty.char '.')
+                |> Pretty.a (Pretty.string " => $.")
                 |> Pretty.a (Pretty.string field)
                 |> Pretty.parens
 
@@ -438,127 +441,93 @@ fromInfix operator lhs rhs =
         Compose ->
             Pretty.char '$'
                 |> Pretty.parens
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.string "=>")
-                |> Pretty.a Pretty.space
+                |> Pretty.a (Pretty.string " => ")
                 |> Pretty.a
                     (fromExpression
-                        (Application rhs [ Application lhs [ Expression.local "$" ] ])
+                        (Application rhs [ Application lhs [ Identifier (Local "$") ] ])
                     )
                 |> Pretty.parens
 
         Add ->
             fromExpression lhs
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.char '+')
-                |> Pretty.a Pretty.space
+                |> Pretty.a (Pretty.string " + ")
                 |> Pretty.a (fromExpression rhs)
 
         Sub ->
             fromExpression lhs
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.char '-')
-                |> Pretty.a Pretty.space
+                |> Pretty.a (Pretty.string " - ")
                 |> Pretty.a (fromExpression rhs)
 
         Mul ->
             fromExpression lhs
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.char '*')
-                |> Pretty.a Pretty.space
+                |> Pretty.a (Pretty.string " * ")
                 |> Pretty.a (fromExpression rhs)
 
         Div ->
             fromExpression lhs
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.char '/')
-                |> Pretty.a Pretty.space
+                |> Pretty.a (Pretty.string " / ")
                 |> Pretty.a (fromExpression rhs)
 
         Pow ->
             fromExpression lhs
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.string "**")
-                |> Pretty.a Pretty.space
+                |> Pretty.a (Pretty.string " ** ")
                 |> Pretty.a (fromExpression rhs)
 
         Mod ->
             fromExpression lhs
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.char '%')
-                |> Pretty.a Pretty.space
+                |> Pretty.a (Pretty.string " % ")
                 |> Pretty.a (fromExpression rhs)
 
         Eq ->
             fromExpression lhs
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.string "==")
-                |> Pretty.a Pretty.space
+                |> Pretty.a (Pretty.string " == ")
                 |> Pretty.a (fromExpression rhs)
 
         NotEq ->
             fromExpression lhs
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.string "!=")
-                |> Pretty.a Pretty.space
+                |> Pretty.a (Pretty.string " != ")
                 |> Pretty.a (fromExpression rhs)
 
         Lt ->
             fromExpression lhs
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.char '<')
-                |> Pretty.a Pretty.space
+                |> Pretty.a (Pretty.string " < ")
                 |> Pretty.a (fromExpression rhs)
 
         Lte ->
             fromExpression lhs
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.string "<=")
-                |> Pretty.a Pretty.space
+                |> Pretty.a (Pretty.string " <= ")
                 |> Pretty.a (fromExpression rhs)
 
         Gt ->
             fromExpression lhs
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.char '>')
-                |> Pretty.a Pretty.space
+                |> Pretty.a (Pretty.string " > ")
                 |> Pretty.a (fromExpression rhs)
 
         Gte ->
             fromExpression lhs
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.string ">=")
-                |> Pretty.a Pretty.space
+                |> Pretty.a (Pretty.string " >= ")
                 |> Pretty.a (fromExpression rhs)
 
         And ->
             fromExpression lhs
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.string "&&")
-                |> Pretty.a Pretty.space
+                |> Pretty.a (Pretty.string " && ")
                 |> Pretty.a (fromExpression rhs)
 
         Or ->
             fromExpression lhs
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.string "||")
-                |> Pretty.a Pretty.space
+                |> Pretty.a (Pretty.string " || ")
                 |> Pretty.a (fromExpression rhs)
 
         Cons ->
             fromExpression lhs
-                |> Pretty.a (Pretty.char ',')
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.string "...")
+                |> Pretty.a (Pretty.string ", ...")
                 |> Pretty.a (fromExpression rhs)
                 |> Pretty.brackets
 
         Join ->
             Pretty.string "..."
                 |> Pretty.a (fromExpression lhs)
-                |> Pretty.a (Pretty.char ',')
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.string "...")
+                |> Pretty.a (Pretty.string ", ...")
                 |> Pretty.a (fromExpression rhs)
                 |> Pretty.brackets
 
@@ -570,10 +539,8 @@ fromInfix operator lhs rhs =
 fromLambda : List Pattern -> Expression -> Pretty.Doc t
 fromLambda args body =
     List.map (fromPattern >> Pretty.parens) args
-        |> Pretty.join (Pretty.space |> Pretty.a (Pretty.string "=>") |> Pretty.a Pretty.space)
-        |> Pretty.a Pretty.space
-        |> Pretty.a (Pretty.string "=>")
-        |> Pretty.a Pretty.space
+        |> Pretty.join (Pretty.string " => ")
+        |> Pretty.a (Pretty.string " => ")
         |> Pretty.a (fromExpression body)
 
 
@@ -581,12 +548,12 @@ fromLambda args body =
 -- EMITTING EXPRESSIONS: LITERAL -----------------------------------------------
 
 
-fromLiteral : Literal Expression -> Pretty.Doc t
+fromLiteral : Literal -> Pretty.Doc t
 fromLiteral literal =
     case literal of
         Array elements ->
             List.map fromExpression elements
-                |> Pretty.join (Pretty.char ',' |> Pretty.a Pretty.space)
+                |> Pretty.join (Pretty.string ", ")
                 |> Pretty.brackets
 
         Boolean True ->
@@ -604,15 +571,14 @@ fromLiteral literal =
                 |> List.map
                     (\( k, v ) ->
                         Pretty.string k
-                            |> Pretty.a (Pretty.char ':')
-                            |> Pretty.a Pretty.space
+                            |> Pretty.a (Pretty.string ": ")
                             |> Pretty.a (fromExpression v)
                     )
-                |> Pretty.join (Pretty.char ',' |> Pretty.a Pretty.space)
+                |> Pretty.join (Pretty.string ", ")
                 |> Pretty.braces
 
         String s ->
-            quotes s
+            Pretty.Extra.singleQuotes s
 
         Template parts ->
             List.map
@@ -633,38 +599,6 @@ fromLiteral literal =
             Pretty.string "undefined"
 
 
-fromPrimitive : Literal Never -> Pretty.Doc t
-fromPrimitive literal =
-    case literal of
-        -- Primitive literals can `Never` be an Array, Object or Template Literal.
-        Array _ ->
-            Pretty.empty
-
-        Boolean True ->
-            Pretty.string "true"
-
-        Boolean False ->
-            Pretty.string "false"
-
-        Number n ->
-            String.fromFloat n
-                |> Pretty.string
-
-        -- Primitive literals can `Never` be an Array, Object or Template Literal.
-        Object _ ->
-            Pretty.empty
-
-        String s ->
-            quotes s
-
-        -- Primitive literals can `Never` be an Array, Object or Template Literal.
-        Template _ ->
-            Pretty.empty
-
-        Undefined ->
-            Pretty.string "undefined"
-
-
 
 -- EMITTING EXPRESSIONS: MATCH -------------------------------------------------
 
@@ -673,14 +607,12 @@ fromMatch : Expression -> List ( Pattern, Maybe Expression, Expression ) -> Pret
 fromMatch expr cases =
     Pretty.char '$'
         |> Pretty.parens
-        |> Pretty.a Pretty.space
-        |> Pretty.a (Pretty.string "=>")
-        |> Pretty.a Pretty.space
+        |> Pretty.a (Pretty.string " => ")
         |> Pretty.a (Pretty.char '{')
         |> Pretty.a Pretty.line
         |> Pretty.a
             (List.map fromCase cases
-                |> List.intersperse (Pretty.line |> Pretty.a Pretty.line)
+                |> List.intersperse Pretty.Extra.doubeLine
                 |> Pretty.join Pretty.empty
                 |> Pretty.indent 4
             )
@@ -706,12 +638,7 @@ fromCase ( pattern, guard, body ) =
                                     Pretty.empty
 
                                 else
-                                    Pretty.join
-                                        (Pretty.space
-                                            |> Pretty.a (Pretty.string "&&")
-                                            |> Pretty.a Pretty.space
-                                        )
-                                        checks_
+                                    Pretty.join (Pretty.string " && ") checks_
                            )
 
                 bindings =
@@ -725,8 +652,7 @@ fromCase ( pattern, guard, body ) =
                                     Pretty.lines bindings_
                            )
             in
-            Pretty.string "if"
-                |> Pretty.a Pretty.space
+            Pretty.string "if "
                 |> Pretty.a (Pretty.parens checks)
                 |> Pretty.a Pretty.space
                 |> Pretty.a (Pretty.char '{')
@@ -734,8 +660,7 @@ fromCase ( pattern, guard, body ) =
                 |> Pretty.a
                     (case guard of
                         Just expr ->
-                            Pretty.string "if"
-                                |> Pretty.a Pretty.space
+                            Pretty.string "if "
                                 |> Pretty.a (fromExpression expr |> Pretty.parens)
                                 |> Pretty.a Pretty.space
                                 |> Pretty.a (Pretty.char '{')
@@ -743,8 +668,7 @@ fromCase ( pattern, guard, body ) =
                                 |> Pretty.a
                                     (bindings
                                         |> Pretty.a Pretty.line
-                                        |> Pretty.a (Pretty.string "return")
-                                        |> Pretty.a Pretty.space
+                                        |> Pretty.a (Pretty.string "return ")
                                         |> Pretty.a (fromExpression body)
                                         |> Pretty.indent 4
                                     )
@@ -755,8 +679,7 @@ fromCase ( pattern, guard, body ) =
                         Nothing ->
                             bindings
                                 |> Pretty.a Pretty.line
-                                |> Pretty.a (Pretty.string "return")
-                                |> Pretty.a Pretty.space
+                                |> Pretty.a (Pretty.string "return ")
                                 |> Pretty.a (fromExpression body)
                                 |> Pretty.indent 4
                     )
@@ -764,13 +687,11 @@ fromCase ( pattern, guard, body ) =
                 |> Pretty.a (Pretty.char '}')
 
         Name name ->
-            Pretty.string "if"
+            Pretty.string "if "
                 |> Pretty.a Pretty.space
                 |> Pretty.a
                     (Pretty.char '$'
-                        |> Pretty.a Pretty.space
-                        |> Pretty.a (Pretty.string "==")
-                        |> Pretty.a Pretty.space
+                        |> Pretty.a (Pretty.string " == ")
                         |> Pretty.a (Pretty.string name)
                         |> Pretty.parens
                     )
@@ -780,15 +701,13 @@ fromCase ( pattern, guard, body ) =
                 |> Pretty.a
                     (case guard of
                         Just expr ->
-                            Pretty.string "if"
-                                |> Pretty.a Pretty.space
+                            Pretty.string "if "
                                 |> Pretty.a (fromExpression expr |> Pretty.parens)
                                 |> Pretty.a Pretty.space
                                 |> Pretty.a (Pretty.char '{')
                                 |> Pretty.a Pretty.line
                                 |> Pretty.a
-                                    (Pretty.string "return"
-                                        |> Pretty.a Pretty.space
+                                    (Pretty.string "return "
                                         |> Pretty.a (fromExpression body)
                                         |> Pretty.indent 4
                                     )
@@ -797,8 +716,7 @@ fromCase ( pattern, guard, body ) =
                                 |> Pretty.indent 4
 
                         Nothing ->
-                            Pretty.string "return"
-                                |> Pretty.a Pretty.space
+                            Pretty.string "return "
                                 |> Pretty.a (fromExpression body)
                                 |> Pretty.indent 4
                     )
@@ -818,12 +736,7 @@ fromCase ( pattern, guard, body ) =
                                     Pretty.empty
 
                                 else
-                                    Pretty.join
-                                        (Pretty.space
-                                            |> Pretty.a (Pretty.string "&&")
-                                            |> Pretty.a Pretty.space
-                                        )
-                                        checks_
+                                    Pretty.join (Pretty.string " && ") checks_
                            )
 
                 bindings =
@@ -836,12 +749,8 @@ fromCase ( pattern, guard, body ) =
                                 else
                                     Pretty.lines bindings_
                            )
-
-                _ =
-                    Debug.log "" (Pretty.pretty 1000 bindings)
             in
-            Pretty.string "if"
-                |> Pretty.a Pretty.space
+            Pretty.string "if "
                 |> Pretty.a (Pretty.parens checks)
                 |> Pretty.a Pretty.space
                 |> Pretty.a (Pretty.char '{')
@@ -849,8 +758,7 @@ fromCase ( pattern, guard, body ) =
                 |> Pretty.a
                     (case guard of
                         Just expr ->
-                            Pretty.string "if"
-                                |> Pretty.a Pretty.space
+                            Pretty.string "if "
                                 |> Pretty.a (fromExpression expr |> Pretty.parens)
                                 |> Pretty.a Pretty.space
                                 |> Pretty.a (Pretty.char '{')
@@ -858,8 +766,7 @@ fromCase ( pattern, guard, body ) =
                                 |> Pretty.a
                                     (bindings
                                         |> Pretty.a Pretty.line
-                                        |> Pretty.a (Pretty.string "return")
-                                        |> Pretty.a Pretty.space
+                                        |> Pretty.a (Pretty.string "return ")
                                         |> Pretty.a (fromExpression body)
                                         |> Pretty.indent 4
                                     )
@@ -870,8 +777,7 @@ fromCase ( pattern, guard, body ) =
                         Nothing ->
                             bindings
                                 |> Pretty.a Pretty.line
-                                |> Pretty.a (Pretty.string "return")
-                                |> Pretty.a Pretty.space
+                                |> Pretty.a (Pretty.string "return ")
                                 |> Pretty.a (fromExpression body)
                                 |> Pretty.indent 4
                     )
@@ -883,10 +789,8 @@ fromCase ( pattern, guard, body ) =
                 |> Pretty.a Pretty.space
                 |> Pretty.a
                     (Pretty.char '$'
-                        |> Pretty.a Pretty.space
-                        |> Pretty.a (Pretty.string "==")
-                        |> Pretty.a Pretty.space
-                        |> Pretty.a (fromPrimitive primitive)
+                        |> Pretty.a (Pretty.string " == ")
+                        |> Pretty.a (fromLiteral primitive)
                         |> Pretty.parens
                     )
                 |> Pretty.a Pretty.space
@@ -895,15 +799,13 @@ fromCase ( pattern, guard, body ) =
                 |> Pretty.a
                     (case guard of
                         Just expr ->
-                            Pretty.string "if"
-                                |> Pretty.a Pretty.space
+                            Pretty.string "if "
                                 |> Pretty.a (fromExpression expr |> Pretty.parens)
                                 |> Pretty.a Pretty.space
                                 |> Pretty.a (Pretty.char '{')
                                 |> Pretty.a Pretty.line
                                 |> Pretty.a
-                                    (Pretty.string "return"
-                                        |> Pretty.a Pretty.space
+                                    (Pretty.string "return "
                                         |> Pretty.a (fromExpression body)
                                         |> Pretty.indent 4
                                     )
@@ -912,26 +814,30 @@ fromCase ( pattern, guard, body ) =
                                 |> Pretty.indent 4
 
                         Nothing ->
-                            Pretty.string "return"
-                                |> Pretty.a Pretty.space
+                            Pretty.string "return "
                                 |> Pretty.a (fromExpression body)
                                 |> Pretty.indent 4
                     )
                 |> Pretty.a Pretty.line
                 |> Pretty.a (Pretty.char '}')
 
+        VariantDestructure tag patterns ->
+            fromCase
+                ( ArrayDestructure (Value (String tag) :: patterns)
+                , guard
+                , body
+                )
+
         Wildcard _ ->
             case guard of
                 Just expr ->
-                    Pretty.string "if"
-                        |> Pretty.a Pretty.space
+                    Pretty.string "if "
                         |> Pretty.a (fromExpression expr |> Pretty.parens)
                         |> Pretty.a Pretty.space
                         |> Pretty.a (Pretty.char '{')
                         |> Pretty.a Pretty.line
                         |> Pretty.a
-                            (Pretty.string "return"
-                                |> Pretty.a Pretty.space
+                            (Pretty.string "return "
                                 |> Pretty.a (fromExpression body)
                                 |> Pretty.indent 4
                             )
@@ -939,8 +845,7 @@ fromCase ( pattern, guard, body ) =
                         |> Pretty.a (Pretty.char '}')
 
                 Nothing ->
-                    Pretty.string "return"
-                        |> Pretty.a Pretty.space
+                    Pretty.string "return "
                         |> Pretty.a (fromExpression body)
 
 
@@ -957,16 +862,12 @@ checkFromMatchPattern pattern =
     case pattern of
         Existential { name, path } ->
             name
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.string "in")
-                |> Pretty.a Pretty.space
+                |> Pretty.a (Pretty.string " in ")
                 |> Pretty.a path
 
         Equality { value, path } ->
             path
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.string "==")
-                |> Pretty.a Pretty.space
+                |> Pretty.a (Pretty.string " == ")
                 |> Pretty.a value
 
         Binding _ ->
@@ -975,27 +876,20 @@ checkFromMatchPattern pattern =
         IsArray { path, length } ->
             Pretty.string "Array.isArray"
                 |> Pretty.a (Pretty.parens path)
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.string "&&")
-                |> Pretty.a Pretty.space
+                |> Pretty.a (Pretty.string " && ")
                 |> Pretty.a path
                 |> Pretty.a (Pretty.string ".length")
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.string ">=")
-                |> Pretty.a Pretty.space
+                |> Pretty.a (Pretty.string " >= ")
                 |> Pretty.a
                     (String.fromInt length
                         |> Pretty.string
                     )
 
         IsObject path ->
-            Pretty.string "typeof"
-                |> Pretty.a Pretty.space
+            Pretty.string "typeof "
                 |> Pretty.a path
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.string "==")
-                |> Pretty.a Pretty.space
-                |> Pretty.a (quotes "object")
+                |> Pretty.a (Pretty.string " == ")
+                |> Pretty.a (Pretty.Extra.singleQuotes "object")
 
 
 bindingFromMatchPattern : MatchPattern t -> Pretty.Doc t
@@ -1008,12 +902,9 @@ bindingFromMatchPattern pattern =
             Pretty.empty
 
         Binding { name, path } ->
-            Pretty.string "var"
-                |> Pretty.a Pretty.space
+            Pretty.string "var "
                 |> Pretty.a name
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.string "=")
-                |> Pretty.a Pretty.space
+                |> Pretty.a (Pretty.string " = ")
                 |> Pretty.a path
 
         IsArray _ ->
@@ -1054,10 +945,15 @@ matchPatternsFromArrayDestructure path patterns =
 
                     Value primitive ->
                         [ Equality
-                            { value = fromPrimitive primitive
+                            { value = fromLiteral primitive
                             , path = Pretty.a idx path
                             }
                         ]
+
+                    VariantDestructure tag ps ->
+                        matchPatternsFromArrayDestructure
+                            (Pretty.a idx path)
+                            (Value (String tag) :: ps)
 
                     Wildcard _ ->
                         []
@@ -1082,7 +978,7 @@ matchPatternsFromObjectDestructure path patterns =
 
                     Just (Name name) ->
                         [ Existential
-                            { name = quotes key
+                            { name = Pretty.Extra.singleQuotes key
                             , path = path
                             }
                         , Binding
@@ -1104,11 +1000,11 @@ matchPatternsFromObjectDestructure path patterns =
 
                     Just (Value primitive) ->
                         [ Existential
-                            { name = quotes key
+                            { name = Pretty.Extra.singleQuotes key
                             , path = path
                             }
                         , Equality
-                            { value = fromPrimitive primitive
+                            { value = fromLiteral primitive
                             , path =
                                 path
                                     |> Pretty.a (Pretty.char '.')
@@ -1118,14 +1014,22 @@ matchPatternsFromObjectDestructure path patterns =
 
                     Just (Wildcard _) ->
                         [ Existential
-                            { name = quotes key
+                            { name = Pretty.Extra.singleQuotes key
                             , path = path
                             }
                         ]
 
+                    Just (VariantDestructure tag ps) ->
+                        matchPatternsFromArrayDestructure
+                            (path
+                                |> Pretty.a (Pretty.char '.')
+                                |> Pretty.a (Pretty.string key)
+                            )
+                            (Value (String tag) :: ps)
+
                     Nothing ->
                         [ Existential
-                            { name = quotes key
+                            { name = Pretty.Extra.singleQuotes key
                             , path = path
                             }
                         , Binding
@@ -1184,6 +1088,10 @@ fromPattern pattern =
                 Value _ ->
                     Wildcard Nothing
 
+                VariantDestructure tag ps ->
+                    List.map replaceLiteral ps
+                        |> VariantDestructure tag
+
                 Wildcard _ ->
                     p
     in
@@ -1191,7 +1099,7 @@ fromPattern pattern =
         ArrayDestructure patterns ->
             List.map replaceLiteral patterns
                 |> List.map fromPattern
-                |> Pretty.join (Pretty.char ',' |> Pretty.a Pretty.space)
+                |> Pretty.join (Pretty.string ", ")
                 |> Pretty.brackets
 
         Name name ->
@@ -1204,32 +1112,26 @@ fromPattern pattern =
                         case v of
                             Just p ->
                                 Pretty.string k
-                                    |> Pretty.a (Pretty.char ':')
-                                    |> Pretty.a Pretty.space
+                                    |> Pretty.a (Pretty.string ": ")
                                     |> Pretty.a (fromPattern p)
 
                             Nothing ->
                                 Pretty.string k
                     )
-                |> Pretty.join (Pretty.char ',' |> Pretty.a Pretty.space)
+                |> Pretty.join (Pretty.string ", ")
                 |> Pretty.braces
 
         Value primitive ->
-            fromPrimitive primitive
+            fromLiteral primitive
+
+        VariantDestructure tag patterns ->
+            List.map replaceLiteral (Value (String tag) :: patterns)
+                |> List.map fromPattern
+                |> Pretty.join (Pretty.string ", ")
+                |> Pretty.brackets
 
         Wildcard (Just name) ->
-            Pretty.char '_'
-                |> Pretty.a (Pretty.string name)
+            Pretty.string ("_" ++ name)
 
         Wildcard Nothing ->
             Pretty.char '_'
-
-
-
--- UTILS -----------------------------------------------------------------------
-
-
-quotes : String -> Pretty.Doc t
-quotes s =
-    Pretty.string s
-        |> Pretty.surround (Pretty.char '\'') (Pretty.char '\'')

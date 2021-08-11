@@ -15,7 +15,6 @@ source =
     """
 import 'ren/array' as Array exposing { forEach }
 import 'ren/debug' as Debug
-
 // The `main` function is always the entry point to your program when being run
 // from Node. It receives `process.argv` as its only argument. We don't need it
 // for this program though, so we can safely ignore it!
@@ -25,7 +24,6 @@ pub fun main = _ =>  {
     // declarations and then a single expression to be returned.
     fun makeVerses = n => if n >= 0 then verse n :: makeVerses (n - 1) else []
     let verses = makeVerses numberOfBottles
-
     ret verses |> forEach Debug.log
 }
 
