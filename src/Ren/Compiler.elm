@@ -195,25 +195,14 @@ parseExpression =
 
 {-| -}
 optimise : Module -> Module
-optimise { imports, declarations } =
-    { imports = imports
-    , declarations =
-        List.map (Tuple.mapSecond optimiseDeclaration) declarations
-    }
+optimise =
+    Ren.Compiler.Optimise.optimiseModule
 
 
 {-| -}
 optimiseDeclaration : Declaration -> Declaration
-optimiseDeclaration declaration =
-    case declaration of
-        Ren.Language.Function name args expr ->
-            Ren.Language.Function name args (optimiseExpression expr)
-
-        Ren.Language.Variable name expr ->
-            Ren.Language.Variable name (optimiseExpression expr)
-
-        Ren.Language.Enum name variants ->
-            Ren.Language.Enum name variants
+optimiseDeclaration =
+    Ren.Compiler.Optimise.optimiseDeclaration
 
 
 {-| -}

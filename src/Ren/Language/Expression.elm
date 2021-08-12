@@ -1,15 +1,136 @@
-module Ren.Language.Expression exposing (references, referencesNamespace, referencesQualified)
+module Ren.Language.Expression exposing
+    ( insertBinding
+    , coerceToNumber, coerceToInteger, coerceToString
+    , references, referencesNamespace, referencesQualified
+    )
 
 {-|
 
+@docs insertBinding
+@docs coerceToNumber, coerceToInteger, coerceToString
 @docs references, referencesNamespace, referencesQualified
 
 -}
 
 -- IMPORTS ---------------------------------------------------------------------
 
+import Basics.Extra
 import Dict
 import Ren.Language exposing (..)
+
+
+
+-- MANIPULATIONS ---------------------------------------------------------------
+
+
+{-| -}
+insertBinding : Declaration -> Expression -> Expression
+insertBinding binding expression =
+    case expression of
+        Block bindings body ->
+            Block (bindings ++ [ binding ]) body
+
+        _ ->
+            Block [ binding ] expression
+
+
+coerceToNumber : Literal -> Maybe Float
+coerceToNumber literal =
+    case literal of
+        Array _ ->
+            Nothing
+
+        Boolean True ->
+            Just 1
+
+        Boolean False ->
+            Just 0
+
+        Number n ->
+            Just n
+
+        Object _ ->
+            Nothing
+
+        String s ->
+            String.toFloat s
+
+        Template _ ->
+            Nothing
+
+        Undefined ->
+            Just 0
+
+
+coerceToInteger : Literal -> Maybe Int
+coerceToInteger literal =
+    case literal of
+        Array _ ->
+            Nothing
+
+        Boolean True ->
+            Just 1
+
+        Boolean False ->
+            Just 0
+
+        Number n ->
+            Basics.Extra.toInt n
+
+        Object _ ->
+            Nothing
+
+        String s ->
+            String.toInt s
+
+        Template _ ->
+            Nothing
+
+        Undefined ->
+            Just 0
+
+
+coerceToString : Literal -> Maybe String
+coerceToString literal =
+    case literal of
+        Array _ ->
+            Nothing
+
+        Boolean True ->
+            Just "true"
+
+        Boolean False ->
+            Just "false"
+
+        Number n ->
+            Just (String.fromFloat n)
+
+        Object _ ->
+            Nothing
+
+        String s ->
+            Just s
+
+        Template segments ->
+            List.foldr
+                (\segment s ->
+                    case segment of
+                        Expr (Literal lit) ->
+                            Maybe.map2 (++)
+                                (coerceToString lit)
+                                s
+
+                        Expr _ ->
+                            Nothing
+
+                        Text text ->
+                            Maybe.map ((++) text) s
+                )
+                (Just "")
+                segments
+
+        Undefined ->
+            Nothing
 
 
 
