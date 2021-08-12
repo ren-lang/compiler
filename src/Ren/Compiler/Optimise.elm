@@ -36,10 +36,11 @@ optimiseModule =
             f m |> Maybe.map Just |> Maybe.withDefault (g m)
     in
     apply
-        [--  simplifyDeclarations
-         -- , removeUnusedDeclarations
-         -- , removeUnusedImports
-         -- , removeUnusedImportBindings
+        [ simplifyDeclarations
+        , removeUnusedDeclarations
+
+        -- , removeUnusedImports
+        -- , removeUnusedImportBindings
         ]
 
 
