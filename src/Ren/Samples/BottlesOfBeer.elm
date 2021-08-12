@@ -24,6 +24,8 @@ import Ren.Language
 source : String
 source =
     """
+import 'ren/array' as Array exposing { forEach }
+import 'ren/debug' as Debug
 // The `main` function is always the entry point to your program when being run
 // from Node. It receives `process.argv` as its only argument. We don't need it
 // for this program though, so we can safely ignore it!
@@ -32,9 +34,8 @@ pub fun main = _ => {
     // Ren has no statements, so a function like this is always a list of
     // declarations and then a single expression to be returned.
     fun makeVerses = n => if n >= 0 then verse n :: makeVerses (n - 1) else []
-    let verses = makeVerses 20
-
-    ret verses.forEach console.log
+    let verses = makeVerses numberOfBottles
+    ret verses |> forEach Debug.log
 }
 
 // When a function has no local declarations, we can omit the curly braces and

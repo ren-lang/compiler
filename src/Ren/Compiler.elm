@@ -60,7 +60,6 @@ The alises are provided here as a convenience so you only need to import
 ## Parsing
 
 @docs parse, parseDeclaration, parseExpression
-@docs decode, decodeDeclaration, decodeExpression
 
 ---
 

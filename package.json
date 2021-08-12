@@ -1,6 +1,6 @@
 {
   "name": "ren-compiler",
-  "version": "7.0.2",
+  "version": "8.0.0",
   "description": "The compiler for Ren: a dynamically typed, functional scripting language.",
   "scripts": {
     "test": "elm-test",
