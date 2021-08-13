@@ -24,6 +24,27 @@ import Set exposing (Set)
 -- CONSTANTS -------------------------------------------------------------------
 
 
+{-|
+
+    Set.fromList
+        [ "if"
+        , "then"
+        , "else"
+        , "import"
+        , "as"
+        , "exposing"
+        , "pub"
+        , "fun"
+        , "let"
+        , "enum"
+        , "ret"
+        , "true"
+        , "false"
+        , "when"
+        , "is"
+        ]
+
+-}
 keywords : Set String
 keywords =
     Set.fromList
