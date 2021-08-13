@@ -1,7 +1,11 @@
-module Ren.Language.Declaration exposing (references, referencesNamespace, referencesQualified)
+module Ren.Language.Declaration exposing
+    ( nameAsPattern
+    , references, referencesNamespace, referencesQualified
+    )
 
 {-|
 
+@docs nameAsPattern
 @docs references, referencesNamespace, referencesQualified
 
 -}
@@ -14,6 +18,21 @@ import Ren.Language.Expression
 
 
 -- QUERIES ---------------------------------------------------------------------
+
+
+{-| -}
+nameAsPattern : Declaration -> Pattern
+nameAsPattern declaration =
+    case declaration of
+        Function name _ _ ->
+            Name name
+
+        Variable name _ ->
+            name
+
+        Enum _ variants ->
+            ArrayDestructure
+                (List.map (\(Variant tag _) -> Name tag) variants)
 
 
 {-| -}

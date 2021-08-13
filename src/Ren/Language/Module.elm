@@ -1,10 +1,14 @@
 module Ren.Language.Module exposing
-    ( imports, exports
+    ( insertImport, removeImport, removeImportByPath
+    , insertDeclaration, removeDeclaration
+    , imports, exports
     , references, referencesNamespace, referencesQualified
     )
 
 {-|
 
+@docs insertImport, removeImport, removeImportByPath
+@docs insertDeclaration, removeDeclaration
 @docs imports, exports
 @docs references, referencesNamespace, referencesQualified
 
@@ -17,9 +21,44 @@ import Ren.Language.Declaration
 
 
 
+-- MANIPULATIONS ---------------------------------------------------------------
+
+
+{-| -}
+insertImport : Import -> Module -> Module
+insertImport i m =
+    { m | imports = m.imports ++ [ i ] }
+
+
+{-| -}
+removeImport : Import -> Module -> Module
+removeImport i m =
+    { m | imports = List.filter ((/=) i) m.imports }
+
+
+{-| -}
+removeImportByPath : String -> Module -> Module
+removeImportByPath p m =
+    { m | imports = List.filter (.path >> (/=) p) m.imports }
+
+
+{-| -}
+insertDeclaration : ( Visibility, Declaration ) -> Module -> Module
+insertDeclaration d m =
+    { m | declarations = m.declarations ++ [ d ] }
+
+
+{-| -}
+removeDeclaration : Declaration -> Module -> Module
+removeDeclaration d m =
+    { m | declarations = List.filter (Tuple.second >> (/=) d) m.declarations }
+
+
+
 -- QUERIES ---------------------------------------------------------------------
 
 
+{-| -}
 imports : String -> Module -> Bool
 imports name module_ =
     module_.imports
@@ -27,20 +66,22 @@ imports name module_ =
         |> List.any ((==) name)
 
 
+{-| -}
 exports : String -> Module -> Bool
 exports name module_ =
     module_.declarations
+        |> List.filter (Tuple.first >> (==) Public)
         |> List.any
-            (\( visibility, declaration ) ->
-                case ( visibility, declaration ) of
-                    ( Public, Function n _ _ ) ->
+            (\( _, declaration ) ->
+                case declaration of
+                    Function n _ _ ->
                         name == n
 
-                    ( Public, Variable n _ ) ->
+                    Variable n _ ->
                         exportsInPattern name n
 
-                    _ ->
-                        False
+                    Enum n variants ->
+                        name == n || List.any (\(Variant t _) -> name == t) variants
             )
 
 
@@ -56,12 +97,8 @@ exportsInPattern name pattern =
         ObjectDestructure entries ->
             List.any
                 (\( k, v ) ->
-                    case v of
-                        Just p ->
-                            exportsInPattern name p
-
-                        Nothing ->
-                            name == k
+                    Maybe.map (exportsInPattern name) v
+                        |> Maybe.withDefault (name == k)
                 )
                 entries
 
@@ -75,6 +112,7 @@ exportsInPattern name pattern =
             False
 
 
+{-| -}
 references : String -> Module -> Bool
 references name module_ =
     List.any
@@ -82,6 +120,7 @@ references name module_ =
         module_.declarations
 
 
+{-| -}
 referencesNamespace : List String -> Module -> Bool
 referencesNamespace namespace module_ =
     List.any
@@ -89,6 +128,7 @@ referencesNamespace namespace module_ =
         module_.declarations
 
 
+{-| -}
 referencesQualified : List String -> String -> Module -> Bool
 referencesQualified namespace name module_ =
     List.any

@@ -2,12 +2,109 @@ module Ren.Compiler.Optimise exposing (..)
 
 -- IMPORTS ---------------------------------------------------------------------
 
-import Basics.Extra
 import Dict
 import List.Extra
+import Maybe.Extra
 import Ren.Language exposing (..)
+import Ren.Language.Declaration
 import Ren.Language.Expression
+import Ren.Language.Pattern
 import Transform
+
+
+
+-- OPTIMISING MODULES ----------------------------------------------------------
+
+
+optimiseModule : Module -> Module
+optimiseModule =
+    let
+        apply : List (Module -> Maybe Module) -> Module -> Module
+        apply optimisations module_ =
+            case optimisations of
+                _ :: _ ->
+                    module_
+                        |> List.foldl or (always Nothing) optimisations
+                        |> Maybe.map (apply optimisations)
+                        |> Maybe.withDefault module_
+
+                [] ->
+                    module_
+
+        or : (Module -> Maybe Module) -> (Module -> Maybe Module) -> Module -> Maybe Module
+        or f g m =
+            f m |> Maybe.map Just |> Maybe.withDefault (g m)
+    in
+    apply
+        [ simplifyDeclarations
+        , removeUnusedDeclarations
+
+        -- , removeUnusedImports
+        -- , removeUnusedImportBindings
+        ]
+
+
+simplifyDeclarations : Module -> Maybe Module
+simplifyDeclarations m =
+    List.map (Tuple.mapSecond optimiseDeclaration) m.declarations
+        |> (\declarations ->
+                if declarations == m.declarations then
+                    Nothing
+
+                else
+                    Just { m | declarations = declarations }
+           )
+
+
+removeUnusedDeclarations : Module -> Maybe Module
+removeUnusedDeclarations m =
+    List.filter (isDeclarationUsed m.declarations) m.declarations
+        |> (\declarations ->
+                if declarations == m.declarations then
+                    Nothing
+
+                else
+                    Just { m | declarations = declarations }
+           )
+
+
+isDeclarationUsed : List ( Visibility, Declaration ) -> ( Visibility, Declaration ) -> Bool
+isDeclarationUsed declarations ( visibility, declaration ) =
+    if visibility == Public then
+        True
+
+    else
+        let
+            name =
+                Ren.Language.Declaration.nameAsPattern declaration
+
+            names =
+                Ren.Language.Pattern.names name
+
+            referencesAny d =
+                List.any (\n -> Ren.Language.Declaration.references n d) names
+        in
+        declarations
+            |> List.filter (Tuple.second >> Ren.Language.Declaration.nameAsPattern >> (/=) name)
+            |> List.any (Tuple.second >> referencesAny)
+
+
+
+-- OPTIMISING DECLARATIONS -----------------------------------------------------
+
+
+{-| -}
+optimiseDeclaration : Declaration -> Declaration
+optimiseDeclaration declaration =
+    case declaration of
+        Function name args body ->
+            Function name args (optimiseExpression body)
+
+        Variable name body ->
+            Variable name (optimiseExpression body)
+
+        Enum name variants ->
+            Enum name variants
 
 
 
@@ -20,9 +117,7 @@ optimiseExpression =
     Transform.transformAll transformExpression
         (Transform.orList
             [ constantFold
-            , removeUnusedInBlock
-
-            -- , stripParentheses
+            , stripParentheses
             ]
         )
 
@@ -138,113 +233,19 @@ transformCase transform ( pattern, guard, body ) =
 
 constantFold : Expression -> Maybe Expression
 constantFold expression =
-    let
-        coerceToNumber literal =
-            case literal of
-                Array _ ->
-                    Nothing
-
-                Boolean True ->
-                    Just 1
-
-                Boolean False ->
-                    Just 0
-
-                Number n ->
-                    Just n
-
-                Object _ ->
-                    Nothing
-
-                String s ->
-                    String.toFloat s
-
-                Template _ ->
-                    Nothing
-
-                Undefined ->
-                    Just 0
-
-        coerceToInteger literal =
-            case literal of
-                Array _ ->
-                    Nothing
-
-                Boolean True ->
-                    Just 1
-
-                Boolean False ->
-                    Just 0
-
-                Number n ->
-                    Basics.Extra.toInt n
-
-                Object _ ->
-                    Nothing
-
-                String s ->
-                    String.toInt s
-
-                Template _ ->
-                    Nothing
-
-                Undefined ->
-                    Just 0
-
-        coerceToString literal =
-            case literal of
-                Array _ ->
-                    Nothing
-
-                Boolean True ->
-                    Just "true"
-
-                Boolean False ->
-                    Just "false"
-
-                Number n ->
-                    Just (String.fromFloat n)
-
-                Object _ ->
-                    Nothing
-
-                String s ->
-                    Just s
-
-                Template segments ->
-                    List.foldr
-                        (\segment s ->
-                            case segment of
-                                Expr (Literal lit) ->
-                                    Maybe.map2 (++)
-                                        (coerceToString lit)
-                                        s
-
-                                Expr _ ->
-                                    Nothing
-
-                                Text text ->
-                                    Maybe.map ((++) text) s
-                        )
-                        (Just "")
-                        segments
-
-                Undefined ->
-                    Nothing
-    in
     case expression of
         -- ACCESS --------------------------------------------------------------
         -- Attempt to access an array literal by coercing the computed literal
         -- to an integer and then indexing the array with that string.
         Access (Literal (Array elements)) ((Computed (Literal n)) :: []) ->
-            coerceToInteger n
+            Ren.Language.Expression.coerceToInteger n
                 |> Maybe.andThen (\i -> List.Extra.at i elements)
 
         -- Attempt to access an array literal by coercing the computed literal
         -- to an integer and then indexing the array with that string, then turn
         -- that back into a `Access` expression using the remaining accessors.
         Access (Literal (Array elements)) ((Computed (Literal n)) :: accessors) ->
-            coerceToInteger n
+            Ren.Language.Expression.coerceToInteger n
                 |> Maybe.andThen (\i -> List.Extra.at i elements)
                 |> Maybe.map (\arr -> Access arr accessors)
 
@@ -262,13 +263,13 @@ constantFold expression =
         -- to a string and then indexing the object with that string, then turn
         -- that back into a `Access` expression using the remaining accessors.
         Access (Literal (Object fields)) ((Computed (Literal s)) :: []) ->
-            Maybe.map2 Dict.get (coerceToString s) (Just fields)
+            Maybe.map2 Dict.get (Ren.Language.Expression.coerceToString s) (Just fields)
                 |> Maybe.andThen identity
 
         -- Attempt to access an object literal by coercing the computed literal
         -- to a string and then indexing the object with that string.
         Access (Literal (Object fields)) ((Computed (Literal s)) :: accessors) ->
-            Maybe.map2 Dict.get (coerceToString s) (Just fields)
+            Maybe.map2 Dict.get (Ren.Language.Expression.coerceToString s) (Just fields)
                 |> Maybe.andThen identity
                 |> Maybe.map (\obj -> Access obj accessors)
 
@@ -314,48 +315,36 @@ constantFold expression =
                 |> Just
 
         -- When the left operand of the Add operator is a number, attempt to
-        -- coerce the right operand to a number as well and add the two together.
+        -- Ren.Language.Expression.coerce the right operand to a number as well and add the two together.
         -- If that fails, fallback to string concatenation instead.
         Infix Add (Literal (Number x)) (Literal y) ->
             let
                 addNumbers a b =
-                    Maybe.map2 (+) (Just a) (coerceToNumber b)
+                    Maybe.map2 (+) (Just a) (Ren.Language.Expression.coerceToNumber b)
                         |> Maybe.map (Number >> Literal)
 
                 addStrings a b =
-                    Maybe.map2 (++) (Just <| String.fromFloat a) (coerceToString b)
+                    Maybe.map2 (++) (Just <| String.fromFloat a) (Ren.Language.Expression.coerceToString b)
                         |> Maybe.map (String >> Literal)
             in
             addNumbers x y
-                |> (\n ->
-                        if n == Nothing then
-                            addStrings x y
-
-                        else
-                            n
-                   )
+                |> Maybe.Extra.or (addStrings x y)
 
         -- When the right operand of the Add operator is a number, attempt to
-        -- coerce the left operand to a number as well and add the two together.
+        -- Ren.Language.Expression.coerce the left operand to a number as well and add the two together.
         -- If that fails, fallback to string concatenation instead.
         Infix Add (Literal x) (Literal (Number y)) ->
             let
                 addNumbers a b =
-                    Maybe.map2 (+) (coerceToNumber a) (Just b)
+                    Maybe.map2 (+) (Ren.Language.Expression.coerceToNumber a) (Just b)
                         |> Maybe.map (Number >> Literal)
 
                 addStrings a b =
-                    Maybe.map2 (++) (coerceToString a) (Just <| String.fromFloat b)
+                    Maybe.map2 (++) (Ren.Language.Expression.coerceToString a) (Just <| String.fromFloat b)
                         |> Maybe.map (String >> Literal)
             in
             addNumbers x y
-                |> (\n ->
-                        if n == Nothing then
-                            addStrings x y
-
-                        else
-                            n
-                   )
+                |> Maybe.Extra.or (addStrings x y)
 
         --
         Infix Add (Literal (Template x)) (Literal (Template y)) ->
@@ -368,25 +357,25 @@ constantFold expression =
             Just (Literal (Template (x ++ [ Text y ])))
 
         -- When the left operand of the Add operator is anything but a number,
-        -- coerce both operands to strings and concatenate them.
+        -- Ren.Language.Expression.coerce both operands to strings and concatenate them.
         Infix Add (Literal x) (Literal y) ->
-            Maybe.map2 (++) (coerceToString x) (coerceToString y)
+            Maybe.map2 (++) (Ren.Language.Expression.coerceToString x) (Ren.Language.Expression.coerceToString y)
                 |> Maybe.map (String >> Literal)
 
         Infix Sub (Literal x) (Literal y) ->
-            Maybe.map2 (-) (coerceToNumber x) (coerceToNumber y)
+            Maybe.map2 (-) (Ren.Language.Expression.coerceToNumber x) (Ren.Language.Expression.coerceToNumber y)
                 |> Maybe.map (Number >> Literal)
 
         Infix Mul (Literal x) (Literal y) ->
-            Maybe.map2 (*) (coerceToNumber x) (coerceToNumber y)
+            Maybe.map2 (*) (Ren.Language.Expression.coerceToNumber x) (Ren.Language.Expression.coerceToNumber y)
                 |> Maybe.map (Number >> Literal)
 
         Infix Div (Literal x) (Literal y) ->
-            Maybe.map2 (/) (coerceToNumber x) (coerceToNumber y)
+            Maybe.map2 (/) (Ren.Language.Expression.coerceToNumber x) (Ren.Language.Expression.coerceToNumber y)
                 |> Maybe.map (Number >> Literal)
 
         Infix Pow (Literal x) (Literal y) ->
-            Maybe.map2 (^) (coerceToNumber x) (coerceToNumber y)
+            Maybe.map2 (^) (Ren.Language.Expression.coerceToNumber x) (Ren.Language.Expression.coerceToNumber y)
                 |> Maybe.map (Number >> Literal)
 
         Infix Eq (Literal x) (Literal y) ->
@@ -462,67 +451,105 @@ constantFold expression =
             Nothing
 
 
-removeUnusedInBlock : Expression -> Maybe Expression
-removeUnusedInBlock expression =
-    let
-        isPatternUsed expr pattern =
-            case pattern of
-                ArrayDestructure patterns ->
-                    List.any
-                        (isPatternUsed expr)
-                        patterns
-
-                Name name ->
-                    Ren.Language.Expression.references name expr
-
-                ObjectDestructure patterns ->
-                    List.any
-                        (\( k, p ) ->
-                            Maybe.map (isPatternUsed expr) p
-                                |> Maybe.map ((||) (Ren.Language.Expression.references k expr))
-                                |> Maybe.withDefault False
-                        )
-                        patterns
-
-                Value _ ->
-                    False
-
-                VariantDestructure _ patterns ->
-                    List.any
-                        (isPatternUsed expr)
-                        patterns
-
-                -- Wildcard match can never be safely eliminated because it might
-                -- be used to perform side effects.
-                Wildcard _ ->
-                    True
-
-        isBindingUsed expr binding =
-            case binding of
-                Function name _ _ ->
-                    Ren.Language.Expression.references name expr
-
-                Variable name _ ->
-                    isPatternUsed expr name
-
-                Enum _ variants ->
-                    List.any
-                        (\(Variant tag _) ->
-                            Ren.Language.Expression.references tag expr
-                        )
-                        variants
-    in
+stripParentheses : Expression -> Maybe Expression
+stripParentheses expression =
     case expression of
-        Block bindings expr ->
-            let
-                filteredBindings =
-                    List.filter (isBindingUsed expr) bindings
-            in
-            if filteredBindings == bindings then
-                Nothing
+        -- SUBEXPRESSION -------------------------------------------------------
+        -- Unwrap all SubExpressions with single expression contents
+        SubExpression (Access expr accessors) ->
+            Access expr accessors
+                |> Just
 
-            else
-                Just (Block filteredBindings expr)
+        SubExpression (Identifier id) ->
+            Identifier id
+                |> Just
+
+        SubExpression (Literal literal) ->
+            Literal literal
+                |> Just
+
+        SubExpression (SubExpression expr) ->
+            SubExpression expr
+                |> Just
+
+        -- ACCESS --------------------------------------------------------------
+        -- Unwrap all SubExpressions inside Computed accessors.
+        -- Removes [(expression)] output.
+        Access expr accessors ->
+            let
+                optimiseAccessor acc =
+                    case acc of
+                        Computed (SubExpression e) ->
+                            Computed e
+
+                        _ ->
+                            acc
+            in
+            List.map optimiseAccessor accessors
+                |> (\optimisedAccessors ->
+                        if optimisedAccessors == accessors then
+                            Nothing
+
+                        else
+                            Access expr optimisedAccessors
+                                |> Just
+                   )
+
+        -- APPLICATION ---------------------------------------------------------
+        -- Unwrap all SubExpressions as arguments.
+        -- Prevents arguments being wrappped in double-parentheses.
+        Application func arguments ->
+            let
+                optimiseArgument arg =
+                    case arg of
+                        SubExpression e ->
+                            e
+
+                        _ ->
+                            arg
+            in
+            List.map optimiseArgument arguments
+                |> (\optimisedArguments ->
+                        if optimisedArguments == arguments then
+                            Nothing
+
+                        else
+                            Application func optimisedArguments
+                                |> Just
+                   )
+
+        -- CONDITIONAL ---------------------------------------------------------
+        -- Unwrap all SubExpressions as condition.
+        -- Prevents condition being wrappped in double-parentheses.
+        Conditional (SubExpression condition) trueCase falseCase ->
+            Conditional condition trueCase falseCase
+                |> Just
+
+        -- Unwrap all SubExpressions as body if true.
+        -- Prevents true body being wrappped in parentheses.
+        Conditional condition (SubExpression trueCase) falseCase ->
+            Conditional condition trueCase falseCase
+                |> Just
+
+        -- Unwrap all SubExpressions as body if false.
+        -- Prevents false body being wrappped in parentheses.
+        Conditional condition trueCase (SubExpression falseCase) ->
+            Conditional condition trueCase falseCase
+                |> Just
+
+        -- LAMBDA --------------------------------------------------------------
+        -- Unwrap SubExpression as body.
+        -- Prevents body being wrappped in parentheses.
+        Lambda patterns (SubExpression body) ->
+            Lambda patterns body
+                |> Just
+
+        -- MATCH ---------------------------------------------------------------
+        -- Unwrap all SubExpressions as arguments.
+        -- Prevents arguments being wrappped in double-parentheses.
+        Match (SubExpression expr) branches ->
+            Match expr branches
+                |> Just
 
         _ ->
             Nothing

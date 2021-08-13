@@ -1,9 +1,20 @@
-module Ren.Samples.BottlesOfBeer exposing (..)
+module Ren.Samples.BottlesOfBeer exposing
+    ( source
+    , ast, output
+    )
+
+{-|
+
+@docs source
+@docs ast, output
+
+-}
 
 -- IMPORTS ---------------------------------------------------------------------
 
 import Parser
-import Ren.Compiler as Ren
+import Ren.Compiler
+import Ren.Language
 
 
 
@@ -18,7 +29,7 @@ import 'ren/debug' as Debug
 // The `main` function is always the entry point to your program when being run
 // from Node. It receives `process.argv` as its only argument. We don't need it
 // for this program though, so we can safely ignore it!
-pub fun main = _ =>  {
+pub fun main = _ => {
     // Declarations may be nested, but they *must all be declared at once*.
     // Ren has no statements, so a function like this is always a list of
     // declarations and then a single expression to be returned.
@@ -27,12 +38,10 @@ pub fun main = _ =>  {
     ret verses |> forEach Debug.log
 }
 
-// Order of declaration is not significant in Ren, so we can declare the value
-// here but use it in `main` no problem.
-let numberOfBottles = 99
-
 // When a function has no local declarations, we can omit the curly braces and
-// the `ret` keyword and just write the return expression instead.
+// the `ret` keyword and just write the return expression instead. In fact, the
+// curly braces are a block *expression* and have nothing to do with declarations
+// at all!
 fun verse = n => when n
     is 0 =>
         'No more bottles of beer on the wall, no more bottles of beer. ' +
@@ -54,12 +63,12 @@ fun bottles = n => when n
 -- OUTPUT ----------------------------------------------------------------------
 
 
-ast : Result (List Parser.DeadEnd) Ren.Module
+ast : Result (List Parser.DeadEnd) Ren.Language.Module
 ast =
-    Ren.parse source
+    Ren.Compiler.parse source
 
 
 output : String
 output =
-    Result.map (Ren.emit Ren.ESModule) ast
+    Ren.Compiler.compile source
         |> Result.withDefault ""
