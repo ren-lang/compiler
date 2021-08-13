@@ -1,4 +1,8 @@
-module Ren.Compiler.Parse exposing (..)
+module Ren.Compiler.Parse exposing
+    ( moduleFromSource, moduleParser
+    , declarationFromSource, declarationParser
+    , expressionFromSource, expressionParser
+    )
 
 {-|
 
