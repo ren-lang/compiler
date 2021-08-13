@@ -367,58 +367,58 @@ fromIdentifier identifier =
                 |> Pretty.a (fromIdentifier name)
 
         Operator Pipe ->
-            Pretty.string "$Function.pipe"
+            Pretty.string "Function.pipe"
 
         Operator Compose ->
-            Pretty.string "$Function.compose"
+            Pretty.string "Function.compose"
 
         Operator Add ->
-            Pretty.string "$Math.add"
+            Pretty.string "Math.add"
 
         Operator Sub ->
-            Pretty.string "$Math.sub"
+            Pretty.string "Math.sub"
 
         Operator Mul ->
-            Pretty.string "$Math.mul"
+            Pretty.string "Math.mul"
 
         Operator Div ->
-            Pretty.string "$Math.div"
+            Pretty.string "Math.div"
 
         Operator Pow ->
-            Pretty.string "$Math.pow"
+            Pretty.string "Math.pow"
 
         Operator Mod ->
-            Pretty.string "$Math.mod"
+            Pretty.string "Math.mod"
 
         Operator Eq ->
-            Pretty.string "$Compare.eq"
+            Pretty.string "Compare.eq"
 
         Operator NotEq ->
-            Pretty.string "$Compare.noteq"
+            Pretty.string "Compare.noteq"
 
         Operator Lt ->
-            Pretty.string "$Compare.lt"
+            Pretty.string "Compare.lt"
 
         Operator Lte ->
-            Pretty.string "$Compare.lte"
+            Pretty.string "Compare.lte"
 
         Operator Gt ->
-            Pretty.string "$Compare.gt"
+            Pretty.string "Compare.gt"
 
         Operator Gte ->
-            Pretty.string "$Compare.gte"
+            Pretty.string "Compare.gte"
 
         Operator And ->
-            Pretty.string "$Logic.and"
+            Pretty.string "Logic.and"
 
         Operator Or ->
-            Pretty.string "$Logic.or"
+            Pretty.string "Logic.or"
 
         Operator Cons ->
-            Pretty.string "$Array.cons"
+            Pretty.string "Array.cons"
 
         Operator Join ->
-            Pretty.string "$Array.join"
+            Pretty.string "Array.join"
 
         Field field ->
             Pretty.char '$'
