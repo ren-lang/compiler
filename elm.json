@@ -6,6 +6,8 @@
     "version": "8.0.1",
     "exposed-modules": [
         "Ren.Compiler",
+        "Ren.Compiler.Parse",
+        "Ren.Compiler.Optimise",
         "Ren.Language"
     ],
     "elm-version": "0.19.0 <= v < 0.20.0",
