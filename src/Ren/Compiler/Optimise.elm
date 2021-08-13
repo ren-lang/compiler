@@ -1,4 +1,16 @@
-module Ren.Compiler.Optimise exposing (..)
+module Ren.Compiler.Optimise exposing
+    ( optimiseModule, optimiseModuleWith, moduleDefaults
+    , optimiseDeclaration, optimiseDeclarationWith
+    , optimiseExpression, optimiseExpressionWith, expressionDefaults
+    )
+
+{-|
+
+@docs optimiseModule, optimiseModuleWith, moduleDefaults
+@docs optimiseDeclaration, optimiseDeclarationWith
+@docs optimiseExpression, optimiseExpressionWith, expressionDefaults
+
+-}
 
 -- IMPORTS ---------------------------------------------------------------------
 
@@ -16,8 +28,9 @@ import Transform
 -- OPTIMISING MODULES ----------------------------------------------------------
 
 
-optimiseModule : Module -> Module
-optimiseModule =
+{-| -}
+optimiseModuleWith : List (Module -> Maybe Module) -> Module -> Module
+optimiseModuleWith =
     let
         apply : List (Module -> Maybe Module) -> Module -> Module
         apply optimisations module_ =
@@ -36,11 +49,22 @@ optimiseModule =
             f m |> Maybe.map Just |> Maybe.withDefault (g m)
     in
     apply
-        [ simplifyDeclarations
-        , removeUnusedDeclarations
-        , removeUnusedImports
-        , removeUnusedImportBindings
-        ]
+
+
+{-| -}
+optimiseModule : Module -> Module
+optimiseModule =
+    optimiseModuleWith moduleDefaults
+
+
+{-| -}
+moduleDefaults : List (Module -> Maybe Module)
+moduleDefaults =
+    [ simplifyDeclarations
+    , removeUnusedDeclarations
+    , removeUnusedImports
+    , removeUnusedImportBindings
+    ]
 
 
 simplifyDeclarations : Module -> Maybe Module
@@ -144,17 +168,23 @@ removeUnusedBindings declarations { path, name, bindings } =
 
 
 {-| -}
-optimiseDeclaration : Declaration -> Declaration
-optimiseDeclaration declaration =
+optimiseDeclarationWith : List (Expression -> Maybe Expression) -> Declaration -> Declaration
+optimiseDeclarationWith optimisations declaration =
     case declaration of
         Function name args body ->
-            Function name args (optimiseExpression body)
+            Function name args (optimiseExpressionWith optimisations body)
 
         Variable name body ->
-            Variable name (optimiseExpression body)
+            Variable name (optimiseExpressionWith optimisations body)
 
         Enum name variants ->
             Enum name variants
+
+
+{-| -}
+optimiseDeclaration : Declaration -> Declaration
+optimiseDeclaration =
+    optimiseDeclarationWith expressionDefaults
 
 
 
@@ -162,14 +192,24 @@ optimiseDeclaration declaration =
 
 
 {-| -}
+optimiseExpressionWith : List (Expression -> Maybe Expression) -> Expression -> Expression
+optimiseExpressionWith optimisations =
+    Transform.transformAll transformExpression
+        (Transform.orList optimisations)
+
+
+{-| -}
 optimiseExpression : Expression -> Expression
 optimiseExpression =
-    Transform.transformAll transformExpression
-        (Transform.orList
-            [ constantFold
-            , stripParentheses
-            ]
-        )
+    optimiseExpressionWith expressionDefaults
+
+
+{-| -}
+expressionDefaults : List (Expression -> Maybe Expression)
+expressionDefaults =
+    [ constantFold
+    , stripParentheses
+    ]
 
 
 transformExpression : (Expression -> Expression) -> Expression -> Expression
