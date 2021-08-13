@@ -38,9 +38,8 @@ optimiseModule =
     apply
         [ simplifyDeclarations
         , removeUnusedDeclarations
-
-        -- , removeUnusedImports
-        -- , removeUnusedImportBindings
+        , removeUnusedImports
+        , removeUnusedImportBindings
         ]
 
 
@@ -87,6 +86,57 @@ isDeclarationUsed declarations ( visibility, declaration ) =
         declarations
             |> List.filter (Tuple.second >> Ren.Language.Declaration.nameAsPattern >> (/=) name)
             |> List.any (Tuple.second >> referencesAny)
+
+
+removeUnusedImports : Module -> Maybe Module
+removeUnusedImports m =
+    List.filter (isImportUsed m.declarations) m.imports
+        |> (\imports ->
+                if imports == m.imports then
+                    Nothing
+
+                else
+                    Just { m | imports = imports }
+           )
+
+
+isImportUsed : List ( Visibility, Declaration ) -> Import -> Bool
+isImportUsed declarations { name, bindings } =
+    List.any
+        (\( _, declaration ) ->
+            Ren.Language.Declaration.referencesNamespace name declaration
+                || List.any (\binding -> Ren.Language.Declaration.references binding declaration) bindings
+        )
+        declarations
+
+
+removeUnusedImportBindings : Module -> Maybe Module
+removeUnusedImportBindings m =
+    List.map (removeUnusedBindings m.declarations) m.imports
+        |> (\imports ->
+                if imports == m.imports then
+                    Nothing
+
+                else
+                    Just { m | imports = imports }
+           )
+
+
+removeUnusedBindings : List ( Visibility, Declaration ) -> Import -> Import
+removeUnusedBindings declarations { path, name, bindings } =
+    { path = path
+    , name = name
+    , bindings =
+        List.filter
+            (\binding ->
+                List.any
+                    (\( _, declaration ) ->
+                        Ren.Language.Declaration.references binding declaration
+                    )
+                    declarations
+            )
+            bindings
+    }
 
 
 
