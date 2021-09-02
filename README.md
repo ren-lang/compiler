@@ -1,6 +1,6 @@
 # ren-lang/compiler
 
-This is the compiler for the [Ren]() programmer language, distributed as an Elm
+This is the compiler for the [Ren](https://ren-lang.github.io) programmer language, distributed as an Elm
 package. If you want to write and run Ren code, you should take a look at the
 [playground](https://github.com/ren-lang/playground) instead.
 
