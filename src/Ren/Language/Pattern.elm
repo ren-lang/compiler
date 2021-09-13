@@ -33,5 +33,8 @@ names pattern =
         VariantDestructure tag patterns ->
             tag :: List.concatMap names patterns
 
+        Typeof _ name ->
+            [ name ]
+
         Wildcard _ ->
             []

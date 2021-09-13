@@ -851,6 +851,7 @@ patternParser =
             , objectDestructureParser
             , valueParser
             , variantDestructureParser
+            , typeofParser
             , wildcardParser
             ]
     in
@@ -973,3 +974,24 @@ wildcardParser =
                     }
             , Parser.succeed Nothing
             ]
+
+
+{-| -}
+typeofParser : Parser Pattern
+typeofParser =
+    Parser.oneOf
+        [ Parser.succeed (Typeof BooleanP)
+            |. Parser.keyword "@Boolean"
+        , Parser.succeed (Typeof NumberP)
+            |. Parser.keyword "@Number"
+        , Parser.succeed (Typeof StringP)
+            |. Parser.keyword "@String"
+        , Parser.succeed (Typeof FunctionP)
+            |. Parser.keyword "@Function"
+        ]
+        |. Parser.spaces
+        |= Parser.variable
+            { start = Char.isLower
+            , inner = Char.isAlphaNum
+            , reserved = Ren.Language.keywords
+            }

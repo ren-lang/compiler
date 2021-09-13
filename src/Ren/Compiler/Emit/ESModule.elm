@@ -657,6 +657,8 @@ fromCase ( pattern, guard, body ) =
                 |> Pretty.a Pretty.space
                 |> Pretty.a (Pretty.char '{')
                 |> Pretty.a Pretty.line
+                |> Pretty.a (Pretty.indent 4 bindings)
+                |> Pretty.a Pretty.line
                 |> Pretty.a
                     (case guard of
                         Just expr ->
@@ -666,9 +668,7 @@ fromCase ( pattern, guard, body ) =
                                 |> Pretty.a (Pretty.char '{')
                                 |> Pretty.a Pretty.line
                                 |> Pretty.a
-                                    (bindings
-                                        |> Pretty.a Pretty.line
-                                        |> Pretty.a (Pretty.string "return ")
+                                    (Pretty.string "return "
                                         |> Pretty.a (fromExpression body)
                                         |> Pretty.indent 4
                                     )
@@ -677,9 +677,7 @@ fromCase ( pattern, guard, body ) =
                                 |> Pretty.indent 4
 
                         Nothing ->
-                            bindings
-                                |> Pretty.a Pretty.line
-                                |> Pretty.a (Pretty.string "return ")
+                            Pretty.string "return "
                                 |> Pretty.a (fromExpression body)
                                 |> Pretty.indent 4
                     )
@@ -697,6 +695,13 @@ fromCase ( pattern, guard, body ) =
                     )
                 |> Pretty.a Pretty.space
                 |> Pretty.a (Pretty.char '{')
+                |> Pretty.a Pretty.line
+                |> Pretty.a
+                    (Pretty.string "var "
+                        |> Pretty.a (Pretty.string name)
+                        |> Pretty.a (Pretty.string " = $")
+                        |> Pretty.indent 4
+                    )
                 |> Pretty.a Pretty.line
                 |> Pretty.a
                     (case guard of
@@ -755,6 +760,8 @@ fromCase ( pattern, guard, body ) =
                 |> Pretty.a Pretty.space
                 |> Pretty.a (Pretty.char '{')
                 |> Pretty.a Pretty.line
+                |> Pretty.a (Pretty.indent 4 bindings)
+                |> Pretty.a Pretty.line
                 |> Pretty.a
                     (case guard of
                         Just expr ->
@@ -764,9 +771,7 @@ fromCase ( pattern, guard, body ) =
                                 |> Pretty.a (Pretty.char '{')
                                 |> Pretty.a Pretty.line
                                 |> Pretty.a
-                                    (bindings
-                                        |> Pretty.a Pretty.line
-                                        |> Pretty.a (Pretty.string "return ")
+                                    (Pretty.string "return "
                                         |> Pretty.a (fromExpression body)
                                         |> Pretty.indent 4
                                     )
@@ -775,9 +780,7 @@ fromCase ( pattern, guard, body ) =
                                 |> Pretty.indent 4
 
                         Nothing ->
-                            bindings
-                                |> Pretty.a Pretty.line
-                                |> Pretty.a (Pretty.string "return ")
+                            Pretty.string "return "
                                 |> Pretty.a (fromExpression body)
                                 |> Pretty.indent 4
                     )
@@ -828,6 +831,64 @@ fromCase ( pattern, guard, body ) =
                 , body
                 )
 
+        Typeof typeof name ->
+            let
+                typename =
+                    case typeof of
+                        BooleanP ->
+                            "boolean"
+
+                        NumberP ->
+                            "number"
+
+                        StringP ->
+                            "string"
+
+                        FunctionP ->
+                            "function"
+            in
+            Pretty.string "if "
+                |> Pretty.a Pretty.space
+                |> Pretty.a
+                    (Pretty.string "typeof $ == "
+                        |> Pretty.a (Pretty.string typename)
+                        |> Pretty.parens
+                    )
+                |> Pretty.a Pretty.space
+                |> Pretty.a (Pretty.char '{')
+                |> Pretty.a Pretty.line
+                |> Pretty.a
+                    (Pretty.string "var "
+                        |> Pretty.a (Pretty.string name)
+                        |> Pretty.a (Pretty.string " = $")
+                        |> Pretty.indent 4
+                    )
+                |> Pretty.a Pretty.line
+                |> Pretty.a
+                    (case guard of
+                        Just expr ->
+                            Pretty.string "if "
+                                |> Pretty.a (fromExpression expr |> Pretty.parens)
+                                |> Pretty.a Pretty.space
+                                |> Pretty.a (Pretty.char '{')
+                                |> Pretty.a Pretty.line
+                                |> Pretty.a
+                                    (Pretty.string "return "
+                                        |> Pretty.a (fromExpression body)
+                                        |> Pretty.indent 4
+                                    )
+                                |> Pretty.a Pretty.line
+                                |> Pretty.a (Pretty.char '}')
+                                |> Pretty.indent 4
+
+                        Nothing ->
+                            Pretty.string "return "
+                                |> Pretty.a (fromExpression body)
+                                |> Pretty.indent 4
+                    )
+                |> Pretty.a Pretty.line
+                |> Pretty.a (Pretty.char '}')
+
         Wildcard _ ->
             case guard of
                 Just expr ->
@@ -855,6 +916,7 @@ type MatchPattern t
     | Binding { name : Pretty.Doc t, path : Pretty.Doc t }
     | IsArray { path : Pretty.Doc t, length : Int }
     | IsObject (Pretty.Doc t)
+    | IsType { path : Pretty.Doc t, typeof : Pretty.Doc t }
 
 
 checkFromMatchPattern : MatchPattern t -> Pretty.Doc t
@@ -891,6 +953,12 @@ checkFromMatchPattern pattern =
                 |> Pretty.a (Pretty.string " == ")
                 |> Pretty.a (Pretty.Extra.singleQuotes "object")
 
+        IsType { path, typeof } ->
+            Pretty.string "typeof "
+                |> Pretty.a path
+                |> Pretty.a (Pretty.string " == ")
+                |> Pretty.a typeof
+
 
 bindingFromMatchPattern : MatchPattern t -> Pretty.Doc t
 bindingFromMatchPattern pattern =
@@ -911,6 +979,9 @@ bindingFromMatchPattern pattern =
             Pretty.empty
 
         IsObject _ ->
+            Pretty.empty
+
+        IsType _ ->
             Pretty.empty
 
 
@@ -954,6 +1025,50 @@ matchPatternsFromArrayDestructure path patterns =
                         matchPatternsFromArrayDestructure
                             (Pretty.a idx path)
                             (Value (String tag) :: ps)
+
+                    Typeof BooleanP name ->
+                        [ IsType
+                            { path = Pretty.a idx path
+                            , typeof = Pretty.Extra.singleQuotes "boolean"
+                            }
+                        , Binding
+                            { name = Pretty.string name
+                            , path = Pretty.a idx path
+                            }
+                        ]
+
+                    Typeof NumberP name ->
+                        [ IsType
+                            { path = Pretty.a idx path
+                            , typeof = Pretty.Extra.singleQuotes "number"
+                            }
+                        , Binding
+                            { name = Pretty.string name
+                            , path = Pretty.a idx path
+                            }
+                        ]
+
+                    Typeof StringP name ->
+                        [ IsType
+                            { path = Pretty.a idx path
+                            , typeof = Pretty.Extra.singleQuotes "string"
+                            }
+                        , Binding
+                            { name = Pretty.string name
+                            , path = Pretty.a idx path
+                            }
+                        ]
+
+                    Typeof FunctionP name ->
+                        [ IsType
+                            { path = Pretty.a idx path
+                            , typeof = Pretty.Extra.singleQuotes "function"
+                            }
+                        , Binding
+                            { name = Pretty.string name
+                            , path = Pretty.a idx path
+                            }
+                        ]
 
                     Wildcard _ ->
                         []
@@ -1027,6 +1142,90 @@ matchPatternsFromObjectDestructure path patterns =
                             )
                             (Value (String tag) :: ps)
 
+                    Just (Typeof BooleanP name) ->
+                        [ Existential
+                            { name = Pretty.Extra.singleQuotes key
+                            , path = path
+                            }
+                        , IsType
+                            { path =
+                                path
+                                    |> Pretty.a (Pretty.char '.')
+                                    |> Pretty.a (Pretty.string key)
+                            , typeof = Pretty.Extra.singleQuotes "boolean"
+                            }
+                        , Binding
+                            { name = Pretty.string name
+                            , path =
+                                path
+                                    |> Pretty.a (Pretty.char '.')
+                                    |> Pretty.a (Pretty.string key)
+                            }
+                        ]
+
+                    Just (Typeof NumberP name) ->
+                        [ Existential
+                            { name = Pretty.Extra.singleQuotes key
+                            , path = path
+                            }
+                        , IsType
+                            { path =
+                                path
+                                    |> Pretty.a (Pretty.char '.')
+                                    |> Pretty.a (Pretty.string key)
+                            , typeof = Pretty.Extra.singleQuotes "number"
+                            }
+                        , Binding
+                            { name = Pretty.string name
+                            , path =
+                                path
+                                    |> Pretty.a (Pretty.char '.')
+                                    |> Pretty.a (Pretty.string key)
+                            }
+                        ]
+
+                    Just (Typeof StringP name) ->
+                        [ Existential
+                            { name = Pretty.Extra.singleQuotes key
+                            , path = path
+                            }
+                        , IsType
+                            { path =
+                                path
+                                    |> Pretty.a (Pretty.char '.')
+                                    |> Pretty.a (Pretty.string key)
+                            , typeof = Pretty.Extra.singleQuotes "string"
+                            }
+                        , Binding
+                            { name = Pretty.string name
+                            , path =
+                                path
+                                    |> Pretty.a (Pretty.char '.')
+                                    |> Pretty.a (Pretty.string key)
+                            }
+                        ]
+
+                    Just (Typeof FunctionP name) ->
+                        [ Existential
+                            { name = Pretty.Extra.singleQuotes key
+                            , path = path
+                            }
+                        , IsType
+                            { path =
+                                path
+                                    |> Pretty.a (Pretty.char '.')
+                                    |> Pretty.a (Pretty.string key)
+                            , typeof = Pretty.Extra.singleQuotes "function"
+                            }
+                        , Binding
+                            { name = Pretty.string name
+                            , path =
+                                path
+                                    |> Pretty.a (Pretty.char '.')
+                                    |> Pretty.a (Pretty.string key)
+                            }
+                        ]
+
                     Nothing ->
                         [ Existential
                             { name = Pretty.Extra.singleQuotes key
@@ -1092,6 +1291,9 @@ fromPattern pattern =
                     List.map replaceLiteral ps
                         |> VariantDestructure tag
 
+                Typeof _ name ->
+                    p
+
                 Wildcard _ ->
                     p
     in
@@ -1121,14 +1323,19 @@ fromPattern pattern =
                 |> Pretty.join (Pretty.string ", ")
                 |> Pretty.braces
 
-        Value primitive ->
-            fromLiteral primitive
+        Value _ ->
+            fromPattern (Wildcard Nothing)
 
         VariantDestructure tag patterns ->
             List.map replaceLiteral (Value (String tag) :: patterns)
                 |> List.map fromPattern
                 |> Pretty.join (Pretty.string ", ")
                 |> Pretty.brackets
+
+        -- TODO: Like above, we need to come up with a proper way to handle these
+        -- sorts of patterns in function args.
+        Typeof _ name ->
+            Pretty.string name
 
         Wildcard (Just name) ->
             Pretty.string ("_" ++ name)
