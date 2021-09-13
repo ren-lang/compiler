@@ -108,6 +108,9 @@ exportsInPattern name pattern =
         Value _ ->
             False
 
+        Typeof _ n ->
+            name == n
+
         Wildcard _ ->
             False
 

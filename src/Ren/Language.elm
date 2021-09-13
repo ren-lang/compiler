@@ -2,7 +2,8 @@ module Ren.Language exposing
     ( keywords
     , Module, Import, Visibility(..)
     , Declaration(..), Variant(..)
-    , Expression(..), Accessor(..), Identifier(..), Literal(..), TemplateSegment(..), Operator(..), Pattern(..)
+    , Expression(..), Accessor(..), Identifier(..), Literal(..), TemplateSegment(..), Operator(..)
+    , Pattern(..), PrimitiveType(..)
     )
 
 {-|
@@ -10,7 +11,8 @@ module Ren.Language exposing
 @docs keywords
 @docs Module, Import, Visibility
 @docs Declaration, Variant
-@docs Expression, Accessor, Identifier, Literal, TemplateSegment, Operator, Pattern
+@docs Expression, Accessor, Identifier, Literal, TemplateSegment, Operator
+@docs Pattern, PrimitiveType
 
 -}
 
@@ -190,4 +192,13 @@ type Pattern
     | ObjectDestructure (List ( String, Maybe Pattern ))
     | Value Literal
     | VariantDestructure String (List Pattern)
+    | Typeof PrimitiveType String
     | Wildcard (Maybe String)
+
+
+{-| -}
+type PrimitiveType
+    = BooleanP
+    | NumberP
+    | StringP
+    | FunctionP
