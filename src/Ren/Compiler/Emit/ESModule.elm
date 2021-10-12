@@ -24,14 +24,19 @@ emitModule =
 
 fromModule : Module -> Pretty.Doc t
 fromModule { imports, declarations } =
-    Pretty.lines (List.map fromImport imports)
-        |> Pretty.a Pretty.line
-        |> Pretty.a Pretty.line
-        |> Pretty.a
-            (declarations
-                |> List.map (fromDeclaration >> Pretty.a Pretty.line)
-                |> Pretty.lines
-            )
+    if List.isEmpty imports then
+        declarations
+            |> List.map (fromDeclaration >> Pretty.a Pretty.line)
+            |> Pretty.lines 
+    else
+        Pretty.lines (List.map fromImport imports)
+            |> Pretty.a Pretty.line
+            |> Pretty.a Pretty.line
+            |> Pretty.a
+                (declarations
+                    |> List.map (fromDeclaration >> Pretty.a Pretty.line)
+                    |> Pretty.lines
+                )
 
 
 fromImport : Import -> Pretty.Doc t
