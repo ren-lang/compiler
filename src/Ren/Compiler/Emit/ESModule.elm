@@ -117,8 +117,7 @@ fromFunction name args body =
                 |> Pretty.a (Pretty.char '{')
                 |> Pretty.a Pretty.line
                 |> Pretty.a
-                    (Pretty.string "return "
-                        |> Pretty.a (fromFunctionBody body)
+                    ((fromFunctionBody True body)
                         |> Pretty.indent 4
                     )
                 |> Pretty.a Pretty.line
@@ -143,7 +142,7 @@ fromFunction name args body =
                                 |> Pretty.a
                                     (Pretty.string "return "
                                         |> Pretty.a Pretty.space
-                                        |> Pretty.a (fromFunctionBody body)
+                                        |> Pretty.a (fromFunctionBody True body)
                                         |> Pretty.indent 4
                                     )
                                 |> Pretty.a Pretty.line
@@ -546,7 +545,7 @@ fromLambda args body =
     List.map (fromPattern >> Pretty.parens) args
         |> Pretty.join (Pretty.string " => ")
         |> Pretty.a (Pretty.string " => ")
-        |> Pretty.a (fromFunctionBody body)
+        |> Pretty.a (fromFunctionBody False body)
 
 
 
@@ -608,8 +607,8 @@ fromLiteral literal =
 -- EMITTING EXPRESSIONS WHICH COMPILE TO AN IIFE INSIDE A FUNCTION BODY --------
 
 
-fromFunctionBody : Expression -> Pretty.Doc t
-fromFunctionBody body =
+fromFunctionBody : Bool -> Expression -> Pretty.Doc t
+fromFunctionBody emitReturn body =
     case body of
         Match expr cases ->
             case expr of
@@ -626,7 +625,8 @@ fromFunctionBody body =
                     fromMatch expr cases
 
         _ ->
-            fromExpression body
+            (if emitReturn then Pretty.string "return " else Pretty.empty)
+                |> Pretty.a (fromExpression body)
 
 
 -- EMITTING EXPRESSIONS: MATCH -------------------------------------------------
