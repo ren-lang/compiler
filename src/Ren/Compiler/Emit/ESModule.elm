@@ -27,7 +27,7 @@ fromModule { imports, declarations } =
     if List.isEmpty imports then
         declarations
             |> List.map (fromDeclaration >> Pretty.a Pretty.line)
-            |> Pretty.lines 
+            |> Pretty.lines
     else
         Pretty.lines (List.map fromImport imports)
             |> Pretty.a Pretty.line
@@ -118,7 +118,7 @@ fromFunction name args body =
                 |> Pretty.a Pretty.line
                 |> Pretty.a
                     (Pretty.string "return "
-                        |> Pretty.a (fromExpression body)
+                        |> Pretty.a (fromFunctionBody body)
                         |> Pretty.indent 4
                     )
                 |> Pretty.a Pretty.line
@@ -143,7 +143,7 @@ fromFunction name args body =
                                 |> Pretty.a
                                     (Pretty.string "return "
                                         |> Pretty.a Pretty.space
-                                        |> Pretty.a (fromExpression body)
+                                        |> Pretty.a (fromFunctionBody body)
                                         |> Pretty.indent 4
                                     )
                                 |> Pretty.a Pretty.line
@@ -546,7 +546,7 @@ fromLambda args body =
     List.map (fromPattern >> Pretty.parens) args
         |> Pretty.join (Pretty.string " => ")
         |> Pretty.a (Pretty.string " => ")
-        |> Pretty.a (fromExpression body)
+        |> Pretty.a (fromFunctionBody body)
 
 
 
@@ -603,6 +603,30 @@ fromLiteral literal =
         Undefined ->
             Pretty.string "undefined"
 
+
+
+-- EMITTING EXPRESSIONS WHICH COMPILE TO AN IIFE INSIDE A FUNCTION BODY --------
+
+
+fromFunctionBody : Expression -> Pretty.Doc t
+fromFunctionBody body =
+    case body of
+        Match expr cases ->
+            case expr of
+                Identifier ident ->
+                    Pretty.line
+                    |> Pretty.a
+                        (List.map fromCase cases
+                            |> List.intersperse Pretty.Extra.doubeLine
+                            |> Pretty.join Pretty.empty
+                            |> Pretty.indent 4
+                        )
+
+                _ ->
+                    fromMatch expr cases
+
+        _ ->
+            fromExpression body
 
 
 -- EMITTING EXPRESSIONS: MATCH -------------------------------------------------
