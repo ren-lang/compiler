@@ -141,9 +141,7 @@ fromFunction name args body =
                                 |> Pretty.a (Pretty.char '{')
                                 |> Pretty.a Pretty.line
                                 |> Pretty.a
-                                    (Pretty.string "return "
-                                        |> Pretty.a Pretty.space
-                                        |> Pretty.a (fromFunctionBody True body)
+                                    (fromFunctionBody True body
                                         |> Pretty.indent 4
                                     )
                                 |> Pretty.a Pretty.line
@@ -613,12 +611,12 @@ fromFunctionBody insideBlock body =
     case body of
         Match (Identifier ident) cases ->
             if insideBlock then
-                matchBody cases
+                matchBody (fromIdentifier ident) cases
 
             else
                 Pretty.line
                     |> Pretty.a
-                        (matchBody cases
+                        (matchBody (fromIdentifier ident) cases
                             |> Pretty.indent 4
                         )
                     |> Pretty.a Pretty.line
@@ -646,7 +644,7 @@ fromMatch expr cases =
         |> Pretty.a (Pretty.char '{')
         |> Pretty.a Pretty.line
         |> Pretty.a
-            (matchBody cases
+            (matchBody (Pretty.char '$') cases
                 |> Pretty.indent 4
             )
         |> Pretty.a Pretty.line
@@ -655,20 +653,20 @@ fromMatch expr cases =
         |> Pretty.a (fromExpression expr |> Pretty.parens)
 
 
-matchBody : List ( Pattern, Maybe Expression, Expression ) -> Pretty.Doc t
-matchBody cases =
-    List.map fromCase cases
+matchBody : Pretty.Doc t -> List ( Pattern, Maybe Expression, Expression ) -> Pretty.Doc t
+matchBody ident cases =
+    List.map (fromCase ident) cases
         |> List.intersperse Pretty.Extra.doubeLine
         |> Pretty.join Pretty.empty
 
 
-fromCase : ( Pattern, Maybe Expression, Expression ) -> Pretty.Doc t
-fromCase ( pattern, guard, body ) =
+fromCase : Pretty.Doc t -> ( Pattern, Maybe Expression, Expression ) -> Pretty.Doc t
+fromCase ident ( pattern, guard, body ) =
     case pattern of
         ArrayDestructure patterns ->
             let
                 matchPatterns =
-                    matchPatternsFromArrayDestructure (Pretty.char '$') patterns
+                    matchPatternsFromArrayDestructure ident patterns
 
                 checks =
                     List.map checkFromMatchPattern matchPatterns
@@ -728,7 +726,7 @@ fromCase ( pattern, guard, body ) =
             Pretty.string "if "
                 |> Pretty.a Pretty.space
                 |> Pretty.a
-                    (Pretty.char '$'
+                    (ident
                         |> Pretty.a (Pretty.string " == ")
                         |> Pretty.a (Pretty.string name)
                         |> Pretty.parens
@@ -771,7 +769,7 @@ fromCase ( pattern, guard, body ) =
         ObjectDestructure patterns ->
             let
                 matchPatterns =
-                    matchPatternsFromObjectDestructure (Pretty.char '$') patterns
+                    matchPatternsFromObjectDestructure ident patterns
 
                 checks =
                     List.map checkFromMatchPattern matchPatterns
@@ -831,7 +829,7 @@ fromCase ( pattern, guard, body ) =
             Pretty.string "if"
                 |> Pretty.a Pretty.space
                 |> Pretty.a
-                    (Pretty.char '$'
+                    (ident
                         |> Pretty.a (Pretty.string " == ")
                         |> Pretty.a (fromLiteral primitive)
                         |> Pretty.parens
@@ -866,6 +864,7 @@ fromCase ( pattern, guard, body ) =
 
         VariantDestructure tag patterns ->
             fromCase
+                ident
                 ( ArrayDestructure (Value (String tag) :: patterns)
                 , guard
                 , body
@@ -890,7 +889,9 @@ fromCase ( pattern, guard, body ) =
             Pretty.string "if "
                 |> Pretty.a Pretty.space
                 |> Pretty.a
-                    (Pretty.string "typeof $ == "
+                    (Pretty.string "typeof "
+                        |> Pretty.a ident
+                        |> Pretty.a (Pretty.string " == ")
                         |> Pretty.a (Pretty.string typename)
                         |> Pretty.parens
                     )
@@ -900,7 +901,8 @@ fromCase ( pattern, guard, body ) =
                 |> Pretty.a
                     (Pretty.string "var "
                         |> Pretty.a (Pretty.string name)
-                        |> Pretty.a (Pretty.string " = $")
+                        |> Pretty.a (Pretty.string " = ")
+                        |> Pretty.a ident
                         |> Pretty.indent 4
                     )
                 |> Pretty.a Pretty.line
