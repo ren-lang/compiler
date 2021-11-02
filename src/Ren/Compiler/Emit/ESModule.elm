@@ -28,6 +28,7 @@ fromModule { imports, declarations } =
         declarations
             |> List.map (fromDeclaration >> Pretty.a Pretty.line)
             |> Pretty.lines
+
     else
         Pretty.lines (List.map fromImport imports)
             |> Pretty.a Pretty.line
@@ -117,7 +118,7 @@ fromFunction name args body =
                 |> Pretty.a (Pretty.char '{')
                 |> Pretty.a Pretty.line
                 |> Pretty.a
-                    ((fromFunctionBody True body)
+                    (fromFunctionBody True body
                         |> Pretty.indent 4
                     )
                 |> Pretty.a Pretty.line
@@ -608,25 +609,30 @@ fromLiteral literal =
 
 
 fromFunctionBody : Bool -> Expression -> Pretty.Doc t
-fromFunctionBody emitReturn body =
+fromFunctionBody insideBlock body =
     case body of
-        Match expr cases ->
-            case expr of
-                Identifier ident ->
-                    Pretty.line
+        Match (Identifier ident) cases ->
+            if insideBlock then
+                matchBody cases
+
+            else
+                Pretty.line
                     |> Pretty.a
-                        (List.map fromCase cases
-                            |> List.intersperse Pretty.Extra.doubeLine
-                            |> Pretty.join Pretty.empty
+                        (matchBody cases
                             |> Pretty.indent 4
                         )
-
-                _ ->
-                    fromMatch expr cases
+                    |> Pretty.a Pretty.line
+                    |> Pretty.braces
 
         _ ->
-            (if emitReturn then Pretty.string "return " else Pretty.empty)
+            (if insideBlock then
+                Pretty.string "return "
+
+             else
+                Pretty.empty
+            )
                 |> Pretty.a (fromExpression body)
+
 
 
 -- EMITTING EXPRESSIONS: MATCH -------------------------------------------------
@@ -640,15 +646,20 @@ fromMatch expr cases =
         |> Pretty.a (Pretty.char '{')
         |> Pretty.a Pretty.line
         |> Pretty.a
-            (List.map fromCase cases
-                |> List.intersperse Pretty.Extra.doubeLine
-                |> Pretty.join Pretty.empty
+            (matchBody cases
                 |> Pretty.indent 4
             )
         |> Pretty.a Pretty.line
         |> Pretty.a (Pretty.char '}')
         |> Pretty.parens
         |> Pretty.a (fromExpression expr |> Pretty.parens)
+
+
+matchBody : List ( Pattern, Maybe Expression, Expression ) -> Pretty.Doc t
+matchBody cases =
+    List.map fromCase cases
+        |> List.intersperse Pretty.Extra.doubeLine
+        |> Pretty.join Pretty.empty
 
 
 fromCase : ( Pattern, Maybe Expression, Expression ) -> Pretty.Doc t
