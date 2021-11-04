@@ -27,7 +27,7 @@ fromModule { imports, declarations } =
     if List.isEmpty imports then
         declarations
             |> List.map (fromDeclaration >> Pretty.a Pretty.line)
-            |> Pretty.lines 
+            |> Pretty.lines
     else
         Pretty.lines (List.map fromImport imports)
             |> Pretty.a Pretty.line
@@ -265,9 +265,19 @@ fromExpression expression =
         Match expr cases ->
             fromMatch expr cases
 
-        SubExpression expr ->
-            fromSubexpression expr
 
+fromExpressionToSingleTerm : Expression -> Pretty.Doc t
+fromExpressionToSingleTerm expression =
+    case expression of
+        Application expr args ->
+            fromApplication expr args
+                |> Pretty.parens
+
+        Infix operator lhs rhs ->
+            fromInfix operator lhs rhs
+                |> Pretty.parens
+
+        _ -> fromExpression expression
 
 
 -- EMITTING EXPRESSIONS: ACCESS ------------------------------------------------
@@ -275,7 +285,7 @@ fromExpression expression =
 
 fromAccess : Expression -> List Accessor -> Pretty.Doc t
 fromAccess expr accessors =
-    fromExpression expr
+    fromExpressionToSingleTerm expr
         |> Pretty.a (Pretty.join Pretty.empty <| List.map fromAccessor accessors)
 
 
@@ -296,7 +306,7 @@ fromAccessor accessor =
 
 fromApplication : Expression -> List Expression -> Pretty.Doc t
 fromApplication expr args =
-    fromExpression expr
+    fromExpressionToSingleTerm expr
         |> Pretty.a Pretty.space
         |> Pretty.a
             (args
@@ -454,86 +464,86 @@ fromInfix operator lhs rhs =
                 |> Pretty.parens
 
         Add ->
-            fromExpression lhs
+            fromExpressionToSingleTerm lhs
                 |> Pretty.a (Pretty.string " + ")
-                |> Pretty.a (fromExpression rhs)
+                |> Pretty.a (fromExpressionToSingleTerm rhs)
 
         Sub ->
-            fromExpression lhs
+            fromExpressionToSingleTerm lhs
                 |> Pretty.a (Pretty.string " - ")
-                |> Pretty.a (fromExpression rhs)
+                |> Pretty.a (fromExpressionToSingleTerm rhs)
 
         Mul ->
-            fromExpression lhs
+            fromExpressionToSingleTerm lhs
                 |> Pretty.a (Pretty.string " * ")
-                |> Pretty.a (fromExpression rhs)
+                |> Pretty.a (fromExpressionToSingleTerm rhs)
 
         Div ->
-            fromExpression lhs
+            fromExpressionToSingleTerm lhs
                 |> Pretty.a (Pretty.string " / ")
-                |> Pretty.a (fromExpression rhs)
+                |> Pretty.a (fromExpressionToSingleTerm rhs)
 
         Pow ->
-            fromExpression lhs
+            fromExpressionToSingleTerm lhs
                 |> Pretty.a (Pretty.string " ** ")
-                |> Pretty.a (fromExpression rhs)
+                |> Pretty.a (fromExpressionToSingleTerm rhs)
 
         Mod ->
-            fromExpression lhs
+            fromExpressionToSingleTerm lhs
                 |> Pretty.a (Pretty.string " % ")
-                |> Pretty.a (fromExpression rhs)
+                |> Pretty.a (fromExpressionToSingleTerm rhs)
 
         Eq ->
-            fromExpression lhs
+            fromExpressionToSingleTerm lhs
                 |> Pretty.a (Pretty.string " == ")
-                |> Pretty.a (fromExpression rhs)
+                |> Pretty.a (fromExpressionToSingleTerm rhs)
 
         NotEq ->
-            fromExpression lhs
+            fromExpressionToSingleTerm lhs
                 |> Pretty.a (Pretty.string " != ")
-                |> Pretty.a (fromExpression rhs)
+                |> Pretty.a (fromExpressionToSingleTerm rhs)
 
         Lt ->
-            fromExpression lhs
+            fromExpressionToSingleTerm lhs
                 |> Pretty.a (Pretty.string " < ")
-                |> Pretty.a (fromExpression rhs)
+                |> Pretty.a (fromExpressionToSingleTerm rhs)
 
         Lte ->
-            fromExpression lhs
+            fromExpressionToSingleTerm lhs
                 |> Pretty.a (Pretty.string " <= ")
-                |> Pretty.a (fromExpression rhs)
+                |> Pretty.a (fromExpressionToSingleTerm rhs)
 
         Gt ->
-            fromExpression lhs
+            fromExpressionToSingleTerm lhs
                 |> Pretty.a (Pretty.string " > ")
-                |> Pretty.a (fromExpression rhs)
+                |> Pretty.a (fromExpressionToSingleTerm rhs)
 
         Gte ->
-            fromExpression lhs
+            fromExpressionToSingleTerm lhs
                 |> Pretty.a (Pretty.string " >= ")
-                |> Pretty.a (fromExpression rhs)
+                |> Pretty.a (fromExpressionToSingleTerm rhs)
 
         And ->
-            fromExpression lhs
+            fromExpressionToSingleTerm lhs
                 |> Pretty.a (Pretty.string " && ")
-                |> Pretty.a (fromExpression rhs)
+                |> Pretty.a (fromExpressionToSingleTerm rhs)
 
         Or ->
-            fromExpression lhs
+            fromExpressionToSingleTerm lhs
                 |> Pretty.a (Pretty.string " || ")
-                |> Pretty.a (fromExpression rhs)
+                |> Pretty.a (fromExpressionToSingleTerm rhs)
 
         Cons ->
-            fromExpression lhs
+            fromExpressionToSingleTerm lhs
                 |> Pretty.a (Pretty.string ", ...")
-                |> Pretty.a (fromExpression rhs)
+                |> Pretty.a (fromExpressionToSingleTerm rhs)
                 |> Pretty.brackets
 
         Join ->
             Pretty.string "..."
-                |> Pretty.a (fromExpression lhs)
+                |> Pretty.a (fromExpressionToSingleTerm lhs)
                 |> Pretty.a (Pretty.string ", ...")
-                |> Pretty.a (fromExpression rhs)
+                |> Pretty.a (fromExpressionToSingleTerm rhs)
                 |> Pretty.brackets
 
 
@@ -1246,16 +1256,6 @@ matchPatternsFromObjectDestructure path patterns =
                         ]
             )
         |> (::) (IsObject path)
-
-
-
--- EMITTING EXPRESSIONS: SUBEXPRESSION -----------------------------------------
-
-
-fromSubexpression : Expression -> Pretty.Doc t
-fromSubexpression expr =
-    fromExpression expr
-        |> Pretty.parens
 
 
 

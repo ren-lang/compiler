@@ -191,9 +191,6 @@ references name expression =
             references name expr
                 || List.any (referencesInCase name) cases
 
-        SubExpression expr ->
-            references name expr
-
 
 referencesInAccessor : String -> Accessor -> Bool
 referencesInAccessor name accessor =
@@ -287,9 +284,6 @@ referencesNamespace namespace expression =
             referencesNamespace namespace expr
                 || List.any (referencesNamespaceInCase namespace) cases
 
-        SubExpression expr ->
-            referencesNamespace namespace expr
-
 
 referencesNamespaceInAccessor : List String -> Accessor -> Bool
 referencesNamespaceInAccessor namespace accessor =
@@ -382,9 +376,6 @@ referencesQualified namespace name expression =
         Match expr cases ->
             referencesQualified namespace name expr
                 || List.any (referencesQualifiedInCase namespace name) cases
-
-        SubExpression expr ->
-            referencesQualified namespace name expr
 
 
 referencesQualifiedInAccessor : List String -> String -> Accessor -> Bool
