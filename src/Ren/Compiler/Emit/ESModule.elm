@@ -28,6 +28,7 @@ fromModule { imports, declarations } =
         declarations
             |> List.map (fromDeclaration >> Pretty.a Pretty.line)
             |> Pretty.lines
+
     else
         Pretty.lines (List.map fromImport imports)
             |> Pretty.a Pretty.line
@@ -273,11 +274,17 @@ fromExpressionToSingleTerm expression =
             fromApplication expr args
                 |> Pretty.parens
 
+        Conditional condition true false ->
+            fromConditional condition true false
+                |> Pretty.parens
+
         Infix operator lhs rhs ->
             fromInfix operator lhs rhs
                 |> Pretty.parens
 
-        _ -> fromExpression expression
+        _ ->
+            fromExpression expression
+
 
 
 -- EMITTING EXPRESSIONS: ACCESS ------------------------------------------------

@@ -208,7 +208,6 @@ optimiseExpression =
 expressionDefaults : List (Expression -> Maybe Expression)
 expressionDefaults =
     [ constantFold
-    -- , stripParentheses
     ]
 
 
