@@ -339,11 +339,22 @@ fromApplication expr args =
         |> Pretty.a Pretty.space
         |> Pretty.a
             (args
-                |> List.map (fromExpression >> Pretty.parens)
+                |> List.map fromArgument
                 |> Pretty.lines
             )
         |> Pretty.group
         |> Pretty.nest 4
+
+
+fromArgument : Expression -> Pretty.Doc t
+fromArgument arg =
+    case arg of
+        Literal Undefined ->
+            Pretty.string "()"
+
+        _ ->
+            fromExpression arg
+                |> Pretty.parens
 
 
 
