@@ -338,7 +338,7 @@ expressionParser =
 {-| -}
 parenthesisedExpressionParser : Pratt.Config Expression -> Parser Expression
 parenthesisedExpressionParser prattConfig =
-    Parser.succeed SubExpression
+    Parser.succeed identity
         |. Parser.symbol "("
         |. Parser.Extra.ignorables
         |= Pratt.subExpression 0 prattConfig

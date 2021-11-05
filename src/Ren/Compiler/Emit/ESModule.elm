@@ -27,7 +27,8 @@ fromModule { imports, declarations } =
     if List.isEmpty imports then
         declarations
             |> List.map (fromDeclaration >> Pretty.a Pretty.line)
-            |> Pretty.lines 
+            |> Pretty.lines
+
     else
         Pretty.lines (List.map fromImport imports)
             |> Pretty.a Pretty.line
@@ -265,8 +266,46 @@ fromExpression expression =
         Match expr cases ->
             fromMatch expr cases
 
-        SubExpression expr ->
-            fromSubexpression expr
+
+{-| Should contain all expressions which when output either starts or ends with an expression
+-}
+fromExpressionToSingleTerm : Expression -> Pretty.Doc t
+fromExpressionToSingleTerm expression =
+    case expression of
+        Application expr args ->
+            fromApplication expr args
+                |> Pretty.parens
+
+        Conditional condition true false ->
+            fromConditional condition true false
+                |> Pretty.parens
+
+        -- Compiles to Application: always wrap
+        Infix Pipe lhs rhs ->
+            fromInfix Pipe lhs rhs
+                |> Pretty.parens
+
+        -- Compiles to IIFE: never wrap
+        Infix Compose lhs rhs ->
+            fromInfix Pipe lhs rhs
+
+        -- Compiles to []: never wrap
+        Infix Cons lhs rhs ->
+            fromInfix Pipe lhs rhs
+
+        -- Compiles to []: never wrap
+        Infix Join lhs rhs ->
+            fromInfix Pipe lhs rhs
+
+        Infix operator lhs rhs ->
+            fromInfix operator lhs rhs
+
+        Lambda args body ->
+            fromLambda args body
+                |> Pretty.parens
+
+        _ ->
+            fromExpression expression
 
 
 
@@ -275,7 +314,7 @@ fromExpression expression =
 
 fromAccess : Expression -> List Accessor -> Pretty.Doc t
 fromAccess expr accessors =
-    fromExpression expr
+    fromExpressionToSingleTerm expr
         |> Pretty.a (Pretty.join Pretty.empty <| List.map fromAccessor accessors)
 
 
@@ -296,7 +335,7 @@ fromAccessor accessor =
 
 fromApplication : Expression -> List Expression -> Pretty.Doc t
 fromApplication expr args =
-    fromExpression expr
+    fromExpressionToSingleTerm expr
         |> Pretty.a Pretty.space
         |> Pretty.a
             (args
@@ -439,6 +478,10 @@ fromIdentifier identifier =
 
 fromInfix : Operator -> Expression -> Expression -> Pretty.Doc t
 fromInfix operator lhs rhs =
+    let
+        fromInfixOp =
+            fromInfixOperand operator
+    in
     case operator of
         Pipe ->
             fromExpression (Application rhs [ lhs ])
@@ -454,87 +497,164 @@ fromInfix operator lhs rhs =
                 |> Pretty.parens
 
         Add ->
-            fromExpression lhs
+            fromInfixOp lhs
                 |> Pretty.a (Pretty.string " + ")
-                |> Pretty.a (fromExpression rhs)
+                |> Pretty.a (fromInfixOp rhs)
 
         Sub ->
-            fromExpression lhs
+            fromInfixOp lhs
                 |> Pretty.a (Pretty.string " - ")
-                |> Pretty.a (fromExpression rhs)
+                |> Pretty.a (fromInfixOp rhs)
 
         Mul ->
-            fromExpression lhs
+            fromInfixOp lhs
                 |> Pretty.a (Pretty.string " * ")
-                |> Pretty.a (fromExpression rhs)
+                |> Pretty.a (fromInfixOp rhs)
 
         Div ->
-            fromExpression lhs
+            fromInfixOp lhs
                 |> Pretty.a (Pretty.string " / ")
-                |> Pretty.a (fromExpression rhs)
+                |> Pretty.a (fromInfixOp rhs)
 
         Pow ->
-            fromExpression lhs
+            fromInfixOp lhs
                 |> Pretty.a (Pretty.string " ** ")
-                |> Pretty.a (fromExpression rhs)
+                |> Pretty.a (fromInfixOp rhs)
 
         Mod ->
-            fromExpression lhs
+            fromInfixOp lhs
                 |> Pretty.a (Pretty.string " % ")
-                |> Pretty.a (fromExpression rhs)
+                |> Pretty.a (fromInfixOp rhs)
 
         Eq ->
-            fromExpression lhs
+            fromInfixOp lhs
                 |> Pretty.a (Pretty.string " == ")
-                |> Pretty.a (fromExpression rhs)
+                |> Pretty.a (fromInfixOp rhs)
 
         NotEq ->
-            fromExpression lhs
+            fromInfixOp lhs
                 |> Pretty.a (Pretty.string " != ")
-                |> Pretty.a (fromExpression rhs)
+                |> Pretty.a (fromInfixOp rhs)
 
         Lt ->
-            fromExpression lhs
+            fromInfixOp lhs
                 |> Pretty.a (Pretty.string " < ")
-                |> Pretty.a (fromExpression rhs)
+                |> Pretty.a (fromInfixOp rhs)
 
         Lte ->
-            fromExpression lhs
+            fromInfixOp lhs
                 |> Pretty.a (Pretty.string " <= ")
-                |> Pretty.a (fromExpression rhs)
+                |> Pretty.a (fromInfixOp rhs)
 
         Gt ->
-            fromExpression lhs
+            fromInfixOp lhs
                 |> Pretty.a (Pretty.string " > ")
-                |> Pretty.a (fromExpression rhs)
+                |> Pretty.a (fromInfixOp rhs)
 
         Gte ->
-            fromExpression lhs
+            fromInfixOp lhs
                 |> Pretty.a (Pretty.string " >= ")
-                |> Pretty.a (fromExpression rhs)
+                |> Pretty.a (fromInfixOp rhs)
 
         And ->
-            fromExpression lhs
+            fromInfixOp lhs
                 |> Pretty.a (Pretty.string " && ")
-                |> Pretty.a (fromExpression rhs)
+                |> Pretty.a (fromInfixOp rhs)
 
         Or ->
-            fromExpression lhs
+            fromInfixOp lhs
                 |> Pretty.a (Pretty.string " || ")
-                |> Pretty.a (fromExpression rhs)
+                |> Pretty.a (fromInfixOp rhs)
 
         Cons ->
-            fromExpression lhs
+            fromExpressionToSingleTerm lhs
                 |> Pretty.a (Pretty.string ", ...")
-                |> Pretty.a (fromExpression rhs)
+                |> Pretty.a (fromExpressionToSingleTerm rhs)
                 |> Pretty.brackets
 
         Join ->
             Pretty.string "..."
-                |> Pretty.a (fromExpression lhs)
+                |> Pretty.a (fromExpressionToSingleTerm lhs)
                 |> Pretty.a (Pretty.string ", ...")
-                |> Pretty.a (fromExpression rhs)
+                |> Pretty.a (fromExpressionToSingleTerm rhs)
                 |> Pretty.brackets
+
+
+{-| Uses precedence numbers from
+<https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Operator_Precedence>
+-}
+esPrecedenceFromInfixOperator : Operator -> Maybe Int
+esPrecedenceFromInfixOperator operator =
+    case operator of
+        Add ->
+            Just 14
+
+        Sub ->
+            Just 14
+
+        Mul ->
+            Just 15
+
+        Div ->
+            Just 15
+
+        Pow ->
+            Just 16
+
+        Mod ->
+            Just 15
+
+        Eq ->
+            Just 11
+
+        NotEq ->
+            Just 11
+
+        Lt ->
+            Just 12
+
+        Lte ->
+            Just 12
+
+        Gt ->
+            Just 12
+
+        Gte ->
+            Just 12
+
+        And ->
+            Just 7
+
+        Or ->
+            Just 6
+
+        _ ->
+            Nothing
+
+
+fromInfixOperand : Operator -> Expression -> Pretty.Doc t
+fromInfixOperand parentOperator operand =
+    let
+        parensRequired =
+            \operator ->
+                case ( esPrecedenceFromInfixOperator parentOperator, esPrecedenceFromInfixOperator operator ) of
+                    ( Just pParent, Just pChild ) ->
+                        pParent > pChild
+
+                    _ ->
+                        False
+    in
+    case operand of
+        Infix operator lhs rhs ->
+            if parensRequired operator then
+                fromInfix operator lhs rhs
+                    |> Pretty.parens
+
+            else
+                fromInfix operator lhs rhs
+
+        _ ->
+            fromExpressionToSingleTerm operand
 
 
 
@@ -1246,16 +1366,6 @@ matchPatternsFromObjectDestructure path patterns =
                         ]
             )
         |> (::) (IsObject path)
-
-
-
--- EMITTING EXPRESSIONS: SUBEXPRESSION -----------------------------------------
-
-
-fromSubexpression : Expression -> Pretty.Doc t
-fromSubexpression expr =
-    fromExpression expr
-        |> Pretty.parens
 
 
 

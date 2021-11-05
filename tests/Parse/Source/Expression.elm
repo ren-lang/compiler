@@ -34,10 +34,8 @@ suite =
         , shouldSucceed Expression.parser
             "(f a) b"
             (Application
-                (SubExpression
-                    (Application (local "f")
-                        [ local "a" ]
-                    )
+                (Application (local "f")
+                    [ local "a" ]
                 )
                 [ local "b" ]
             )
@@ -105,12 +103,10 @@ suite =
             (Infix Sub
                 (Infix Add
                     (Literal (Number 3))
-                    (SubExpression
-                        (Conditional
-                            (Identifier (Local "a"))
-                            (Identifier (Local "b"))
-                            (Identifier (Local "c"))
-                        )
+                    (Conditional
+                        (Identifier (Local "a"))
+                        (Identifier (Local "b"))
+                        (Identifier (Local "c"))
                     )
                 )
                 (Literal (Number 1))

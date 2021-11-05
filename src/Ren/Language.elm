@@ -124,7 +124,6 @@ type Expression
     | Lambda (List Pattern) Expression
     | Literal Literal
     | Match Expression (List ( Pattern, Maybe Expression, Expression ))
-    | SubExpression Expression
 
 
 {-| -}
