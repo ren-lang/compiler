@@ -287,18 +287,19 @@ fromExpressionToSingleTerm expression =
 
         -- Compiles to IIFE: never wrap
         Infix Compose lhs rhs ->
-            fromInfix Pipe lhs rhs
+            fromInfix Compose lhs rhs
 
         -- Compiles to []: never wrap
         Infix Cons lhs rhs ->
-            fromInfix Pipe lhs rhs
+            fromInfix Cons lhs rhs
 
         -- Compiles to []: never wrap
         Infix Join lhs rhs ->
-            fromInfix Pipe lhs rhs
+            fromInfix Join lhs rhs
 
         Infix operator lhs rhs ->
             fromInfix operator lhs rhs
+                |> Pretty.parens
 
         Lambda args body ->
             fromLambda args body
