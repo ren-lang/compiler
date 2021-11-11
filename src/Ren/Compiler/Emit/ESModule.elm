@@ -118,8 +118,7 @@ fromFunction name args body =
                 |> Pretty.a (Pretty.char '{')
                 |> Pretty.a Pretty.line
                 |> Pretty.a
-                    (Pretty.string "return "
-                        |> Pretty.a (fromExpression body)
+                    (fromFunctionBody True body
                         |> Pretty.indent 4
                     )
                 |> Pretty.a Pretty.line
@@ -142,9 +141,7 @@ fromFunction name args body =
                                 |> Pretty.a (Pretty.char '{')
                                 |> Pretty.a Pretty.line
                                 |> Pretty.a
-                                    (Pretty.string "return "
-                                        |> Pretty.a Pretty.space
-                                        |> Pretty.a (fromExpression body)
+                                    (fromFunctionBody True body
                                         |> Pretty.indent 4
                                     )
                                 |> Pretty.a Pretty.line
@@ -678,7 +675,7 @@ fromLambda args body =
     List.map (fromPattern >> Pretty.parens) args
         |> Pretty.join (Pretty.string " => ")
         |> Pretty.a (Pretty.string " => ")
-        |> Pretty.a (fromExpression body)
+        |> Pretty.a (fromFunctionBody False body)
 
 
 
@@ -737,6 +734,36 @@ fromLiteral literal =
 
 
 
+-- EMITTING EXPRESSIONS WHICH COMPILE TO AN IIFE INSIDE A FUNCTION BODY --------
+
+
+fromFunctionBody : Bool -> Expression -> Pretty.Doc t
+fromFunctionBody insideBlock body =
+    case body of
+        Match (Identifier ident) cases ->
+            if insideBlock then
+                matchBody (fromIdentifier ident) cases
+
+            else
+                Pretty.line
+                    |> Pretty.a
+                        (matchBody (fromIdentifier ident) cases
+                            |> Pretty.indent 4
+                        )
+                    |> Pretty.a Pretty.line
+                    |> Pretty.braces
+
+        _ ->
+            (if insideBlock then
+                Pretty.string "return "
+
+             else
+                Pretty.empty
+            )
+                |> Pretty.a (fromExpression body)
+
+
+
 -- EMITTING EXPRESSIONS: MATCH -------------------------------------------------
 
 
@@ -748,9 +775,7 @@ fromMatch expr cases =
         |> Pretty.a (Pretty.char '{')
         |> Pretty.a Pretty.line
         |> Pretty.a
-            (List.map fromCase cases
-                |> List.intersperse Pretty.Extra.doubeLine
-                |> Pretty.join Pretty.empty
+            (matchBody (Pretty.char '$') cases
                 |> Pretty.indent 4
             )
         |> Pretty.a Pretty.line
@@ -759,13 +784,20 @@ fromMatch expr cases =
         |> Pretty.a (fromExpression expr |> Pretty.parens)
 
 
-fromCase : ( Pattern, Maybe Expression, Expression ) -> Pretty.Doc t
-fromCase ( pattern, guard, body ) =
+matchBody : Pretty.Doc t -> List ( Pattern, Maybe Expression, Expression ) -> Pretty.Doc t
+matchBody ident cases =
+    List.map (fromCase ident) cases
+        |> List.intersperse Pretty.Extra.doubeLine
+        |> Pretty.join Pretty.empty
+
+
+fromCase : Pretty.Doc t -> ( Pattern, Maybe Expression, Expression ) -> Pretty.Doc t
+fromCase ident ( pattern, guard, body ) =
     case pattern of
         ArrayDestructure patterns ->
             let
                 matchPatterns =
-                    matchPatternsFromArrayDestructure (Pretty.char '$') patterns
+                    matchPatternsFromArrayDestructure ident patterns
 
                 checks =
                     List.map checkFromMatchPattern matchPatterns
@@ -825,7 +857,7 @@ fromCase ( pattern, guard, body ) =
             Pretty.string "if "
                 |> Pretty.a Pretty.space
                 |> Pretty.a
-                    (Pretty.char '$'
+                    (ident
                         |> Pretty.a (Pretty.string " == ")
                         |> Pretty.a (Pretty.string name)
                         |> Pretty.parens
@@ -868,7 +900,7 @@ fromCase ( pattern, guard, body ) =
         ObjectDestructure patterns ->
             let
                 matchPatterns =
-                    matchPatternsFromObjectDestructure (Pretty.char '$') patterns
+                    matchPatternsFromObjectDestructure ident patterns
 
                 checks =
                     List.map checkFromMatchPattern matchPatterns
@@ -928,7 +960,7 @@ fromCase ( pattern, guard, body ) =
             Pretty.string "if"
                 |> Pretty.a Pretty.space
                 |> Pretty.a
-                    (Pretty.char '$'
+                    (ident
                         |> Pretty.a (Pretty.string " == ")
                         |> Pretty.a (fromLiteral primitive)
                         |> Pretty.parens
@@ -963,6 +995,7 @@ fromCase ( pattern, guard, body ) =
 
         VariantDestructure tag patterns ->
             fromCase
+                ident
                 ( ArrayDestructure (Value (String tag) :: patterns)
                 , guard
                 , body
@@ -987,7 +1020,9 @@ fromCase ( pattern, guard, body ) =
             Pretty.string "if "
                 |> Pretty.a Pretty.space
                 |> Pretty.a
-                    (Pretty.string "typeof $ == "
+                    (Pretty.string "typeof "
+                        |> Pretty.a ident
+                        |> Pretty.a (Pretty.string " == ")
                         |> Pretty.a (Pretty.string typename)
                         |> Pretty.parens
                     )
@@ -997,7 +1032,8 @@ fromCase ( pattern, guard, body ) =
                 |> Pretty.a
                     (Pretty.string "var "
                         |> Pretty.a (Pretty.string name)
-                        |> Pretty.a (Pretty.string " = $")
+                        |> Pretty.a (Pretty.string " = ")
+                        |> Pretty.a ident
                         |> Pretty.indent 4
                     )
                 |> Pretty.a Pretty.line
