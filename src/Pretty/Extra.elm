@@ -27,7 +27,7 @@ when condition doc =
         Pretty.empty
 
 
-mapNonEmptyList : List -> (List -> Pretty.Doc t) -> Pretty.Doc t
+mapNonEmptyList : List a -> (List a -> Pretty.Doc t) -> Pretty.Doc t
 mapNonEmptyList list mapper =
     if List.isEmpty list then
         Pretty.empty
