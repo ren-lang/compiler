@@ -173,7 +173,7 @@ fromEnum : Visibility -> String -> List Variant -> Pretty.Doc t
 fromEnum visibility _ variants =
     variants
         |> List.map (fromVariant visibility)
-        |> Pretty.join Pretty.Extra.doubeLine
+        |> Pretty.join Pretty.Extra.doubleLine
 
 
 fromVariant : Visibility -> Variant -> Pretty.Doc t
@@ -365,9 +365,9 @@ fromBlock bindings expr =
         |> Pretty.a Pretty.line
         |> Pretty.a
             (List.map (Tuple.pair Private >> fromDeclaration) bindings
-                |> List.intersperse Pretty.Extra.doubeLine
+                |> List.intersperse Pretty.Extra.doubleLine
                 |> Pretty.join Pretty.empty
-                |> Pretty.a Pretty.Extra.doubeLine
+                |> Pretty.a Pretty.Extra.doubleLine
                 |> Pretty.a (Pretty.string "return ")
                 |> Pretty.a (fromExpression expr)
                 |> Pretty.indent 4
@@ -787,7 +787,7 @@ fromMatch expr cases =
 matchBody : Pretty.Doc t -> List ( Pattern, Maybe Expression, Expression ) -> Pretty.Doc t
 matchBody ident cases =
     List.map (fromCase ident) cases
-        |> List.intersperse Pretty.Extra.doubeLine
+        |> List.intersperse Pretty.Extra.doubleLine
         |> Pretty.join Pretty.empty
 
 

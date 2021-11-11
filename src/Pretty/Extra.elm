@@ -14,6 +14,6 @@ singleQuotes s =
         |> Pretty.surround (Pretty.char '\'') (Pretty.char '\'')
 
 
-doubeLine : Pretty.Doc t
-doubeLine =
+doubleLine : Pretty.Doc t
+doubleLine =
     Pretty.line |> Pretty.a Pretty.line
