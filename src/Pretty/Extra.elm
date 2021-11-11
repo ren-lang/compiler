@@ -17,3 +17,19 @@ singleQuotes s =
 doubleLine : Pretty.Doc t
 doubleLine =
     Pretty.line |> Pretty.a Pretty.line
+
+
+when : Bool -> Pretty.Doc t -> Pretty.Doc t
+when condition doc =
+    if condition then
+        doc
+    else
+        Pretty.empty
+
+
+mapNonEmptyList : List -> (List -> Pretty.Doc t) -> Pretty.Doc t
+mapNonEmptyList list mapper =
+    if List.isEmpty list then
+        Pretty.empty
+    else
+        mapper list

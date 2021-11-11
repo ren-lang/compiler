@@ -754,12 +754,7 @@ fromFunctionBody insideBlock body =
                     |> Pretty.braces
 
         _ ->
-            (if insideBlock then
-                Pretty.string "return "
-
-             else
-                Pretty.empty
-            )
+            Pretty.Extra.when insideBlock (Pretty.string "return ")
                 |> Pretty.a (fromExpression body)
 
 
@@ -803,22 +798,14 @@ fromCase ident ( pattern, guard, body ) =
                     List.map checkFromMatchPattern matchPatterns
                         |> List.filter ((/=) Pretty.empty)
                         |> (\checks_ ->
-                                if List.isEmpty checks_ then
-                                    Pretty.empty
-
-                                else
-                                    Pretty.join (Pretty.string " && ") checks_
+                                Pretty.Extra.mapNonEmptyList checks_ (Pretty.join (Pretty.string " && "))
                            )
 
                 bindings =
                     List.map bindingFromMatchPattern matchPatterns
                         |> List.filter ((/=) Pretty.empty)
                         |> (\bindings_ ->
-                                if List.isEmpty bindings_ then
-                                    Pretty.empty
-
-                                else
-                                    Pretty.lines bindings_
+                                Pretty.Extra.mapNonEmptyList bindings_ Pretty.lines
                            )
             in
             Pretty.string "if "
@@ -906,22 +893,14 @@ fromCase ident ( pattern, guard, body ) =
                     List.map checkFromMatchPattern matchPatterns
                         |> List.filter ((/=) Pretty.empty)
                         |> (\checks_ ->
-                                if List.isEmpty checks_ then
-                                    Pretty.empty
-
-                                else
-                                    Pretty.join (Pretty.string " && ") checks_
+                                Pretty.Extra.mapNonEmptyList checks_ (Pretty.join (Pretty.string " && "))
                            )
 
                 bindings =
                     List.map bindingFromMatchPattern matchPatterns
                         |> List.filter ((/=) Pretty.empty)
                         |> (\bindings_ ->
-                                if List.isEmpty bindings_ then
-                                    Pretty.empty
-
-                                else
-                                    Pretty.lines bindings_
+                                Pretty.Extra.mapNonEmptyList bindings_ Pretty.lines
                            )
             in
             Pretty.string "if "
