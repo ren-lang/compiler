@@ -173,7 +173,7 @@ fromEnum : Visibility -> String -> List Variant -> Pretty.Doc t
 fromEnum visibility _ variants =
     variants
         |> List.map (fromVariant visibility)
-        |> Pretty.join Pretty.Extra.doubeLine
+        |> Pretty.join Pretty.Extra.doubleLine
 
 
 fromVariant : Visibility -> Variant -> Pretty.Doc t
@@ -365,9 +365,9 @@ fromBlock bindings expr =
         |> Pretty.a Pretty.line
         |> Pretty.a
             (List.map (Tuple.pair Private >> fromDeclaration) bindings
-                |> List.intersperse Pretty.Extra.doubeLine
+                |> List.intersperse Pretty.Extra.doubleLine
                 |> Pretty.join Pretty.empty
-                |> Pretty.a Pretty.Extra.doubeLine
+                |> Pretty.a Pretty.Extra.doubleLine
                 |> Pretty.a (Pretty.string "return ")
                 |> Pretty.a (fromExpression expr)
                 |> Pretty.indent 4
@@ -754,12 +754,7 @@ fromFunctionBody insideBlock body =
                     |> Pretty.braces
 
         _ ->
-            (if insideBlock then
-                Pretty.string "return "
-
-             else
-                Pretty.empty
-            )
+            Pretty.Extra.when insideBlock (Pretty.string "return ")
                 |> Pretty.a (fromExpression body)
 
 
@@ -787,7 +782,7 @@ fromMatch expr cases =
 matchBody : Pretty.Doc t -> List ( Pattern, Maybe Expression, Expression ) -> Pretty.Doc t
 matchBody ident cases =
     List.map (fromCase ident) cases
-        |> List.intersperse Pretty.Extra.doubeLine
+        |> List.intersperse Pretty.Extra.doubleLine
         |> Pretty.join Pretty.empty
 
 
@@ -803,22 +798,14 @@ fromCase ident ( pattern, guard, body ) =
                     List.map checkFromMatchPattern matchPatterns
                         |> List.filter ((/=) Pretty.empty)
                         |> (\checks_ ->
-                                if List.isEmpty checks_ then
-                                    Pretty.empty
-
-                                else
-                                    Pretty.join (Pretty.string " && ") checks_
+                                Pretty.Extra.mapNonEmptyList checks_ (Pretty.join (Pretty.string " && "))
                            )
 
                 bindings =
                     List.map bindingFromMatchPattern matchPatterns
                         |> List.filter ((/=) Pretty.empty)
                         |> (\bindings_ ->
-                                if List.isEmpty bindings_ then
-                                    Pretty.empty
-
-                                else
-                                    Pretty.lines bindings_
+                                Pretty.Extra.mapNonEmptyList bindings_ Pretty.lines
                            )
             in
             Pretty.string "if "
@@ -906,22 +893,14 @@ fromCase ident ( pattern, guard, body ) =
                     List.map checkFromMatchPattern matchPatterns
                         |> List.filter ((/=) Pretty.empty)
                         |> (\checks_ ->
-                                if List.isEmpty checks_ then
-                                    Pretty.empty
-
-                                else
-                                    Pretty.join (Pretty.string " && ") checks_
+                                Pretty.Extra.mapNonEmptyList checks_ (Pretty.join (Pretty.string " && "))
                            )
 
                 bindings =
                     List.map bindingFromMatchPattern matchPatterns
                         |> List.filter ((/=) Pretty.empty)
                         |> (\bindings_ ->
-                                if List.isEmpty bindings_ then
-                                    Pretty.empty
-
-                                else
-                                    Pretty.lines bindings_
+                                Pretty.Extra.mapNonEmptyList bindings_ Pretty.lines
                            )
             in
             Pretty.string "if "
