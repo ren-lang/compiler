@@ -739,6 +739,14 @@ fromLiteral literal =
 
 fromFunctionBody : Bool -> Expression -> Pretty.Doc t
 fromFunctionBody insideBlock body =
+    let
+        return =
+            if insideBlock then
+                Pretty.string "return "
+
+            else
+                Pretty.empty
+    in
     case body of
         Match (Identifier ident) cases ->
             if insideBlock then
@@ -753,14 +761,14 @@ fromFunctionBody insideBlock body =
                     |> Pretty.a Pretty.line
                     |> Pretty.braces
 
-        _ ->
-            (if insideBlock then
-                Pretty.string "return "
+        -- In JS arrow functions, object literals can be confused with the opening
+        -- of a block, and so they must be wrapped in parentheses to avoid the
+        -- ambiguity.
+        Literal ((Object _) as object) ->
+            return |> Pretty.a (Pretty.parens <| fromLiteral object)
 
-             else
-                Pretty.empty
-            )
-                |> Pretty.a (fromExpression body)
+        _ ->
+            return |> Pretty.a (fromExpression body)
 
 
 
@@ -854,23 +862,11 @@ fromCase ident ( pattern, guard, body ) =
                 |> Pretty.a (Pretty.char '}')
 
         Name name ->
-            Pretty.string "if "
-                |> Pretty.a Pretty.space
-                |> Pretty.a
-                    (ident
-                        |> Pretty.a (Pretty.string " == ")
-                        |> Pretty.a (Pretty.string name)
-                        |> Pretty.parens
-                    )
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.char '{')
-                |> Pretty.a Pretty.line
-                |> Pretty.a
-                    (Pretty.string "var "
-                        |> Pretty.a (Pretty.string name)
-                        |> Pretty.a (Pretty.string " = $")
-                        |> Pretty.indent 4
-                    )
+            (Pretty.string "var "
+                |> Pretty.a (Pretty.string name)
+                |> Pretty.a (Pretty.string " = $")
+                |> Pretty.indent 4
+            )
                 |> Pretty.a Pretty.line
                 |> Pretty.a
                     (case guard of
@@ -1023,7 +1019,7 @@ fromCase ident ( pattern, guard, body ) =
                     (Pretty.string "typeof "
                         |> Pretty.a ident
                         |> Pretty.a (Pretty.string " == ")
-                        |> Pretty.a (Pretty.string typename)
+                        |> Pretty.a (Pretty.Extra.singleQuotes typename)
                         |> Pretty.parens
                     )
                 |> Pretty.a Pretty.space
