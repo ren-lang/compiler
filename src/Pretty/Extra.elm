@@ -14,6 +14,22 @@ singleQuotes s =
         |> Pretty.surround (Pretty.char '\'') (Pretty.char '\'')
 
 
-doubeLine : Pretty.Doc t
-doubeLine =
+doubleLine : Pretty.Doc t
+doubleLine =
     Pretty.line |> Pretty.a Pretty.line
+
+
+when : Bool -> Pretty.Doc t -> Pretty.Doc t
+when condition doc =
+    if condition then
+        doc
+    else
+        Pretty.empty
+
+
+mapNonEmptyList : List a -> (List a -> Pretty.Doc t) -> Pretty.Doc t
+mapNonEmptyList list mapper =
+    if List.isEmpty list then
+        Pretty.empty
+    else
+        mapper list
