@@ -1,997 +1,950 @@
-module Ren.Compiler.Parse exposing
-    ( moduleFromSource, moduleParser
-    , declarationFromSource, declarationParser
-    , expressionFromSource, expressionParser
-    )
-
-{-|
-
-@docs moduleFromSource, moduleParser
-@docs declarationFromSource, declarationParser
-@docs expressionFromSource, expressionParser
-
--}
+module Ren.Compiler.Parse exposing (..)
 
 -- IMPORTS ---------------------------------------------------------------------
 
-import Dict
-import Parser exposing ((|.), (|=), Parser)
-import Parser.Extra
-import Pratt
-import Ren.Language exposing (..)
-import Set
+import Data.Either
+import Parser.Advanced as Parser exposing ((|.), (|=))
+import Pratt.Advanced as Pratt
+import Ren.AST.Expr as Expr exposing (Expr(..), ExprF(..))
+import Set exposing (Set)
+
+
+run : String -> Result (List (Parser.DeadEnd Context Error)) (Expr Location)
+run =
+    Parser.run expression
 
 
 
--- PARSING MODULES -------------------------------------------------------------
-
-
-{-| -}
-moduleFromSource : String -> Result (List Parser.DeadEnd) Module
-moduleFromSource =
-    Parser.run moduleParser
-
-
-{-| -}
-moduleParser : Parser Module
-moduleParser =
-    Parser.succeed Module
-        |. Parser.Extra.ignorables
-        |= Parser.loop []
-            (\imports_ ->
-                Parser.oneOf
-                    [ Parser.succeed (\i -> i :: imports_)
-                        |. Parser.Extra.ignorables
-                        |= importParser
-                        |. Parser.Extra.ignorables
-                        |> Parser.map Parser.Loop
-                    , Parser.succeed (List.reverse imports_)
-                        |> Parser.map Parser.Done
-                    ]
-            )
-        |. Parser.Extra.ignorables
-        |= Parser.loop []
-            (\declarations ->
-                Parser.oneOf
-                    [ Parser.succeed (\visibility declaration -> ( visibility, declaration ) :: declarations)
-                        |. Parser.Extra.ignorables
-                        |= visibilityParser
-                        |. Parser.spaces
-                        |= declarationParser
-                        |. Parser.Extra.ignorables
-                        |> Parser.map Parser.Loop
-                    , Parser.succeed (List.reverse declarations)
-                        |> Parser.map Parser.Done
-                    ]
-            )
-        |. Parser.Extra.ignorables
-        |. Parser.end
+-- TYPES -----------------------------------------------------------------------
 
 
 {-| -}
-importParser : Parser Import
-importParser =
-    Parser.succeed Import
-        |. Parser.keyword "import"
-        |. Parser.Extra.spaces
-        |= Parser.oneOf
-            [ Parser.Extra.string '\''
-            , Parser.Extra.string '"'
+type alias Parser a =
+    Parser.Parser Context Error a
+
+
+{-| -}
+type alias Config a =
+    Pratt.Config Context Error a
+
+
+{-| -}
+type Context
+    = InExpr
+
+
+{-| -}
+type Error
+    = ExpectingKeyword String
+    | ExpectingSymbol String
+    | ExpectingOperator String
+    | ExpectingTypePattern (List String)
+    | ExpectingChar
+    | UnexpextedChar Char
+    | ExpectingNumber
+    | ExpectingEOF
+    | ExpectingWhitespace
+    | ExpectingCamelCase
+    | ExpectingCapitalCase
+    | InternalError String
+
+
+{-| -}
+type alias Location =
+    { start : ( Int, Int )
+    , end : ( Int, Int )
+    }
+
+
+
+--
+
+
+{-| Takes a parser for an unwrapped expression and then attaches some location
+metadata to it.
+-}
+locateExpr : Parser (ExprF (Expr Location)) -> Parser (Expr Location)
+locateExpr parser =
+    Parser.succeed (\start expr end -> Expr (Location start end) expr)
+        |= Parser.getPosition
+        |= parser
+        |= Parser.getPosition
+
+
+
+--                                                                            --
+-- EXPRESSION PARSERS ----------------------------------------------------------
+--                                                                            --
+
+
+expression : Parser (Expr Location)
+expression =
+    Pratt.expression
+        { oneOf =
+            -- These parsers start with a keyword
+            [ lambda
+            , conditional
+            , match
+
+            -- These parsers parse sub expressions
+            --, annotation
+            , application
+            , Pratt.literal access
+
+            --
+            , block
+            , literal
+            , Pratt.literal (Parser.lazy (\_ -> subexpression))
+            , Pratt.literal identifier
             ]
-        |. Parser.Extra.spaces
-        |= Parser.oneOf
-            [ Parser.succeed identity
-                |. Parser.keyword "as"
-                |. Parser.Extra.spaces
-                |= importNamespaceParser
-            , Parser.succeed []
+        , andThenOneOf =
+            let
+                -- This cursed dummy location is necessary because we need the
+                -- type of the infix expression to be the same as its sub-expressions
+                -- but we can't get the location start/end of the parser until
+                -- we've created the parser...
+                --
+                -- It's cursed but it works.
+                dummyLocation =
+                    Location ( 0, 0 ) ( 0, 0 )
+
+                -- Helper parser for handling infix operator parsing. Takes the
+                -- required symbol as a string helpfully wraps it up in a the
+                -- `Parser.symbol` parser.
+                infix_ parser precedence sym op =
+                    parser precedence
+                        (operator sym)
+                        ((<<) (Expr.wrap dummyLocation) << Infix op)
+                        >> Tuple.mapSecond locateInfix
+
+                -- This annotates a parsed infix expression with start/end location
+                -- data by taking the start of the left operand and the end of
+                -- the right one.
+                --
+                -- Of course, we have to pattern match on the parsed expression
+                -- even though we know it will be an Infix one, so we throw an
+                -- internal error if somehow things go wrong.
+                locateInfix parser expr =
+                    Parser.andThen
+                        (\(Expr _ e) ->
+                            case e of
+                                Infix _ (Expr { start } _) (Expr { end } _) ->
+                                    Expr (Location start end) e
+                                        |> Parser.succeed
+
+                                _ ->
+                                    InternalError "Parsed something other than an `Infix` expression in `andThenOneOf`"
+                                        |> Parser.problem
+                        )
+                        (parser expr)
+            in
+            [ infix_ Pratt.infixLeft 1 "|>" Expr.Pipe
+            , infix_ Pratt.infixRight 9 ">>" Expr.Compose
+            , infix_ Pratt.infixLeft 4 "==" Expr.Eq
+            , infix_ Pratt.infixLeft 4 "!=" Expr.NotEq
+            , infix_ Pratt.infixLeft 4 "<=" Expr.Lte
+            , infix_ Pratt.infixLeft 4 ">=" Expr.Lte
+            , infix_ Pratt.infixRight 3 "&&" Expr.And
+            , infix_ Pratt.infixRight 2 "||" Expr.Or
+            , infix_ Pratt.infixRight 5 "::" Expr.Cons
+            , infix_ Pratt.infixRight 5 "++" Expr.Join
+
+            -- ONE CHARACTER OPERATORS
+            , infix_ Pratt.infixLeft 4 "<" Expr.Lt
+            , infix_ Pratt.infixLeft 4 ">" Expr.Gt
+            , infix_ Pratt.infixLeft 6 "+" Expr.Add
+            , infix_ Pratt.infixLeft 6 "-" Expr.Sub
+            , infix_ Pratt.infixLeft 7 "*" Expr.Mul
+            , infix_ Pratt.infixRight 7 "^" Expr.Pow
+            , infix_ Pratt.infixRight 7 "%" Expr.Mod
             ]
-        |. Parser.Extra.spaces
-        |= Parser.oneOf
-            [ Parser.succeed identity
-                |. Parser.keyword "exposing"
-                |. Parser.Extra.spaces
-                |= Parser.sequence
-                    { start = "{"
-                    , separator = ","
-                    , end = "}"
-                    , item =
-                        Parser.variable
-                            { start = \c -> Char.isLower c || c == '#'
-                            , inner = Char.isAlphaNum
-                            , reserved = Ren.Language.keywords
-                            }
-                    , spaces = Parser.spaces
-                    , trailing = Parser.Forbidden
-                    }
-            , Parser.succeed []
-            ]
+        , spaces = Parser.spaces
+        }
+        |> Parser.inContext InExpr
 
 
-{-| -}
-importNamespaceParser : Parser (List String)
-importNamespaceParser =
-    Parser.succeed (::)
-        |= Parser.variable
-            { start = Char.isUpper
-            , inner = Char.isAlphaNum
-            , reserved = Set.empty
-            }
-        |= Parser.loop []
-            (\namespaces ->
-                Parser.oneOf
-                    [ Parser.succeed (\ns -> ns :: namespaces)
-                        |. Parser.symbol "."
-                        |= Parser.variable
-                            { start = Char.isUpper
-                            , inner = Char.isAlphaNum
-                            , reserved = Set.empty
-                            }
-                        |> Parser.map Parser.Loop
-                    , Parser.succeed (List.reverse namespaces)
-                        |. Parser.oneOf
-                            [ Parser.token " "
-                            , Parser.token "\n"
-                            , Parser.end
+subexpression : Parser (Expr Location)
+subexpression =
+    Parser.succeed identity
+        |. symbol "("
+        |. Parser.spaces
+        |= expression
+        |. Parser.spaces
+        |. symbol ")"
+
+
+parenthesised : Parser (Expr Location)
+parenthesised =
+    Parser.oneOf
+        [ -- These are all the expressions that can be unambiguously parsed
+          -- without parentheses in contexts where parentheses might be necessary.
+          Pratt.expression
+            { oneOf =
+                [ block
+                , \config ->
+                    Parser.succeed Literal
+                        |= Parser.oneOf
+                            [ array config
+                            , boolean
+                            , number
+                            , record config
+                            , string
+                            , template config
+                            , undefined
                             ]
+                        |> locateExpr
+                , Pratt.literal identifier
+                ]
+            , andThenOneOf = []
+            , spaces = Parser.spaces
+            }
+            |> Parser.inContext InExpr
+        , Parser.lazy (\_ -> subexpression)
+        ]
+
+
+
+-- EXPRESSION PARSERS: ACCESSORS -----------------------------------------------
+
+
+access : Parser (Expr Location)
+access =
+    Parser.succeed (\expr accessor accessors -> Access expr (accessor :: accessors))
+        |= Parser.lazy (\_ -> parenthesised)
+        |. Parser.spaces
+        |. symbol "."
+        |. Parser.commit ()
+        |= lowercaseName Set.empty
+        |. Parser.spaces
+        |= Parser.loop []
+            (\accessors ->
+                Parser.oneOf
+                    [ Parser.succeed (\accessor -> accessor :: accessors)
+                        |. symbol "."
+                        |= lowercaseName Set.empty
+                        |> Parser.map Parser.Loop
+                    , Parser.succeed ()
+                        |> Parser.map (\_ -> List.reverse accessors)
                         |> Parser.map Parser.Done
                     ]
             )
-
-
-{-| -}
-visibilityParser : Parser Visibility
-visibilityParser =
-    Parser.oneOf
-        [ Parser.succeed Public
-            |. Parser.keyword "pub"
-        , Parser.succeed Private
-        ]
+        |> Parser.backtrackable
+        |> locateExpr
 
 
 
--- PARSING DECLARATIONS --------------------------------------------------------
+-- EXPRESSION PARSERS: APPLICATION ---------------------------------------------
 
 
-{-| -}
-declarationFromSource : String -> Result (List Parser.DeadEnd) Declaration
-declarationFromSource =
-    Parser.run declarationParser
-
-
-{-| -}
-declarationParser : Parser Declaration
-declarationParser =
-    Parser.oneOf
-        [ functionParser
-        , variableParser
-        , enumParser
-        ]
-
-
-{-| -}
-functionParser : Parser Declaration
-functionParser =
-    Parser.succeed Function
-        |. Parser.keyword "fun"
-        |. Parser.Extra.spaces
-        |= Parser.variable
-            { start = Char.isLower
-            , inner = Char.isAlphaNum
-            , reserved = Ren.Language.keywords
-            }
-        |. Parser.Extra.spaces
-        |. Parser.symbol "="
-        |. Parser.Extra.spaces
+application : Config (Expr Location) -> Parser (Expr Location)
+application config =
+    Parser.succeed (\f arg args -> Application f (arg :: args))
+        |= Parser.oneOf
+            [ access
+            , block config
+            , Parser.lazy (\_ -> subexpression)
+            , identifier
+            ]
+        |. Parser.spaces
+        |= parenthesised
+        |. Parser.commit ()
+        |. Parser.spaces
         |= Parser.loop []
             (\args ->
                 Parser.oneOf
                     [ Parser.succeed (\arg -> arg :: args)
-                        |= patternParser
-                        |. Parser.Extra.spaces
+                        |= parenthesised
+                        |. Parser.spaces
                         |> Parser.map Parser.Loop
-                    , Parser.succeed (List.reverse args)
+                    , Parser.succeed ()
+                        |> Parser.map (\_ -> List.reverse args)
                         |> Parser.map Parser.Done
                     ]
             )
-        |. Parser.Extra.spaces
-        |. Parser.symbol "=>"
-        |. Parser.Extra.ignorables
-        |= expressionParser
         |> Parser.backtrackable
+        |> locateExpr
 
 
-{-| -}
-variableParser : Parser Declaration
-variableParser =
-    Parser.succeed Variable
-        |. Parser.keyword "let"
-        |. Parser.Extra.spaces
-        |= patternParser
-        |. Parser.Extra.spaces
-        |. Parser.symbol "="
-        |. Parser.Extra.ignorables
-        |= expressionParser
-        |> Parser.backtrackable
+
+-- EXPRESSION PARSERS: BLOCKS --------------------------------------------------
 
 
-{-| -}
-enumParser : Parser Declaration
-enumParser =
-    Parser.succeed Enum
-        |. Parser.keyword "enum"
+block : Config (Expr Location) -> Parser (Expr Location)
+block config =
+    Parser.succeed Block
+        |. symbol "{"
         |. Parser.spaces
-        |= Parser.variable
-            { start = Char.isUpper
-            , inner = Char.isAlphaNum
-            , reserved = Set.empty
+        |= Parser.loop []
+            (\bindings ->
+                Parser.oneOf
+                    [ Parser.succeed (\b -> b :: bindings)
+                        |= binding config
+                        |. Parser.commit ()
+                        |. Parser.spaces
+                        |> Parser.map Parser.Loop
+                    , Parser.succeed ()
+                        |> Parser.map (\_ -> List.reverse bindings)
+                        |> Parser.map Parser.Done
+                    ]
+            )
+        |. Parser.spaces
+        |. keyword "ret"
+        |. Parser.commit ()
+        |= Pratt.subExpression 0 config
+        |. Parser.spaces
+        |. symbol "}"
+        |> Parser.backtrackable
+        |> locateExpr
+
+
+binding : Config (Expr Location) -> Parser ( String, Expr Location )
+binding config =
+    Parser.succeed Tuple.pair
+        |. keyword "let"
+        |. Parser.commit ()
+        |. Parser.spaces
+        |= lowercaseName keywords
+        |. Parser.spaces
+        |. symbol "="
+        |. Parser.spaces
+        |= Pratt.subExpression 0 config
+        |> Parser.backtrackable
+
+
+
+-- EXPRESSION PARSERS: CONDITIONALS --------------------------------------------
+
+
+conditional : Config (Expr Location) -> Parser (Expr Location)
+conditional config =
+    Parser.succeed Conditional
+        |. keyword "if"
+        |. Parser.commit ()
+        |. Parser.spaces
+        |= Pratt.subExpression 0 config
+        |. Parser.spaces
+        |. keyword "then"
+        |. Parser.spaces
+        |= Pratt.subExpression 0 config
+        |. Parser.spaces
+        |. keyword "else"
+        |. Parser.spaces
+        |= Pratt.subExpression 0 config
+        |> Parser.backtrackable
+        |> locateExpr
+
+
+
+-- EXPRESSION PARSERS: IDENTIFIERS ---------------------------------------------
+
+
+identifier : Parser (Expr Location)
+identifier =
+    Parser.succeed Identifier
+        |= Parser.oneOf
+            [ placeholder
+            , local
+            , scoped
+            ]
+        |> locateExpr
+
+
+placeholder : Parser Expr.Identifier
+placeholder =
+    Parser.succeed Expr.Placeholder
+        |. symbol "_"
+        |= Parser.oneOf
+            [ Parser.succeed Just
+                |= lowercaseName keywords
+            , Parser.succeed Nothing
+            ]
+
+
+local : Parser Expr.Identifier
+local =
+    Parser.succeed Expr.Local
+        |= lowercaseName keywords
+
+
+scoped : Parser Expr.Identifier
+scoped =
+    Parser.succeed Expr.Scoped
+        |= uppercaseName Set.empty
+        |. symbol "."
+        |= Parser.oneOf
+            [ Parser.lazy (\_ -> scoped)
+            , local
+            ]
+
+
+
+-- EXPRESSION PARSERS: LAMBDAS -------------------------------------------------
+
+
+lambda : Config (Expr Location) -> Parser (Expr Location)
+lambda config =
+    Parser.succeed (\arg args body -> Lambda (arg :: args) body)
+        |. keyword "fun"
+        |. Parser.commit ()
+        |. Parser.spaces
+        |= pattern
+        |. Parser.spaces
+        |= Parser.loop []
+            (\args ->
+                Parser.oneOf
+                    [ Parser.succeed (\arg -> arg :: args)
+                        |= pattern
+                        |. Parser.spaces
+                        |> Parser.map Parser.Loop
+                    , Parser.succeed ()
+                        |> Parser.map (\_ -> List.reverse args)
+                        |> Parser.map Parser.Done
+                    ]
+            )
+        |. Parser.spaces
+        |. symbol "=>"
+        |. Parser.spaces
+        |= Pratt.subExpression 0 config
+        |> Parser.backtrackable
+        |> locateExpr
+
+
+
+-- EXPRESSION PARSERS: LITERALS ------------------------------------------------
+
+
+literal : Config (Expr Location) -> Parser (Expr Location)
+literal config =
+    Parser.succeed Literal
+        |= Parser.oneOf
+            [ array config
+            , boolean
+            , number
+            , record config
+            , string
+            , template config
+            , undefined
+            , variant
+            ]
+        |> locateExpr
+
+
+array : Config (Expr Location) -> Parser (Expr.Literal (Expr Location))
+array config =
+    Parser.succeed Expr.Array
+        |= Parser.sequence
+            { start = Parser.Token "[" <| ExpectingSymbol "["
+            , separator = Parser.Token "," <| ExpectingSymbol ","
+            , end = Parser.Token "]" <| ExpectingSymbol "]"
+            , item = Pratt.subExpression 0 config
+            , spaces = Parser.spaces
+            , trailing = Parser.Forbidden
             }
-        |. Parser.Extra.ignorables
+
+
+boolean : Parser (Expr.Literal expr)
+boolean =
+    Parser.succeed Expr.Boolean
+        |= Parser.oneOf
+            [ Parser.succeed True
+                |. Parser.keyword (Parser.Token "true" <| ExpectingKeyword "true")
+            , Parser.succeed False
+                |. Parser.keyword (Parser.Token "false" <| ExpectingKeyword "false")
+            ]
+
+
+number : Parser (Expr.Literal expr)
+number =
+    let
+        numberConfig =
+            { int = Ok Basics.toFloat
+            , hex = Ok Basics.toFloat
+            , octal = Ok Basics.toFloat
+            , binary = Ok Basics.toFloat
+            , float = Ok identity
+            , invalid = ExpectingNumber
+            , expecting = ExpectingNumber
+            }
+    in
+    Parser.succeed Expr.Number
+        |= Parser.oneOf
+            [ Parser.succeed Basics.negate
+                |. Parser.symbol (Parser.Token "-" <| ExpectingSymbol "-")
+                |= Parser.number numberConfig
+            , Parser.number numberConfig
+            ]
+        |. Parser.oneOf
+            [ Parser.chompIf Char.isAlpha ExpectingNumber
+                |> Parser.andThen (\_ -> Parser.problem ExpectingNumber)
+            , Parser.succeed ()
+            ]
+
+
+record : Config (Expr Location) -> Parser (Expr.Literal (Expr Location))
+record config =
+    Parser.succeed Expr.Record
+        |= Parser.sequence
+            { start = Parser.Token "{" <| ExpectingSymbol "{"
+            , separator = Parser.Token "," <| ExpectingSymbol ","
+            , end = Parser.Token "}" <| ExpectingSymbol "}"
+            , item =
+                Parser.oneOf
+                    [ Parser.succeed Tuple.pair
+                        |= lowercaseName keywords
+                        |. Parser.spaces
+                        |. Parser.symbol (Parser.Token ":" <| ExpectingSymbol ":")
+                        |. Parser.commit ()
+                        |. Parser.spaces
+                        |= Pratt.subExpression 0 config
+                        |> Parser.backtrackable
+
+                    -- We support record literal shorthand like JavaScript that
+                    -- lets you write `{ foo }` as a shorthand for writing
+                    -- `{ foo: foo }`. Because our expressions are annotated with
+                    -- their source location, we do some gymnastics to get that
+                    -- location data before we construct the identifier.
+                    , Parser.succeed (\start key end -> ( Location start end, key ))
+                        |= Parser.getPosition
+                        |= lowercaseName keywords
+                        |= Parser.getPosition
+                        |> Parser.map (\( loc, key ) -> ( key, Expr loc (Identifier (Expr.Local key)) ))
+                    ]
+            , spaces = Parser.spaces
+            , trailing = Parser.Forbidden
+            }
+        |> Parser.backtrackable
+
+
+string : Parser (Expr.Literal expr)
+string =
+    Parser.succeed Expr.String
+        |= quotedString '"'
+
+
+template : Config (Expr Location) -> Parser (Expr.Literal (Expr Location))
+template config =
+    let
+        char =
+            Parser.oneOf
+                [ Parser.succeed identity
+                    |. Parser.token (Parser.Token "\\" <| ExpectingSymbol "\\")
+                    |= Parser.oneOf
+                        [ Parser.map (\_ -> '\\') (Parser.token (Parser.Token "\\" <| ExpectingSymbol "\\"))
+                        , Parser.map (\_ -> '"') (Parser.token (Parser.Token "\"" <| ExpectingSymbol "\"")) -- " (elm-vscode workaround)
+                        , Parser.map (\_ -> '\'') (Parser.token (Parser.Token "'" <| ExpectingSymbol "'"))
+                        , Parser.map (\_ -> '\n') (Parser.token (Parser.Token "n" <| ExpectingSymbol "n"))
+                        , Parser.map (\_ -> '\t') (Parser.token (Parser.Token "t" <| ExpectingSymbol "t"))
+                        , Parser.map (\_ -> '\u{000D}') (Parser.token (Parser.Token "r" <| ExpectingSymbol "r"))
+                        ]
+                , Parser.token (Parser.Token "`" <| ExpectingSymbol "`")
+                    |> Parser.andThen (\_ -> Parser.problem <| UnexpextedChar '`')
+                , Parser.chompIf ((/=) '\n') ExpectingChar
+                    |> Parser.getChompedString
+                    |> Parser.andThen
+                        (String.uncons
+                            >> Maybe.map (Tuple.first >> Parser.succeed)
+                            >> Maybe.withDefault (Parser.problem <| InternalError "Multiple characters chomped in `parseChar`")
+                        )
+                ]
+
+        -- Each template segment should either be a String or an expression to
+        -- be interpolated. Right now instead of String segments we have Char
+        -- segments, so we use this function in a fold to join all the characters
+        -- into a strings.
+        joinSegments segment segments =
+            case ( segment, segments ) of
+                ( Data.Either.Left c, (Data.Either.Left s) :: rest ) ->
+                    Data.Either.Left (String.cons c s) :: rest
+
+                ( Data.Either.Left c, rest ) ->
+                    Data.Either.Left (String.fromChar c) :: rest
+
+                ( Data.Either.Right e, rest ) ->
+                    Data.Either.Right e :: rest
+    in
+    Parser.succeed (List.foldl joinSegments [] >> Expr.Template)
+        |. Parser.symbol (Parser.Token "`" <| ExpectingSymbol "`")
+        |= Parser.loop []
+            (\segments ->
+                Parser.oneOf
+                    [ Parser.succeed (\expr -> Data.Either.Right expr :: segments)
+                        |. Parser.symbol (Parser.Token "${" <| ExpectingSymbol "${")
+                        |= Pratt.subExpression 0 config
+                        |. Parser.symbol (Parser.Token "}" <| ExpectingSymbol "}")
+                        |> Parser.map Parser.Loop
+                    , Parser.succeed (\c -> Data.Either.Left c :: segments)
+                        |= char
+                        |> Parser.backtrackable
+                        |> Parser.map Parser.Loop
+                    , Parser.succeed segments
+                        |> Parser.map Parser.Done
+                    ]
+            )
+        |. Parser.symbol (Parser.Token "`" <| ExpectingSymbol "`")
+
+
+undefined : Parser (Expr.Literal expr)
+undefined =
+    Parser.succeed Expr.Undefined
+        |. symbol "()"
+
+
+variant : Parser (Expr.Literal (Expr Location))
+variant =
+    Parser.succeed Expr.Variant
+        |. symbol "#"
+        |= lowercaseName Set.empty
+        |. Parser.spaces
+        |= Parser.loop []
+            (\exprs ->
+                Parser.oneOf
+                    [ Parser.succeed (\expr -> expr :: exprs)
+                        |= parenthesised
+                        |. Parser.spaces
+                        |> Parser.map Parser.Loop
+                    , Parser.succeed ()
+                        |> Parser.map (\_ -> List.reverse exprs)
+                        |> Parser.map Parser.Done
+                    ]
+            )
+
+
+
+-- EXPRESSION PARSERS: MATCHES -------------------------------------------------
+
+
+match : Config (Expr Location) -> Parser (Expr Location)
+match config =
+    Parser.succeed Match
+        |. keyword "where"
+        |. Parser.commit ()
+        |. Parser.spaces
+        |= Pratt.subExpression 0 config
+        |. Parser.spaces
+        |= Parser.loop []
+            (\cases ->
+                Parser.oneOf
+                    [ Parser.succeed (\pat guard body -> ( pat, guard, body ) :: cases)
+                        |. keyword "is"
+                        |. Parser.spaces
+                        |= pattern
+                        |. Parser.spaces
+                        |= Parser.oneOf
+                            [ Parser.succeed Just
+                                |. keyword "if"
+                                |. Parser.spaces
+                                |= Pratt.subExpression 0 config
+                            , Parser.succeed Nothing
+                            ]
+                        |. Parser.spaces
+                        |. symbol "=>"
+                        |. Parser.spaces
+                        |= Pratt.subExpression 0 config
+                        |> Parser.map Parser.Loop
+                    , Parser.succeed ()
+                        |> Parser.map (\_ -> List.reverse cases)
+                        |> Parser.map Parser.Done
+                    ]
+            )
+        |> Parser.backtrackable
+        |> locateExpr
+
+
+
+--                                                                            --
+-- PATTERN PARSERS -------------------------------------------------------------
+--                                                                            --
+
+
+pattern : Parser Expr.Pattern
+pattern =
+    Parser.oneOf
+        [ arrayDestructure
+        , literalPattern
+        , name
+        , recordDestructure
+        , typeof
+        , variantDestructure
+        , wildcard
+        ]
+
+
+arrayDestructure : Parser Expr.Pattern
+arrayDestructure =
+    Parser.succeed Expr.ArrayDestructure
+        |. symbol "["
+        |. Parser.commit ()
+        |. Parser.spaces
         |= Parser.oneOf
             [ Parser.succeed (::)
-                |. Parser.symbol "="
+                |= Parser.lazy (\_ -> pattern)
                 |. Parser.spaces
-                |= variantParser
-                |. Parser.Extra.ignorables
                 |= Parser.loop []
-                    (\variants ->
+                    (\patterns ->
                         Parser.oneOf
-                            [ Parser.succeed (\variant -> variant :: variants)
-                                |. Parser.symbol "|"
+                            [ Parser.succeed (\pat -> pat :: patterns)
+                                |. symbol ","
                                 |. Parser.spaces
-                                |= variantParser
-                                |. Parser.Extra.ignorables
+                                |= Parser.lazy (\_ -> pattern)
+                                |> Parser.backtrackable
                                 |> Parser.map Parser.Loop
-                            , Parser.succeed (List.reverse variants)
+                            , Parser.succeed (\pat -> pat :: patterns)
+                                |. symbol ","
+                                |. Parser.spaces
+                                |= spread
+                                |> Parser.map List.reverse
+                                |> Parser.map Parser.Done
+                            , Parser.succeed ()
+                                |> Parser.map (\_ -> List.reverse patterns)
                                 |> Parser.map Parser.Done
                             ]
                     )
             , Parser.succeed []
             ]
-
-
-{-| -}
-variantParser : Parser Variant
-variantParser =
-    Parser.succeed Variant
-        |= Parser.variable
-            { start = (==) '#'
-            , inner = Char.isAlphaNum
-            , reserved = Set.empty
-            }
         |. Parser.spaces
-        |= Parser.loop 0
-            (\slots ->
-                Parser.oneOf
-                    [ Parser.succeed (slots + 1)
-                        |. Parser.variable
-                            { start = (==) '_'
-                            , inner = Char.isAlphaNum
-                            , reserved = Set.empty
-                            }
-                        |. Parser.Extra.ignorables
-                        |> Parser.map Parser.Loop
-                    , Parser.succeed slots
-                        |> Parser.map Parser.Done
-                    ]
-            )
-
-
-
--- PARSING EXPRESSIONS ---------------------------------------------------------
-
-
-{-| Parse an `Expression` from some Ren source code. It doesn't seem all that
-likely you'll need to use this over `Declaration.fromSource` or `Module.fromSource`
-but just in case it is, here you go.
--}
-expressionFromSource : String -> Result (List Parser.DeadEnd) Expression
-expressionFromSource =
-    Parser.run expressionParser
-
-
-{-| The parse used in `fromSource`. It's unclear why you'd need this, but it's
-exposed just in case you do.
--}
-expressionParser : Parser Expression
-expressionParser =
-    Parser.succeed identity
-        |. Parser.Extra.ignorables
-        |= Pratt.expression
-            { oneOf =
-                [ Pratt.literal blockParser
-                , conditionalParser
-                , applicationParser
-                , accessParser
-                , lambdaParser
-                , matchParser
-                , Pratt.literal literalParser
-                , parenthesisedExpressionParser
-                , Pratt.literal identifierParser
-                ]
-            , andThenOneOf =
-                [ Infix Pipe |> Pratt.infixLeft 1 (Parser.symbol "|>")
-                , Infix Compose |> Pratt.infixRight 9 (Parser.symbol ">>")
-                , Infix Eq |> Pratt.infixLeft 4 (Parser.symbol "==")
-                , Infix NotEq |> Pratt.infixLeft 4 (Parser.symbol "!=")
-                , Infix Lte |> Pratt.infixLeft 4 (Parser.symbol "<=")
-                , Infix Gte |> Pratt.infixLeft 4 (Parser.symbol ">=")
-                , Infix And |> Pratt.infixRight 3 (Parser.symbol "&&")
-                , Infix Or |> Pratt.infixRight 2 (Parser.symbol "||")
-                , Infix Cons |> Pratt.infixRight 5 (Parser.symbol "::")
-                , Infix Join |> Pratt.infixRight 5 (Parser.symbol "++")
-
-                -- ONE CHARACTER OPERATORS
-                , Infix Lt |> Pratt.infixLeft 4 (Parser.symbol "<")
-                , Infix Gt |> Pratt.infixLeft 4 (Parser.symbol ">")
-                , Infix Add |> Pratt.infixLeft 6 (Parser.symbol "+")
-                , Infix Sub |> Pratt.infixLeft 6 (Parser.symbol "-")
-                , Infix Mul |> Pratt.infixLeft 7 (Parser.symbol "*")
-                , Infix Div |> Pratt.infixLeft 7 (Parser.symbol "/")
-                , Infix Pow |> Pratt.infixRight 8 (Parser.symbol "^")
-                , Infix Mod |> Pratt.infixRight 8 (Parser.symbol "%")
-                ]
-            , spaces = Parser.Extra.ignorables
-            }
-
-
-{-| -}
-parenthesisedExpressionParser : Pratt.Config Expression -> Parser Expression
-parenthesisedExpressionParser prattConfig =
-    Parser.succeed identity
-        |. Parser.symbol "("
-        |. Parser.Extra.ignorables
-        |= Pratt.subExpression 0 prattConfig
-        |. Parser.Extra.ignorables
-        |. Parser.symbol ")"
+        |. symbol "]"
         |> Parser.backtrackable
 
 
-{-| -}
-lazyExpressionParser : Parser Expression
-lazyExpressionParser =
-    Parser.lazy (\_ -> expressionParser)
-
-
-
--- PARSING EXPRESSIONS: ACCESS -------------------------------------------------
-
-
-accessParser : Pratt.Config Expression -> Parser Expression
-accessParser prattConfig =
-    Parser.succeed (\expr accessor accessors -> Access expr (accessor :: accessors))
+literalPattern : Parser Expr.Pattern
+literalPattern =
+    Parser.succeed Expr.LiteralPattern
         |= Parser.oneOf
-            [ literalParser
-            , parenthesisedExpressionParser prattConfig
-            , identifierParser
-            ]
-        |= accessorParser
-        |= Parser.loop []
-            (\accessors ->
-                Parser.oneOf
-                    [ Parser.succeed (\accessor -> accessor :: accessors)
-                        |= accessorParser
-                        |> Parser.map Parser.Loop
-                    , Parser.succeed (List.reverse accessors)
-                        |> Parser.map Parser.Done
-                    ]
-            )
-        |> Parser.backtrackable
-
-
-{-| -}
-accessorParser : Parser Accessor
-accessorParser =
-    Parser.oneOf
-        [ computedAccessorParser
-        , fixedAccessorParser
-        ]
-
-
-{-| -}
-computedAccessorParser : Parser Accessor
-computedAccessorParser =
-    Parser.succeed Computed
-        |. Parser.symbol "["
-        |. Parser.Extra.ignorables
-        |= lazyExpressionParser
-        |. Parser.Extra.ignorables
-        |. Parser.symbol "]"
-
-
-{-| -}
-fixedAccessorParser : Parser Accessor
-fixedAccessorParser =
-    Parser.succeed Fixed
-        |. Parser.symbol "."
-        |= Parser.variable
-            { start = Char.isLower
-            , inner = Char.isAlphaNum
-            , reserved = Set.empty
-            }
-
-
-
--- PARSING EXPRESSIONS: APPLICATION --------------------------------------------
-
-
-{-| -}
-applicationParser : Pratt.Config Expression -> Parser Expression
-applicationParser prattConfig =
-    Parser.succeed (\function arg args -> Application function (arg :: args))
-        |= Parser.oneOf
-            [ accessParser prattConfig
-            , parenthesisedExpressionParser prattConfig
-            , identifierParser
-            ]
-        |. Parser.Extra.ignorables
-        |= applicationArgumentParser prattConfig
-        |. Parser.Extra.ignorables
-        |= Parser.loop []
-            (\args ->
-                Parser.oneOf
-                    [ Parser.succeed (\arg -> arg :: args)
-                        |= applicationArgumentParser prattConfig
-                        |. Parser.Extra.ignorables
-                        |> Parser.map Parser.Loop
-                    , Parser.succeed (List.reverse args)
-                        |> Parser.map Parser.Done
-                    ]
-            )
-        |> Parser.backtrackable
-
-
-{-| -}
-applicationArgumentParser : Pratt.Config Expression -> Parser Expression
-applicationArgumentParser prattConfig =
-    Parser.oneOf
-        [ parenthesisedExpressionParser prattConfig
-        , accessParser prattConfig
-        , lambdaParser prattConfig
-        , literalParser
-        , identifierParser
-        ]
-
-
-
--- PARSING EXPRESSIONS: BLOCK --------------------------------------------------
-
-
-{-| -}
-blockParser : Parser Expression
-blockParser =
-    Parser.succeed Block
-        |. Parser.symbol "{"
-        |. Parser.Extra.ignorables
-        |= Parser.loop []
-            (\declarations ->
-                Parser.oneOf
-                    [ Parser.succeed (\declaration -> declaration :: declarations)
-                        |= declarationParser
-                        |. Parser.Extra.ignorables
-                        |> Parser.map Parser.Loop
-                    , Parser.succeed (List.reverse declarations)
-                        |> Parser.map Parser.Done
-                    ]
-            )
-        |. Parser.Extra.ignorables
-        |. Parser.keyword "ret"
-        |. Parser.Extra.ignorables
-        |= lazyExpressionParser
-        |. Parser.Extra.ignorables
-        |. Parser.symbol "}"
-        |> Parser.backtrackable
-
-
-
--- PARSING EXPRESSIONS: CONDITIONAL --------------------------------------------
-
-
-{-| -}
-conditionalParser : Pratt.Config Expression -> Parser Expression
-conditionalParser prattConfig =
-    Parser.succeed Conditional
-        |. Parser.keyword "if"
-        |. Parser.Extra.ignorables
-        |= Pratt.subExpression 0 prattConfig
-        |. Parser.keyword "then"
-        |. Parser.Extra.ignorables
-        |= Pratt.subExpression 0 prattConfig
-        |. Parser.keyword "else"
-        |. Parser.Extra.ignorables
-        |= Pratt.subExpression 0 prattConfig
-
-
-
--- PARSING EXPRESSIONS: IDENTIFIER ---------------------------------------------
-
-
-{-| -}
-identifierParser : Parser Expression
-identifierParser =
-    Parser.succeed Identifier
-        |= Parser.oneOf
-            [ localIdentifierParser
-            , constructorIdentifierParser
-            , scopedIdentifierParser
-            , operatorIdentifierParser
-            , fieldIdentifierParser
+            [ boolean
+            , number
+            , string
+            , undefined
             ]
 
 
-{-| -}
-localIdentifierParser : Parser Identifier
-localIdentifierParser =
-    Parser.succeed Local
-        |= Parser.variable
-            { start = Char.isLower
-            , inner = Char.isAlphaNum
-            , reserved = Ren.Language.keywords
-            }
+name : Parser Expr.Pattern
+name =
+    Parser.succeed Expr.Name
+        |= lowercaseName keywords
 
 
-{-| -}
-constructorIdentifierParser : Parser Identifier
-constructorIdentifierParser =
-    Parser.succeed Constructor
-        |= Parser.variable
-            { start = (==) '#'
-            , inner = Char.isAlphaNum
-            , reserved = Set.empty
-            }
-
-
-{-| -}
-scopedIdentifierParser : Parser Identifier
-scopedIdentifierParser =
-    Parser.succeed Scoped
-        |= Parser.sequence
-            { start = ""
-            , separator = "."
-            , end = ""
-            , item =
-                Parser.variable
-                    { start = Char.isUpper
-                    , inner = Char.isAlphaNum
-                    , reserved = Set.empty
-                    }
-            , spaces = Parser.succeed ()
-            , trailing = Parser.Mandatory
-            }
-        |= Parser.oneOf
-            [ localIdentifierParser
-            , constructorIdentifierParser
-            ]
-
-
-{-| -}
-operatorIdentifierParser : Parser Identifier
-operatorIdentifierParser =
-    Parser.succeed Operator
-        |. Parser.symbol "("
-        |= Parser.oneOf
-            [ Parser.succeed Pipe |. Parser.symbol "|>"
-            , Parser.succeed Compose |. Parser.symbol ">>"
-            , Parser.succeed Eq |. Parser.symbol "=="
-            , Parser.succeed NotEq |. Parser.symbol "!="
-            , Parser.succeed Lte |. Parser.symbol "<="
-            , Parser.succeed Gte |. Parser.symbol ">="
-            , Parser.succeed And |. Parser.symbol "&&"
-            , Parser.succeed Or |. Parser.symbol "||"
-            , Parser.succeed Cons |. Parser.symbol "::"
-            , Parser.succeed Join |. Parser.symbol "++"
-            , Parser.succeed Lt |. Parser.symbol "<"
-            , Parser.succeed Gt |. Parser.symbol ">"
-            , Parser.succeed Add |. Parser.symbol "+"
-            , Parser.succeed Sub |. Parser.symbol "-"
-            , Parser.succeed Mul |. Parser.symbol "*"
-            , Parser.succeed Div |. Parser.symbol "/"
-            , Parser.succeed Pow |. Parser.symbol "^"
-            , Parser.succeed Mod |. Parser.symbol "%"
-            ]
-        |. Parser.symbol ")"
-
-
-{-| -}
-fieldIdentifierParser : Parser Identifier
-fieldIdentifierParser =
-    Parser.succeed Field
-        |. Parser.symbol "."
-        |= Parser.variable
-            { start = Char.isLower
-            , inner = Char.isAlphaNum
-            , reserved = Ren.Language.keywords
-            }
-
-
-
--- PARSING EXPRESSIONS: LAMBDA -------------------------------------------------
-
-
-{-| -}
-lambdaParser : Pratt.Config Expression -> Parser Expression
-lambdaParser prattConfig =
-    Parser.succeed Lambda
-        |. Parser.keyword "fun"
-        |. Parser.Extra.ignorables
-        |= Parser.sequence
-            { start = ""
-            , separator = " "
-            , end = ""
-            , item =
-                Parser.succeed identity
-                    |. Parser.Extra.ignorables
-                    |= patternParser
-            , spaces = Parser.succeed ()
-            , trailing = Parser.Optional
-            }
-        |. Parser.Extra.ignorables
-        |. Parser.symbol "=>"
-        |. Parser.Extra.ignorables
-        |= Pratt.subExpression 0 prattConfig
-
-
-
--- PARSING EXPRESSIONS: LITERAL ------------------------------------------------
-
-
-{-| -}
-literalParser : Parser Expression
-literalParser =
-    Parser.succeed Literal
-        |= Parser.oneOf
-            [ arrayLiteralParser
-            , booleanLiteralParser
-            , objectLiteralParser
-            , numberLiteralParser
-            , stringLiteralParser
-            , templateLiteralParser
-            , undefinedLiteralParser
-            ]
-
-
-{-| -}
-arrayLiteralParser : Parser Literal
-arrayLiteralParser =
-    Parser.succeed Array
-        |= Parser.sequence
-            { start = "["
-            , separator = ","
-            , end = "]"
-            , item = lazyExpressionParser
-            , spaces = Parser.Extra.ignorables
-            , trailing = Parser.Forbidden
-            }
-
-
-{-| -}
-booleanLiteralParser : Parser Literal
-booleanLiteralParser =
-    Parser.succeed Boolean
-        |= Parser.oneOf
-            [ Parser.succeed True
-                |. Parser.keyword "true"
-            , Parser.succeed False
-                |. Parser.keyword "false"
-            ]
-
-
-{-| -}
-numberLiteralParser : Parser Literal
-numberLiteralParser =
+recordDestructure : Parser Expr.Pattern
+recordDestructure =
     let
-        numberConfig =
-            { int = Just Basics.toFloat
-            , hex = Just Basics.toFloat
-            , octal = Just Basics.toFloat
-            , binary = Just Basics.toFloat
-            , float = Just identity
-            }
-    in
-    Parser.succeed Number
-        |= Parser.oneOf
-            [ Parser.succeed Basics.negate
-                |. Parser.symbol "-"
-                |= Parser.number numberConfig
-            , Parser.number numberConfig
-            ]
-        -- This is necessary to ensure we don't parse "123abc" as "Number 123"
-        |. Parser.oneOf
-            [ Parser.chompIf Char.isAlpha
-                |> Parser.andThen (\_ -> Parser.problem "")
-            , Parser.succeed ()
-            ]
-        |> Parser.backtrackable
-
-
-{-| -}
-objectLiteralParser : Parser Literal
-objectLiteralParser =
-    Parser.succeed (Dict.fromList >> Object)
-        |= Parser.sequence
-            { start = "{"
-            , separator = ","
-            , end = "}"
-            , item =
-                Parser.oneOf
-                    [ Parser.succeed Tuple.pair
-                        |= Parser.variable
-                            { start = Char.isLower
-                            , inner = Char.isAlphaNum
-                            , reserved = Ren.Language.keywords
-                            }
-                        |. Parser.Extra.ignorables
-                        |. Parser.symbol ":"
-                        |. Parser.Extra.ignorables
-                        |= lazyExpressionParser
-                        |> Parser.backtrackable
-                    , Parser.succeed (\name -> ( name, Identifier (Local name) ))
-                        |= Parser.variable
-                            { start = Char.isLower
-                            , inner = Char.isAlphaNum
-                            , reserved = Ren.Language.keywords
-                            }
+        keyAndPattern =
+            Parser.succeed Tuple.pair
+                |= lowercaseName keywords
+                |. Parser.spaces
+                |= Parser.oneOf
+                    [ Parser.succeed Just
+                        |. symbol ":"
+                        |. Parser.spaces
+                        |= Parser.lazy (\_ -> pattern)
+                    , Parser.succeed Nothing
                     ]
-            , spaces = Parser.Extra.ignorables
-            , trailing = Parser.Forbidden
-            }
-
-
-{-| -}
-stringLiteralParser : Parser Literal
-stringLiteralParser =
-    Parser.succeed String
-        |= Parser.oneOf
-            [ Parser.Extra.string '"'
-            , Parser.Extra.string '\''
-            ]
-
-
-{-| -}
-templateLiteralParser : Parser Literal
-templateLiteralParser =
-    let
-        isRawText c =
-            c /= '`' && c /= '\\' && c /= '$'
     in
-    Parser.succeed Template
-        |. Parser.symbol "`"
-        |= Parser.loop []
-            (\chunks ->
-                Parser.oneOf
-                    [ Parser.succeed (\s -> Text s :: chunks)
-                        |= Parser.Extra.stringEscape [ "`", "$" ]
-                        |> Parser.map Parser.Loop
-                    , Parser.succeed (\expr -> Expr expr :: chunks)
-                        |. Parser.token "${"
-                        |= lazyExpressionParser
-                        |. Parser.token "}"
-                        |> Parser.map Parser.Loop
-                    , Parser.succeed (List.reverse chunks)
-                        |. Parser.token "`"
-                        |> Parser.map Parser.Done
-                    , Parser.getChompedString (Parser.chompWhile isRawText)
-                        |> Parser.andThen
-                            (\s ->
-                                if s == "" then
-                                    Parser.problem ""
+    Parser.succeed Expr.RecordDestructure
+        |. symbol "{"
+        |. Parser.commit ()
+        |. Parser.spaces
+        |= Parser.oneOf
+            [ Parser.succeed (::)
+                |= keyAndPattern
+                |. Parser.spaces
+                |= Parser.loop []
+                    (\patterns ->
+                        Parser.oneOf
+                            [ Parser.succeed (\pat -> pat :: patterns)
+                                |. symbol ","
+                                |. Parser.spaces
+                                |= keyAndPattern
+                                |> Parser.backtrackable
+                                |> Parser.map Parser.Loop
+                            , Parser.succeed Basics.identity
+                                |. symbol ","
+                                |. Parser.spaces
+                                |= spread
+                                -- We need to get the name of the binding
+                                -- introduced by the spread pattern so we can
+                                -- store it in the pattern list with a "key".
+                                |> Parser.andThen
+                                    (\pat ->
+                                        case pat of
+                                            Expr.Spread key ->
+                                                (( key, Just pat ) :: patterns)
+                                                    |> Parser.succeed
 
-                                else
-                                    Parser.succeed (Text s :: chunks)
-                            )
-                        |> Parser.map Parser.Loop
-                    ]
-            )
-
-
-{-| -}
-undefinedLiteralParser : Parser Literal
-undefinedLiteralParser =
-    Parser.succeed Undefined
-        |. Parser.symbol "()"
-        |> Parser.backtrackable
-
-
-
--- PARSING EXPRESSIONS: MATCH --------------------------------------------------
-
-
-{-| -}
-matchParser : Pratt.Config Expression -> Parser Expression
-matchParser prattConfig =
-    Parser.succeed Match
-        |. Parser.keyword "when"
-        |. Parser.Extra.ignorables
-        |= lazyExpressionParser
-        |. Parser.Extra.ignorables
-        |= Parser.loop []
-            (\cases ->
-                Parser.oneOf
-                    [ Parser.succeed (\pattern guard expr -> ( pattern, guard, expr ) :: cases)
-                        |. Parser.keyword "is"
-                        |. Parser.Extra.ignorables
-                        |= patternParser
-                        |. Parser.Extra.ignorables
-                        |= Parser.oneOf
-                            [ Parser.succeed Just
-                                |. Parser.keyword "if"
-                                |. Parser.Extra.ignorables
-                                |= Pratt.subExpression 0 prattConfig
-                                |. Parser.Extra.ignorables
-                            , Parser.succeed Nothing
+                                            _ ->
+                                                InternalError ""
+                                                    |> Parser.problem
+                                    )
+                                |> Parser.map List.reverse
+                                |> Parser.map Parser.Done
+                            , Parser.succeed ()
+                                |> Parser.map (\_ -> List.reverse patterns)
+                                |> Parser.map Parser.Done
                             ]
-                        |. Parser.symbol "=>"
-                        |. Parser.Extra.ignorables
-                        |= Pratt.subExpression 0 prattConfig
-                        |> Parser.map Parser.Loop
-                    , Parser.succeed (\expr -> ( Wildcard Nothing, Nothing, expr ) :: cases)
-                        |. Parser.keyword "else"
-                        |. Parser.Extra.ignorables
-                        |. Parser.symbol "=>"
-                        |. Parser.Extra.ignorables
-                        |= Pratt.subExpression 0 prattConfig
-                        |> Parser.map Parser.Loop
-                    , Parser.succeed (List.reverse cases)
-                        |> Parser.map Parser.Done
-                    ]
-            )
-
-
-
--- PARSING PATTERNS ------------------------------------------------------------
-
-
-{-| -}
-patternParser : Parser Pattern
-patternParser =
-    let
-        patternParsers =
-            [ arrayDestructureParser
-            , nameParser
-            , objectDestructureParser
-            , valueParser
-            , variantDestructureParser
-            , typeofParser
-            , wildcardParser
+                    )
+            , Parser.succeed []
             ]
-    in
-    Parser.oneOf
-        [ Parser.succeed identity
-            |. Parser.symbol "("
-            |. Parser.spaces
-            |= Parser.oneOf patternParsers
-            |. Parser.spaces
-            |. Parser.symbol ")"
-            |> Parser.backtrackable
-        , Parser.oneOf patternParsers
-        ]
+        |. Parser.spaces
+        |. symbol "}"
+        |> Parser.backtrackable
 
 
-{-| -}
-lazyPatternParser : Parser Pattern
-lazyPatternParser =
-    Parser.lazy (\_ -> patternParser)
+spread : Parser Expr.Pattern
+spread =
+    Parser.succeed Expr.Spread
+        |. symbol "..."
+        |. Parser.commit ()
+        |= lowercaseName keywords
+        |> Parser.backtrackable
 
 
-{-| -}
-arrayDestructureParser : Parser Pattern
-arrayDestructureParser =
-    Parser.succeed ArrayDestructure
-        |= Parser.sequence
-            { start = "["
-            , separator = ","
-            , end = "]"
-            , spaces = Parser.spaces
-            , item = lazyPatternParser
-            , trailing = Parser.Forbidden
-            }
+typeof : Parser Expr.Pattern
+typeof =
+    Parser.succeed Expr.Typeof
+        |. symbol "@"
+        |. Parser.commit ()
+        |= uppercaseName Set.empty
+        |. Parser.spaces
+        |= Parser.lazy (\_ -> pattern)
+        |> Parser.backtrackable
 
 
-{-| -}
-nameParser : Parser Pattern
-nameParser =
-    Parser.succeed Name
-        |= Parser.variable
-            { start = Char.isLower
-            , inner = Char.isAlphaNum
-            , reserved = Ren.Language.keywords
-            }
-
-
-{-| -}
-objectDestructureParser : Parser Pattern
-objectDestructureParser =
-    Parser.succeed ObjectDestructure
-        |= Parser.sequence
-            { start = "{"
-            , separator = ","
-            , end = "}"
-            , spaces = Parser.spaces
-            , item =
-                Parser.succeed Tuple.pair
-                    |= Parser.variable
-                        { start = Char.isLower
-                        , inner = Char.isAlphaNum
-                        , reserved = Ren.Language.keywords
-                        }
-                    |. Parser.spaces
-                    |= Parser.oneOf
-                        [ Parser.succeed Just
-                            |. Parser.symbol ":"
-                            |. Parser.spaces
-                            |= lazyPatternParser
-                        , Parser.succeed Nothing
-                        ]
-            , trailing = Parser.Forbidden
-            }
-
-
-{-| -}
-valueParser : Parser Pattern
-valueParser =
-    Parser.succeed Value
-        |= Parser.oneOf
-            [ booleanLiteralParser
-            , numberLiteralParser
-            , stringLiteralParser
-            ]
-
-
-{-| -}
-variantDestructureParser : Parser Pattern
-variantDestructureParser =
-    Parser.succeed VariantDestructure
-        |= Parser.variable
-            { start = (==) '#'
-            , inner = Char.isAlphaNum
-            , reserved = Set.empty
-            }
+variantDestructure : Parser Expr.Pattern
+variantDestructure =
+    Parser.succeed Expr.VariantDestructure
+        |. symbol "#"
+        |. Parser.commit ()
+        |= lowercaseName Set.empty
         |. Parser.spaces
         |= Parser.loop []
             (\patterns ->
                 Parser.oneOf
-                    [ Parser.succeed (\pattern -> pattern :: patterns)
-                        |= patternParser
+                    [ Parser.succeed (\pat -> pat :: patterns)
+                        |= Parser.lazy (\_ -> pattern)
                         |. Parser.spaces
                         |> Parser.map Parser.Loop
-                    , Parser.succeed (List.reverse patterns)
+                    , Parser.succeed ()
+                        |> Parser.map (\_ -> List.reverse patterns)
                         |> Parser.map Parser.Done
                     ]
             )
+        |> Parser.backtrackable
 
 
-{-| -}
-wildcardParser : Parser Pattern
-wildcardParser =
-    Parser.succeed Wildcard
-        |. Parser.symbol "_"
+wildcard : Parser Expr.Pattern
+wildcard =
+    Parser.succeed Expr.Wildcard
+        |. symbol "_"
         |= Parser.oneOf
-            [ Parser.succeed Just
-                |= Parser.variable
-                    { start = Char.isLower
-                    , inner = Char.isAlphaNum
-                    , reserved = Ren.Language.keywords
-                    }
+            [ lowercaseName Set.empty
+                |> Parser.map Just
             , Parser.succeed Nothing
             ]
 
 
-{-| -}
-typeofParser : Parser Pattern
-typeofParser =
-    Parser.oneOf
-        [ Parser.succeed (Typeof BooleanP)
-            |. Parser.keyword "@Boolean"
-        , Parser.succeed (Typeof NumberP)
-            |. Parser.keyword "@Number"
-        , Parser.succeed (Typeof StringP)
-            |. Parser.keyword "@String"
-        , Parser.succeed (Typeof FunctionP)
-            |. Parser.keyword "@Function"
-        ]
-        |. Parser.spaces
-        |= Parser.variable
-            { start = Char.isLower
-            , inner = Char.isAlphaNum
-            , reserved = Ren.Language.keywords
-            }
+
+--                                                                            --
+-- UTILITIES -------------------------------------------------------------------
+--                                                                            --
+
+
+lowercaseName : Set String -> Parser String
+lowercaseName reserved =
+    Parser.variable
+        { expecting = ExpectingCamelCase
+        , start = Char.isLower
+        , inner = Char.isAlphaNum
+        , reserved = reserved
+        }
+
+
+uppercaseName : Set String -> Parser String
+uppercaseName reserved =
+    Parser.variable
+        { expecting = ExpectingCapitalCase
+        , start = Char.isUpper
+        , inner = Char.isAlphaNum
+        , reserved = reserved
+        }
+
+
+symbol : String -> Parser ()
+symbol s =
+    Parser.symbol (Parser.Token s <| ExpectingSymbol s)
+
+
+keyword : String -> Parser ()
+keyword s =
+    Parser.keyword (Parser.Token s <| ExpectingKeyword s)
+
+
+operator : String -> Parser ()
+operator s =
+    Parser.symbol (Parser.Token s <| ExpectingOperator s)
+
+
+quotedString : Char -> Parser String
+quotedString quote =
+    let
+        s =
+            String.fromChar quote
+
+        char =
+            Parser.oneOf
+                [ Parser.succeed identity
+                    |. symbol s
+                    |= Parser.oneOf
+                        [ Parser.map (\_ -> '\\') (symbol "\\")
+                        , Parser.map (\_ -> '"') (symbol "\"") -- " (elm-vscode workaround)
+                        , Parser.map (\_ -> '\'') (symbol "'")
+                        , Parser.map (\_ -> '\n') (symbol "n")
+                        , Parser.map (\_ -> '\t') (symbol "t")
+                        , Parser.map (\_ -> '\u{000D}') (symbol "r")
+                        ]
+                , symbol s
+                    |> Parser.andThen (\_ -> Parser.problem <| UnexpextedChar quote)
+                , Parser.chompIf ((/=) '\n') ExpectingChar
+                    |> Parser.getChompedString
+                    |> Parser.andThen
+                        (String.uncons
+                            >> Maybe.map (Tuple.first >> Parser.succeed)
+                            >> Maybe.withDefault (Parser.problem <| InternalError "Multiple characters chomped in `character`")
+                        )
+                ]
+    in
+    Parser.succeed String.fromList
+        |. symbol s
+        |= Parser.loop []
+            (\cs ->
+                Parser.oneOf
+                    [ Parser.succeed (\c -> c :: cs)
+                        |= char
+                        |> Parser.backtrackable
+                        |> Parser.map Parser.Loop
+                    , Parser.succeed (List.reverse cs)
+                        |> Parser.map Parser.Done
+                    ]
+            )
+        |. symbol s
+
+
+keywords : Set String
+keywords =
+    Set.fromList <|
+        List.concat
+            -- Bindings
+            [ [ "fun", "let" ]
+
+            -- Conditionals
+            , [ "if", "then", "else" ]
+
+            -- Pattern matching
+            , [ "where", "is" ]
+
+            -- Literals
+            , [ "true", "false" ]
+
+            -- Imports
+            , [ "import", "as", "exposing" ]
+
+            -- Declarations
+            , [ "pub", "extern" ]
+            ]
