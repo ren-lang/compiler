@@ -112,10 +112,10 @@ expression =
                 -- required symbol as a string helpfully wraps it up in a the
                 -- `Parser.symbol` parser.
                 infix_ parser precedence sym op =
-                    parser precedence
-                        (operator sym)
-                        ((<<) (Expr.wrap dummyLocation) << Infix op)
-                        >> Tuple.mapSecond locateInfix
+                    Tuple.mapSecond locateInfix
+                        << parser precedence
+                            (operator sym)
+                            (\lhs rhs -> Expr.wrap dummyLocation (Infix op lhs rhs))
 
                 -- This annotates a parsed infix expression with start/end location
                 -- data by taking the start of the left operand and the end of
