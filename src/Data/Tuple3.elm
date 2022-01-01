@@ -1,6 +1,11 @@
 module Data.Tuple3 exposing (..)
 
 
+from : a -> b -> c -> ( a, b, c )
+from a b c =
+    ( a, b, c )
+
+
 mapFirst : (a -> d) -> ( a, b, c ) -> ( d, b, c )
 mapFirst f ( a, b, c ) =
     ( f a, b, c )

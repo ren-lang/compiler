@@ -14,12 +14,134 @@ import Ren.AST.Expr as Expr
         , Identifier(..)
         , Pattern(..)
         )
+import Ren.AST.Module as Module exposing (Module)
+import Ren.Compiler.Emit.Util as Util
+import Ren.Data.Type as Type
 
 
 {-| -}
-run : Expr meta -> String
+run : Module meta -> String
 run =
-    Expr.cata (\_ -> expression) >> .expr >> Pretty.pretty 80
+    module_ >> Pretty.pretty 80
+
+
+
+--                                                                            --
+-- EMITTING MODULES ------------------------------------------------------------
+--                                                                            --
+
+
+module_ : Module meta -> Pretty.Doc t
+module_ { imports, declarations } =
+    if List.isEmpty imports then
+        Pretty.join Util.doubleline (List.map declaration declarations)
+
+    else
+        Pretty.join Pretty.line (List.map import_ imports)
+            |> Pretty.a Util.doubleline
+            |> Pretty.a (Pretty.join Util.doubleline (List.map declaration declarations))
+
+
+import_ : Module.Import -> Pretty.Doc t
+import_ { path, name, exposed } =
+    case ( name, exposed ) of
+        ( [], [] ) ->
+            Pretty.string "import "
+                |> Pretty.a (Pretty.char '"')
+                |> Pretty.a (Pretty.string path)
+                |> Pretty.a (Pretty.char '"')
+
+        ( parts, [] ) ->
+            Pretty.string "import * as "
+                |> Pretty.a (Pretty.join (Pretty.char '$') <| List.map Pretty.string parts)
+                |> Pretty.a (Pretty.string " from ")
+                |> Pretty.a (Pretty.char '"')
+                |> Pretty.a (Pretty.string path)
+                |> Pretty.a (Pretty.char '"')
+
+        ( [], bindings ) ->
+            Pretty.string "import "
+                |> Pretty.a (Pretty.braces <| Pretty.join (Pretty.string ", ") <| List.map Pretty.string bindings)
+                |> Pretty.a (Pretty.string " from ")
+                |> Pretty.a (Pretty.char '"')
+                |> Pretty.a (Pretty.string path)
+                |> Pretty.a (Pretty.char '"')
+
+        ( parts, bindings ) ->
+            Pretty.join Pretty.line
+                [ import_ { path = path, name = parts, exposed = [] }
+                , import_ { path = path, name = [], exposed = bindings }
+                ]
+
+
+declaration : Module.Declaration meta -> Pretty.Doc t
+declaration { public, name, type_, expr } =
+    Pretty.string "// "
+        |> Pretty.a (Pretty.string name)
+        |> Pretty.a (Pretty.string " :: ")
+        |> Pretty.a (Pretty.string <| Type.toString type_)
+        |> Pretty.a Pretty.line
+        |> Pretty.a
+            (case expr of
+                Expr _ (Lambda [ arg ] body) ->
+                    Pretty.string "function "
+                        |> Pretty.a (Pretty.string name)
+                        |> Pretty.a Pretty.space
+                        |> Pretty.a (Pretty.parens <| lambdaPattern arg)
+                        |> Pretty.a Pretty.space
+                        |> Pretty.a (Pretty.char '{')
+                        |> Pretty.a Pretty.line
+                        |> Pretty.a
+                            (Pretty.string "return "
+                                |> Pretty.a (wrapGenerator <| Expr.cata (always expression) body)
+                                |> Pretty.indent 4
+                            )
+                        |> Pretty.a Pretty.line
+                        |> Pretty.a (Pretty.char '}')
+                        |> Pretty.append
+                            (if public then
+                                Pretty.string "export "
+
+                             else
+                                Pretty.empty
+                            )
+
+                Expr meta (Lambda (arg :: args) body) ->
+                    Pretty.string "function "
+                        |> Pretty.a (Pretty.string name)
+                        |> Pretty.a Pretty.space
+                        |> Pretty.a (Pretty.parens <| lambdaPattern arg)
+                        |> Pretty.a Pretty.space
+                        |> Pretty.a (Pretty.char '{')
+                        |> Pretty.a Pretty.line
+                        |> Pretty.a
+                            (Pretty.string "return "
+                                |> Pretty.a (wrapGenerator <| Expr.cata (always expression) <| Expr meta (Lambda args body))
+                                |> Pretty.indent 4
+                            )
+                        |> Pretty.a Pretty.line
+                        |> Pretty.a (Pretty.char '}')
+                        |> Pretty.append
+                            (if public then
+                                Pretty.string "export "
+
+                             else
+                                Pretty.empty
+                            )
+
+                _ ->
+                    Pretty.string "const "
+                        |> Pretty.a (Pretty.string name)
+                        |> Pretty.a (Pretty.string " = ")
+                        |> Pretty.a (wrapGenerator <| Expr.cata (always expression) expr)
+                        |> Pretty.append
+                            (if public then
+                                Pretty.string "export "
+
+                             else
+                                Pretty.empty
+                            )
+            )
 
 
 
@@ -33,6 +155,11 @@ type alias Generator t =
     { wrap : Pretty.Doc t -> Pretty.Doc t
     , expr : Pretty.Doc t
     }
+
+
+wrapGenerator : Generator t -> Pretty.Doc t
+wrapGenerator { wrap, expr } =
+    wrap expr
 
 
 {-| -}
@@ -406,8 +533,8 @@ literal lit =
             in
             { wrap = Basics.identity
             , expr =
-                Pretty.join Pretty.empty
-                    (List.map segment segments)
+                Pretty.join Pretty.empty (List.map segment segments)
+                    |> Pretty.surround (Pretty.char '`') (Pretty.char '`')
             }
 
         Expr.Undefined ->
@@ -446,7 +573,7 @@ match { expr } cases =
             else
                 "$match"
     in
-    { wrap = iife ( matchVariable, expr )
+    { wrap = Basics.identity
     , expr =
         Pretty.char '{'
             |> Pretty.a Pretty.line
@@ -460,6 +587,7 @@ match { expr } cases =
                 )
             |> Pretty.a Pretty.line
             |> Pretty.a (Pretty.char '}')
+            |> iife ( matchVariable, expr )
     }
 
 
@@ -475,10 +603,15 @@ matchCase name ( pat, guard, { expr } ) =
         |> Pretty.a (Pretty.string ") {")
         |> Pretty.a Pretty.line
         |> Pretty.a
-            (matchBindings name pat
-                |> Pretty.join Pretty.line
-                |> Pretty.a Pretty.line
-                |> Pretty.a Pretty.line
+            ((case matchBindings name pat of
+                [] ->
+                    Pretty.empty
+
+                bindings ->
+                    Pretty.join Pretty.line bindings
+                        |> Pretty.a Pretty.line
+                        |> Pretty.a Pretty.line
+             )
                 |> Pretty.a (Pretty.string "return ")
                 |> Pretty.a expr
                 |> Pretty.indent 4
@@ -652,7 +785,7 @@ matchPattern name pat =
         -- ```
         --
         Expr.Wildcard _ ->
-            Pretty.empty
+            Pretty.string "true"
 
 
 {-| -}

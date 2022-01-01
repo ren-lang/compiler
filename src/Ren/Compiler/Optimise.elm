@@ -1,18 +1,26 @@
 module Ren.Compiler.Optimise exposing (..)
 
+{-| -}
+
 -- IMPORTS ---------------------------------------------------------------------
 
-import Ren.AST.Expr as Expr exposing (Expr(..), ExprF(..))
+import Ren.AST.Expr as Expr
+    exposing
+        ( Expr(..)
+        , ExprF(..)
+        , Literal(..)
+        , Operator(..)
+        )
+import Ren.AST.Module as Module
+
+
+
+-- RUNNING OPTIMISATIONS -------------------------------------------------------
 
 
 {-| -}
-runAll : Expr meta -> Expr meta
-runAll =
-    run [ operators ]
-
-
-run : List (Optimisation meta) -> Expr meta -> Expr meta
-run optimisations =
+run : List (Optimisation meta) -> Module.Declaration meta -> Module.Declaration meta
+run optimisations declaration =
     let
         -- This continuously applies optimisations until they no longer change
         -- the AST. It's possible to blow the stack up if one optimisation undoes
@@ -28,13 +36,18 @@ run optimisations =
             else
                 apply meta result
     in
-    Expr.cata <|
-        \meta expression ->
-            apply meta expression
-                -- After all the transformations have been applied we wrap the
-                -- expression back up in our `Expr` wrapper with the original
-                -- metadata attached.
-                |> Expr meta
+    { declaration
+        | expr =
+            Expr.cata
+                (\meta expression ->
+                    apply meta expression
+                        -- After all the optimisations have been applied we wrap the
+                        -- expression back up in our `Expr` wrapper with the original
+                        -- metadata attached.
+                        |> Expr meta
+                )
+                declaration.expr
+    }
 
 
 
@@ -57,79 +70,82 @@ type alias Optimisation meta =
 -- OPTIMISATIONS ---------------------------------------------------------------
 
 
-{-| This optimisation attempts to evaluate operators at compile-time. The usual
-term for this is _constant folding_.
+{-| This optimisation attempts to evaluate operators at compile-time. This mostly
+just optimises away operations on literals, like computing the expression `1 + 1`.
 -}
 operators : Optimisation meta
 operators _ expr =
     case expr of
-        Infix Expr.Add (Expr _ lhs) (Expr _ rhs) ->
+        Infix Pipe lhs rhs ->
+            Application rhs [ lhs ]
+
+        Infix Add (Expr _ lhs) (Expr _ rhs) ->
             Maybe.map2 (+) (Expr.coerceToNumber lhs) (Expr.coerceToNumber rhs)
-                |> Maybe.map (Expr.Number >> Expr.Literal)
+                |> Maybe.map (Number >> Literal)
                 |> Maybe.withDefault expr
 
-        Infix Expr.Sub (Expr _ lhs) (Expr _ rhs) ->
+        Infix Sub (Expr _ lhs) (Expr _ rhs) ->
             Maybe.map2 (-) (Expr.coerceToNumber lhs) (Expr.coerceToNumber rhs)
-                |> Maybe.map (Expr.Number >> Expr.Literal)
+                |> Maybe.map (Number >> Literal)
                 |> Maybe.withDefault expr
 
-        Infix Expr.Mul (Expr _ lhs) (Expr _ rhs) ->
+        Infix Mul (Expr _ lhs) (Expr _ rhs) ->
             Maybe.map2 (*) (Expr.coerceToNumber lhs) (Expr.coerceToNumber rhs)
-                |> Maybe.map (Expr.Number >> Expr.Literal)
+                |> Maybe.map (Number >> Literal)
                 |> Maybe.withDefault expr
 
-        Infix Expr.Div (Expr _ lhs) (Expr _ rhs) ->
+        Infix Div (Expr _ lhs) (Expr _ rhs) ->
             Maybe.map2 (/) (Expr.coerceToNumber lhs) (Expr.coerceToNumber rhs)
-                |> Maybe.map (Expr.Number >> Expr.Literal)
+                |> Maybe.map (Number >> Literal)
                 |> Maybe.withDefault expr
 
-        Infix Expr.Pow (Expr _ lhs) (Expr _ rhs) ->
+        Infix Pow (Expr _ lhs) (Expr _ rhs) ->
             Maybe.map2 (^) (Expr.coerceToNumber lhs) (Expr.coerceToNumber rhs)
-                |> Maybe.map (Expr.Number >> Expr.Literal)
+                |> Maybe.map (Number >> Literal)
                 |> Maybe.withDefault expr
 
         -- Elm's `Basics.modBy` function only works on integers, but numbers in
         -- Ren are always floats. We could attempt to see if both operands are
         -- integers and perform the optimisation in that case, but I think it's
         -- easier to just let this happen at run time.
-        Infix Expr.Mod _ _ ->
+        Infix Mod _ _ ->
             expr
 
-        Infix Expr.Lt (Expr _ lhs) (Expr _ rhs) ->
+        Infix Lt (Expr _ lhs) (Expr _ rhs) ->
             Maybe.map2 (<) (Expr.coerceToNumber lhs) (Expr.coerceToNumber rhs)
-                |> Maybe.map (Expr.Boolean >> Expr.Literal)
+                |> Maybe.map (Boolean >> Literal)
                 |> Maybe.withDefault expr
 
-        Infix Expr.Lte (Expr _ lhs) (Expr _ rhs) ->
+        Infix Lte (Expr _ lhs) (Expr _ rhs) ->
             Maybe.map2 (<=) (Expr.coerceToNumber lhs) (Expr.coerceToNumber rhs)
-                |> Maybe.map (Expr.Boolean >> Expr.Literal)
+                |> Maybe.map (Boolean >> Literal)
                 |> Maybe.withDefault expr
 
-        Infix Expr.Gt (Expr _ lhs) (Expr _ rhs) ->
+        Infix Gt (Expr _ lhs) (Expr _ rhs) ->
             Maybe.map2 (>) (Expr.coerceToNumber lhs) (Expr.coerceToNumber rhs)
-                |> Maybe.map (Expr.Boolean >> Expr.Literal)
+                |> Maybe.map (Boolean >> Literal)
                 |> Maybe.withDefault expr
 
-        Infix Expr.Gte (Expr _ lhs) (Expr _ rhs) ->
+        Infix Gte (Expr _ lhs) (Expr _ rhs) ->
             Maybe.map2 (>=) (Expr.coerceToNumber lhs) (Expr.coerceToNumber rhs)
-                |> Maybe.map (Expr.Boolean >> Expr.Literal)
+                |> Maybe.map (Boolean >> Literal)
                 |> Maybe.withDefault expr
 
-        Infix Expr.And (Expr _ lhs) (Expr _ rhs) ->
+        Infix And (Expr _ lhs) (Expr _ rhs) ->
             Maybe.map2 (&&) (Expr.coerceToBoolean lhs) (Expr.coerceToBoolean rhs)
-                |> Maybe.map (Expr.Boolean >> Expr.Literal)
+                |> Maybe.map (Boolean >> Literal)
                 |> Maybe.withDefault expr
 
-        Infix Expr.Or (Expr _ lhs) (Expr _ rhs) ->
+        Infix Or (Expr _ lhs) (Expr _ rhs) ->
             Maybe.map2 (||) (Expr.coerceToBoolean lhs) (Expr.coerceToBoolean rhs)
-                |> Maybe.map (Expr.Boolean >> Expr.Literal)
+                |> Maybe.map (Boolean >> Literal)
                 |> Maybe.withDefault expr
 
-        Infix Expr.Cons lhs (Expr _ (Expr.Literal (Expr.Array elements))) ->
-            Expr.Literal (Expr.Array <| lhs :: elements)
+        Infix Cons lhs (Expr _ (Literal (Array elements))) ->
+            Literal (Array <| lhs :: elements)
 
-        Infix Expr.Join (Expr _ (Expr.Literal (Expr.Array xs))) (Expr _ (Expr.Literal (Expr.Array ys))) ->
-            Expr.Literal (Expr.Array <| xs ++ ys)
+        Infix Join (Expr _ (Literal (Array xs))) (Expr _ (Literal (Array ys))) ->
+            Literal (Array <| xs ++ ys)
 
         _ ->
             expr

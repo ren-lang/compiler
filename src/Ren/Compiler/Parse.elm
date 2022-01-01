@@ -6,12 +6,16 @@ import Data.Either
 import Parser.Advanced as Parser exposing ((|.), (|=))
 import Pratt.Advanced as Pratt
 import Ren.AST.Expr as Expr exposing (Expr(..), ExprF(..))
+import Ren.AST.Module as Module exposing (Module)
+import Ren.Data.Span as Span exposing (Span)
+import Ren.Data.Type as Type exposing (Type)
 import Set exposing (Set)
 
 
-run : String -> Result (List (Parser.DeadEnd Context Error)) (Expr Location)
+{-| -}
+run : String -> Result (List (Parser.DeadEnd Context Error)) (Module Span)
 run =
-    Parser.run expression
+    Parser.run module_
 
 
 
@@ -30,7 +34,9 @@ type alias Config a =
 
 {-| -}
 type Context
-    = InExpr
+    = InImport
+    | InDeclaration
+    | InExpr
 
 
 {-| -}
@@ -49,26 +55,125 @@ type Error
     | InternalError String
 
 
+
+--                                                                            --
+-- MODULE PARSERS --------------------------------------------------------------
+--                                                                            --
+
+
 {-| -}
-type alias Location =
-    { start : ( Int, Int )
-    , end : ( Int, Int )
-    }
+module_ : Parser (Module Span)
+module_ =
+    Parser.succeed Module
+        |. Parser.spaces
+        |= Parser.loop []
+            (\imports ->
+                Parser.oneOf
+                    [ Parser.succeed (\i -> i :: imports)
+                        |= import_
+                        |. Parser.spaces
+                        |> Parser.map Parser.Loop
+                    , Parser.succeed ()
+                        |> Parser.map (\_ -> List.reverse imports)
+                        |> Parser.map Parser.Done
+                    ]
+            )
+        |. Parser.spaces
+        |= Parser.loop []
+            (\declarations ->
+                Parser.oneOf
+                    [ Parser.succeed (\d -> d :: declarations)
+                        |= declaration
+                        |. Parser.spaces
+                        |> Parser.map Parser.Loop
+                    , Parser.succeed ()
+                        |> Parser.map (\_ -> List.reverse declarations)
+                        |> Parser.map Parser.Done
+                    ]
+            )
+        |. Parser.spaces
+        |. Parser.end ExpectingEOF
 
 
+{-| -}
+import_ : Parser Module.Import
+import_ =
+    Parser.succeed Module.Import
+        |. keyword "import"
+        |. Parser.spaces
+        -- TODO: This doesn't handle escaped `"` characters.
+        |. symbol "\""
+        |= (Parser.getChompedString <| Parser.chompWhile ((/=) '"'))
+        |. symbol "\""
+        |. Parser.spaces
+        |= Parser.oneOf
+            [ Parser.succeed Basics.identity
+                |. keyword "as"
+                |. Parser.spaces
+                |= Parser.loop []
+                    (\names ->
+                        Parser.oneOf
+                            [ Parser.succeed (\n -> n :: names)
+                                |= uppercaseName Set.empty
+                                |. symbol "."
+                                |> Parser.map Parser.Loop
+                                |> Parser.backtrackable
+                            , Parser.succeed (\n -> n :: names)
+                                |= uppercaseName Set.empty
+                                |> Parser.map (Parser.Done << List.reverse)
+                            , Parser.succeed ()
+                                |> Parser.map (\_ -> List.reverse names)
+                                |> Parser.map Parser.Done
+                            ]
+                    )
+            , Parser.succeed []
+            ]
+        |. Parser.spaces
+        |= Parser.oneOf
+            [ Parser.succeed Basics.identity
+                |. keyword "exposing"
+                |. Parser.spaces
+                |= Parser.sequence
+                    { start = Parser.Token "{" (ExpectingSymbol "{")
+                    , separator = Parser.Token "," (ExpectingSymbol ",")
+                    , end = Parser.Token "}" (ExpectingSymbol "}")
+                    , spaces = Parser.spaces
+                    , item = lowercaseName keywords
+                    , trailing = Parser.Forbidden
+                    }
+                |> Parser.backtrackable
+            , Parser.succeed []
+            ]
+        |> Parser.inContext InImport
 
---
 
-
-{-| Takes a parser for an unwrapped expression and then attaches some location
-metadata to it.
--}
-locateExpr : Parser (ExprF (Expr Location)) -> Parser (Expr Location)
-locateExpr parser =
-    Parser.succeed (\start expr end -> Expr (Location start end) expr)
-        |= Parser.getPosition
-        |= parser
-        |= Parser.getPosition
+{-| -}
+declaration : Parser (Module.Declaration Span)
+declaration =
+    Parser.succeed Module.Declaration
+        |= Parser.oneOf
+            [ Parser.succeed True
+                |. keyword "pub"
+            , Parser.succeed False
+            ]
+        |. Parser.spaces
+        |. keyword "let"
+        |. Parser.spaces
+        |= lowercaseName keywords
+        |. Parser.spaces
+        |= Parser.oneOf
+            [ Parser.succeed Basics.identity
+                |. symbol ":"
+                |. Parser.spaces
+                |= type_
+                |. Parser.spaces
+            , Parser.succeed Type.Any
+            ]
+        |. symbol "="
+        |. Parser.spaces
+        |= expression
+        |> Span.parser (|>)
+        |> Parser.inContext InDeclaration
 
 
 
@@ -77,36 +182,45 @@ locateExpr parser =
 --                                                                            --
 
 
-expression : Parser (Expr Location)
+{-| -}
+expression : Parser (Expr Span)
 expression =
+    prattExpression
+        -- These parsers start with a keyword
+        [ conditional
+        , match
+
+        -- These parsers parse sub expressions
+        --, annotation
+        , lambda
+        , application
+        , Pratt.literal access
+
+        --
+        , block
+        , Pratt.literal identifier
+        , literal
+
+        -- Subexpressions are wrapped in parentheses.
+        , Pratt.literal (Parser.lazy (\_ -> subexpression))
+        ]
+
+
+{-| -}
+prattExpression : List (Config (Expr Span) -> Parser (Expr Span)) -> Parser (Expr Span)
+prattExpression parsers =
     Pratt.expression
-        { oneOf =
-            -- These parsers start with a keyword
-            [ lambda
-            , conditional
-            , match
-
-            -- These parsers parse sub expressions
-            --, annotation
-            , application
-            , Pratt.literal access
-
-            --
-            , block
-            , literal
-            , Pratt.literal (Parser.lazy (\_ -> subexpression))
-            , Pratt.literal identifier
-            ]
+        { oneOf = parsers
         , andThenOneOf =
             let
-                -- This cursed dummy location is necessary because we need the
+                -- This cursed dummy Span is necessary because we need the
                 -- type of the infix expression to be the same as its sub-expressions
-                -- but we can't get the location start/end of the parser until
+                -- but we can't get the Span start/end of the parser until
                 -- we've created the parser...
                 --
                 -- It's cursed but it works.
-                dummyLocation =
-                    Location ( 0, 0 ) ( 0, 0 )
+                dummySpan =
+                    Span.fromTuples ( 0, 0 ) ( 0, 0 )
 
                 -- Helper parser for handling infix operator parsing. Takes the
                 -- required symbol as a string helpfully wraps it up in a the
@@ -115,9 +229,9 @@ expression =
                     Tuple.mapSecond locateInfix
                         << parser precedence
                             (operator sym)
-                            (\lhs rhs -> Expr.wrap dummyLocation (Infix op lhs rhs))
+                            (\lhs rhs -> Expr.wrap dummySpan (Infix op lhs rhs))
 
-                -- This annotates a parsed infix expression with start/end location
+                -- This annotates a parsed infix expression with start/end Span
                 -- data by taking the start of the left operand and the end of
                 -- the right one.
                 --
@@ -129,7 +243,7 @@ expression =
                         (\(Expr _ e) ->
                             case e of
                                 Infix _ (Expr { start } _) (Expr { end } _) ->
-                                    Expr (Location start end) e
+                                    Expr (Span start end) e
                                         |> Parser.succeed
 
                                 _ ->
@@ -163,7 +277,8 @@ expression =
         |> Parser.inContext InExpr
 
 
-subexpression : Parser (Expr Location)
+{-| -}
+subexpression : Parser (Expr Span)
 subexpression =
     Parser.succeed identity
         |. symbol "("
@@ -173,7 +288,8 @@ subexpression =
         |. symbol ")"
 
 
-parenthesised : Parser (Expr Location)
+{-| -}
+parenthesised : Parser (Expr Span)
 parenthesised =
     Parser.oneOf
         [ -- These are all the expressions that can be unambiguously parsed
@@ -192,7 +308,7 @@ parenthesised =
                             , template config
                             , undefined
                             ]
-                        |> locateExpr
+                        |> Span.parser Expr
                 , Pratt.literal identifier
                 ]
             , andThenOneOf = []
@@ -207,7 +323,8 @@ parenthesised =
 -- EXPRESSION PARSERS: ACCESSORS -----------------------------------------------
 
 
-access : Parser (Expr Location)
+{-| -}
+access : Parser (Expr Span)
 access =
     Parser.succeed (\expr accessor accessors -> Access expr (accessor :: accessors))
         |= Parser.lazy (\_ -> parenthesised)
@@ -229,14 +346,15 @@ access =
                     ]
             )
         |> Parser.backtrackable
-        |> locateExpr
+        |> Span.parser Expr
 
 
 
 -- EXPRESSION PARSERS: APPLICATION ---------------------------------------------
 
 
-application : Config (Expr Location) -> Parser (Expr Location)
+{-| -}
+application : Config (Expr Span) -> Parser (Expr Span)
 application config =
     Parser.succeed (\f arg args -> Application f (arg :: args))
         |= Parser.oneOf
@@ -262,14 +380,15 @@ application config =
                     ]
             )
         |> Parser.backtrackable
-        |> locateExpr
+        |> Span.parser Expr
 
 
 
 -- EXPRESSION PARSERS: BLOCKS --------------------------------------------------
 
 
-block : Config (Expr Location) -> Parser (Expr Location)
+{-| -}
+block : Config (Expr Span) -> Parser (Expr Span)
 block config =
     Parser.succeed Block
         |. symbol "{"
@@ -294,10 +413,11 @@ block config =
         |. Parser.spaces
         |. symbol "}"
         |> Parser.backtrackable
-        |> locateExpr
+        |> Span.parser Expr
 
 
-binding : Config (Expr Location) -> Parser ( String, Expr Location )
+{-| -}
+binding : Config (Expr Span) -> Parser ( String, Expr Span )
 binding config =
     Parser.succeed Tuple.pair
         |. keyword "let"
@@ -315,7 +435,8 @@ binding config =
 -- EXPRESSION PARSERS: CONDITIONALS --------------------------------------------
 
 
-conditional : Config (Expr Location) -> Parser (Expr Location)
+{-| -}
+conditional : Config (Expr Span) -> Parser (Expr Span)
 conditional config =
     Parser.succeed Conditional
         |. keyword "if"
@@ -331,14 +452,15 @@ conditional config =
         |. Parser.spaces
         |= Pratt.subExpression 0 config
         |> Parser.backtrackable
-        |> locateExpr
+        |> Span.parser Expr
 
 
 
 -- EXPRESSION PARSERS: IDENTIFIERS ---------------------------------------------
 
 
-identifier : Parser (Expr Location)
+{-| -}
+identifier : Parser (Expr Span)
 identifier =
     Parser.succeed Identifier
         |= Parser.oneOf
@@ -346,9 +468,10 @@ identifier =
             , local
             , scoped
             ]
-        |> locateExpr
+        |> Span.parser Expr
 
 
+{-| -}
 placeholder : Parser Expr.Identifier
 placeholder =
     Parser.succeed Expr.Placeholder
@@ -360,12 +483,14 @@ placeholder =
             ]
 
 
+{-| -}
 local : Parser Expr.Identifier
 local =
     Parser.succeed Expr.Local
         |= lowercaseName keywords
 
 
+{-| -}
 scoped : Parser Expr.Identifier
 scoped =
     Parser.succeed Expr.Scoped
@@ -381,12 +506,10 @@ scoped =
 -- EXPRESSION PARSERS: LAMBDAS -------------------------------------------------
 
 
-lambda : Config (Expr Location) -> Parser (Expr Location)
+{-| -}
+lambda : Config (Expr Span) -> Parser (Expr Span)
 lambda config =
     Parser.succeed (\arg args body -> Lambda (arg :: args) body)
-        |. keyword "fun"
-        |. Parser.commit ()
-        |. Parser.spaces
         |= pattern
         |. Parser.spaces
         |= Parser.loop []
@@ -403,17 +526,19 @@ lambda config =
             )
         |. Parser.spaces
         |. symbol "=>"
+        |. Parser.commit ()
         |. Parser.spaces
         |= Pratt.subExpression 0 config
         |> Parser.backtrackable
-        |> locateExpr
+        |> Span.parser Expr
 
 
 
 -- EXPRESSION PARSERS: LITERALS ------------------------------------------------
 
 
-literal : Config (Expr Location) -> Parser (Expr Location)
+{-| -}
+literal : Config (Expr Span) -> Parser (Expr Span)
 literal config =
     Parser.succeed Literal
         |= Parser.oneOf
@@ -426,10 +551,11 @@ literal config =
             , undefined
             , variant
             ]
-        |> locateExpr
+        |> Span.parser Expr
 
 
-array : Config (Expr Location) -> Parser (Expr.Literal (Expr Location))
+{-| -}
+array : Config (Expr Span) -> Parser (Expr.Literal (Expr Span))
 array config =
     Parser.succeed Expr.Array
         |= Parser.sequence
@@ -442,6 +568,7 @@ array config =
             }
 
 
+{-| -}
 boolean : Parser (Expr.Literal expr)
 boolean =
     Parser.succeed Expr.Boolean
@@ -453,6 +580,7 @@ boolean =
             ]
 
 
+{-| -}
 number : Parser (Expr.Literal expr)
 number =
     let
@@ -480,7 +608,8 @@ number =
             ]
 
 
-record : Config (Expr Location) -> Parser (Expr.Literal (Expr Location))
+{-| -}
+record : Config (Expr Span) -> Parser (Expr.Literal (Expr Span))
 record config =
     Parser.succeed Expr.Record
         |= Parser.sequence
@@ -501,9 +630,9 @@ record config =
                     -- We support record literal shorthand like JavaScript that
                     -- lets you write `{ foo }` as a shorthand for writing
                     -- `{ foo: foo }`. Because our expressions are annotated with
-                    -- their source location, we do some gymnastics to get that
-                    -- location data before we construct the identifier.
-                    , Parser.succeed (\start key end -> ( Location start end, key ))
+                    -- their source Span, we do some gymnastics to get that
+                    -- Span data before we construct the identifier.
+                    , Parser.succeed (\start key end -> ( Span.fromTuples start end, key ))
                         |= Parser.getPosition
                         |= lowercaseName keywords
                         |= Parser.getPosition
@@ -515,13 +644,15 @@ record config =
         |> Parser.backtrackable
 
 
+{-| -}
 string : Parser (Expr.Literal expr)
 string =
     Parser.succeed Expr.String
         |= quotedString '"'
 
 
-template : Config (Expr Location) -> Parser (Expr.Literal (Expr Location))
+{-| -}
+template : Config (Expr Span) -> Parser (Expr.Literal (Expr Span))
 template config =
     let
         char =
@@ -583,13 +714,15 @@ template config =
         |. Parser.symbol (Parser.Token "`" <| ExpectingSymbol "`")
 
 
+{-| -}
 undefined : Parser (Expr.Literal expr)
 undefined =
     Parser.succeed Expr.Undefined
         |. symbol "()"
 
 
-variant : Parser (Expr.Literal (Expr Location))
+{-| -}
+variant : Parser (Expr.Literal (Expr Span))
 variant =
     Parser.succeed Expr.Variant
         |. symbol "#"
@@ -613,7 +746,8 @@ variant =
 -- EXPRESSION PARSERS: MATCHES -------------------------------------------------
 
 
-match : Config (Expr Location) -> Parser (Expr Location)
+{-| -}
+match : Config (Expr Span) -> Parser (Expr Span)
 match config =
     Parser.succeed Match
         |. keyword "where"
@@ -633,7 +767,24 @@ match config =
                             [ Parser.succeed Just
                                 |. keyword "if"
                                 |. Parser.spaces
-                                |= Pratt.subExpression 0 config
+                                |= prattExpression
+                                    -- These parsers start with a keyword
+                                    [ conditional
+                                    , match
+
+                                    -- These parsers parse sub expressions
+                                    --, annotation
+                                    , application
+                                    , Pratt.literal access
+
+                                    --
+                                    , block
+                                    , Pratt.literal identifier
+                                    , literal
+
+                                    -- Subexpressions are wrapped in parentheses.
+                                    , Pratt.literal (Parser.lazy (\_ -> subexpression))
+                                    ]
                             , Parser.succeed Nothing
                             ]
                         |. Parser.spaces
@@ -647,7 +798,7 @@ match config =
                     ]
             )
         |> Parser.backtrackable
-        |> locateExpr
+        |> Span.parser Expr
 
 
 
@@ -656,6 +807,7 @@ match config =
 --                                                                            --
 
 
+{-| -}
 pattern : Parser Expr.Pattern
 pattern =
     Parser.oneOf
@@ -669,6 +821,7 @@ pattern =
         ]
 
 
+{-| -}
 arrayDestructure : Parser Expr.Pattern
 arrayDestructure =
     Parser.succeed Expr.ArrayDestructure
@@ -706,6 +859,7 @@ arrayDestructure =
         |> Parser.backtrackable
 
 
+{-| -}
 literalPattern : Parser Expr.Pattern
 literalPattern =
     Parser.succeed Expr.LiteralPattern
@@ -717,12 +871,14 @@ literalPattern =
             ]
 
 
+{-| -}
 name : Parser Expr.Pattern
 name =
     Parser.succeed Expr.Name
         |= lowercaseName keywords
 
 
+{-| -}
 recordDestructure : Parser Expr.Pattern
 recordDestructure =
     let
@@ -787,6 +943,7 @@ recordDestructure =
         |> Parser.backtrackable
 
 
+{-| -}
 spread : Parser Expr.Pattern
 spread =
     Parser.succeed Expr.Spread
@@ -796,6 +953,7 @@ spread =
         |> Parser.backtrackable
 
 
+{-| -}
 typeof : Parser Expr.Pattern
 typeof =
     Parser.succeed Expr.Typeof
@@ -807,6 +965,7 @@ typeof =
         |> Parser.backtrackable
 
 
+{-| -}
 variantDestructure : Parser Expr.Pattern
 variantDestructure =
     Parser.succeed Expr.VariantDestructure
@@ -829,6 +988,7 @@ variantDestructure =
         |> Parser.backtrackable
 
 
+{-| -}
 wildcard : Parser Expr.Pattern
 wildcard =
     Parser.succeed Expr.Wildcard
@@ -842,10 +1002,115 @@ wildcard =
 
 
 --                                                                            --
+-- TYPE PARSERS ----------------------------------------------------------------
+--                                                                            --
+
+
+type_ : Parser Type
+type_ =
+    Parser.oneOf
+        [ fun
+        , app
+        , var
+        , con
+        , any
+        ]
+
+
+subtype : Parser Type
+subtype =
+    Parser.succeed identity
+        |. symbol "("
+        |. Parser.spaces
+        |= Parser.lazy (\_ -> type_)
+        |. Parser.spaces
+        |. symbol ")"
+        |> Parser.backtrackable
+
+
+var : Parser Type
+var =
+    Parser.succeed Type.Var
+        |= lowercaseName Set.empty
+
+
+con : Parser Type
+con =
+    Parser.oneOf
+        [ Parser.succeed Type.Con
+            |= uppercaseName Set.empty
+        , Parser.succeed (Type.Con "()")
+            |. Parser.symbol (Parser.Token "()" <| ExpectingSymbol "()")
+        ]
+
+
+app : Parser Type
+app =
+    let
+        typeWithoutApp =
+            Parser.oneOf
+                [ subtype
+                , var
+                , con
+                , any
+                ]
+    in
+    Parser.succeed (\con_ arg args -> Type.App con_ (arg :: args))
+        |= typeWithoutApp
+        |. Parser.spaces
+        |= typeWithoutApp
+        |. Parser.spaces
+        |= Parser.loop []
+            (\args ->
+                Parser.oneOf
+                    [ Parser.succeed (\arg -> arg :: args)
+                        |= typeWithoutApp
+                        |. Parser.spaces
+                        |> Parser.map Parser.Loop
+                    , Parser.succeed (List.reverse args)
+                        |> Parser.map Parser.Done
+                    ]
+            )
+        |> Parser.backtrackable
+
+
+fun : Parser Type
+fun =
+    let
+        typeWithoutFun =
+            Parser.oneOf
+                [ subtype
+                , any
+                , var
+                , con
+                , app
+                ]
+    in
+    Parser.succeed Type.Fun
+        |= typeWithoutFun
+        |. Parser.spaces
+        |. Parser.oneOf
+            [ symbol "->"
+            , symbol "→"
+            ]
+        |. Parser.spaces
+        |= Parser.lazy (\_ -> type_)
+        |> Parser.backtrackable
+
+
+any : Parser Type
+any =
+    Parser.succeed Type.Any
+        |. symbol "*"
+
+
+
+--                                                                            --
 -- UTILITIES -------------------------------------------------------------------
 --                                                                            --
 
 
+{-| -}
 lowercaseName : Set String -> Parser String
 lowercaseName reserved =
     Parser.variable
@@ -856,6 +1121,7 @@ lowercaseName reserved =
         }
 
 
+{-| -}
 uppercaseName : Set String -> Parser String
 uppercaseName reserved =
     Parser.variable
@@ -866,21 +1132,25 @@ uppercaseName reserved =
         }
 
 
+{-| -}
 symbol : String -> Parser ()
 symbol s =
     Parser.symbol (Parser.Token s <| ExpectingSymbol s)
 
 
+{-| -}
 keyword : String -> Parser ()
 keyword s =
     Parser.keyword (Parser.Token s <| ExpectingKeyword s)
 
 
+{-| -}
 operator : String -> Parser ()
 operator s =
     Parser.symbol (Parser.Token s <| ExpectingOperator s)
 
 
+{-| -}
 quotedString : Char -> Parser String
 quotedString quote =
     let
@@ -894,10 +1164,6 @@ quotedString quote =
                     |= Parser.oneOf
                         [ Parser.map (\_ -> '\\') (symbol "\\")
                         , Parser.map (\_ -> '"') (symbol "\"") -- " (elm-vscode workaround)
-                        , Parser.map (\_ -> '\'') (symbol "'")
-                        , Parser.map (\_ -> '\n') (symbol "n")
-                        , Parser.map (\_ -> '\t') (symbol "t")
-                        , Parser.map (\_ -> '\u{000D}') (symbol "r")
                         ]
                 , symbol s
                     |> Parser.andThen (\_ -> Parser.problem <| UnexpextedChar quote)
@@ -926,12 +1192,19 @@ quotedString quote =
         |. symbol s
 
 
+{-| -}
 keywords : Set String
 keywords =
     Set.fromList <|
         List.concat
+            -- Imports
+            [ [ "import", "as", "exposing" ]
+
+            -- Declarations
+            , [ "pub", "extern" ]
+
             -- Bindings
-            [ [ "fun", "let" ]
+            , [ "fun", "let", "ret" ]
 
             -- Conditionals
             , [ "if", "then", "else" ]
@@ -941,10 +1214,4 @@ keywords =
 
             -- Literals
             , [ "true", "false" ]
-
-            -- Imports
-            , [ "import", "as", "exposing" ]
-
-            -- Declarations
-            , [ "pub", "extern" ]
             ]
