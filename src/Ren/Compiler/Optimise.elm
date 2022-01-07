@@ -77,6 +77,12 @@ operators : Optimisation meta
 operators _ expr =
     case expr of
         Infix Pipe lhs rhs ->
+            -- I suppose this could count as a desugaring instead of an optimisation
+            -- but there you go.
+            --
+            -- Maybe counting this as an optimisation is correct, without optimisations
+            -- enabled we could then compile Ren pipes into some JS-like construct
+            -- like Rambda does for better readability.
             Application rhs [ lhs ]
 
         Infix Add (Expr _ lhs) (Expr _ rhs) ->

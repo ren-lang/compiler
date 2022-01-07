@@ -93,7 +93,7 @@ declaration { public, name, type_, expr } =
                         |> Pretty.a Pretty.line
                         |> Pretty.a
                             (Pretty.string "return "
-                                |> Pretty.a (wrapGenerator <| Expr.cata (always expression) body)
+                                |> Pretty.a (wrapBuilder <| Expr.cata (always expression) body)
                                 |> Pretty.indent 4
                             )
                         |> Pretty.a Pretty.line
@@ -116,7 +116,7 @@ declaration { public, name, type_, expr } =
                         |> Pretty.a Pretty.line
                         |> Pretty.a
                             (Pretty.string "return "
-                                |> Pretty.a (wrapGenerator <| Expr.cata (always expression) <| Expr meta (Lambda args body))
+                                |> Pretty.a (wrapBuilder <| Expr.cata (always expression) <| Expr meta (Lambda args body))
                                 |> Pretty.indent 4
                             )
                         |> Pretty.a Pretty.line
@@ -133,7 +133,7 @@ declaration { public, name, type_, expr } =
                     Pretty.string "const "
                         |> Pretty.a (Pretty.string name)
                         |> Pretty.a (Pretty.string " = ")
-                        |> Pretty.a (wrapGenerator <| Expr.cata (always expression) expr)
+                        |> Pretty.a (wrapBuilder <| Expr.cata (always expression) expr)
                         |> Pretty.append
                             (if public then
                                 Pretty.string "export "
@@ -151,19 +151,19 @@ declaration { public, name, type_, expr } =
 
 
 {-| -}
-type alias Generator t =
+type alias Builder t =
     { wrap : Pretty.Doc t -> Pretty.Doc t
     , expr : Pretty.Doc t
     }
 
 
-wrapGenerator : Generator t -> Pretty.Doc t
-wrapGenerator { wrap, expr } =
+wrapBuilder : Builder t -> Pretty.Doc t
+wrapBuilder { wrap, expr } =
     wrap expr
 
 
 {-| -}
-expression : ExprF (Generator t) -> Generator t
+expression : ExprF (Builder t) -> Builder t
 expression exprF =
     case exprF of
         Access expr accessors ->
@@ -172,11 +172,17 @@ expression exprF =
         Application expr args ->
             application expr args
 
+        Annotation expr _ ->
+            expr
+
         Block bindings expr ->
             block bindings expr
 
         Conditional cond true false ->
             conditional cond true false
+
+        Error _ ->
+            { wrap = Basics.identity, expr = Pretty.empty }
 
         Identifier id ->
             identifier id
@@ -199,7 +205,7 @@ expression exprF =
 
 
 {-| -}
-access : Generator t -> List String -> Generator t
+access : Builder t -> List String -> Builder t
 access { wrap, expr } accessors =
     { wrap = Basics.identity
     , expr =
@@ -213,7 +219,7 @@ access { wrap, expr } accessors =
 
 
 {-| -}
-application : Generator t -> List (Generator t) -> Generator t
+application : Builder t -> List (Builder t) -> Builder t
 application { wrap, expr } args =
     { wrap = Pretty.parens
     , expr =
@@ -227,7 +233,7 @@ application { wrap, expr } args =
 
 
 {-| -}
-block : List ( String, Generator t ) -> Generator t -> Generator t
+block : List ( String, Builder t ) -> Builder t -> Builder t
 block bindings { wrap, expr } =
     let
         binding ( name, gen ) =
@@ -265,7 +271,7 @@ block bindings { wrap, expr } =
 
 
 {-| -}
-conditional : Generator t -> Generator t -> Generator t -> Generator t
+conditional : Builder t -> Builder t -> Builder t -> Builder t
 conditional cond true false =
     { wrap = Pretty.parens
     , expr =
@@ -284,7 +290,7 @@ conditional cond true false =
 
 
 {-| -}
-identifier : Expr.Identifier -> Generator t
+identifier : Expr.Identifier -> Builder t
 identifier id =
     case id of
         Expr.Local var ->
@@ -319,7 +325,7 @@ identifier id =
 
 
 {-| -}
-infix_ : Expr.Operator -> Generator t -> Generator t -> Generator t
+infix_ : Expr.Operator -> Builder t -> Builder t -> Builder t
 infix_ op lhs rhs =
     let
         binop s =
@@ -407,7 +413,7 @@ infix_ op lhs rhs =
 
 
 {-| -}
-lambda : List Expr.Pattern -> Generator t -> Generator t
+lambda : List Expr.Pattern -> Builder t -> Builder t
 lambda args { wrap, expr } =
     { wrap = Pretty.parens
     , expr =
@@ -473,7 +479,7 @@ lambdaPattern pat =
 
 
 {-| -}
-literal : Expr.Literal (Generator t) -> Generator t
+literal : Expr.Literal (Builder t) -> Builder t
 literal lit =
     case lit of
         Expr.Array elements ->
@@ -557,7 +563,7 @@ literal lit =
 
 
 {-| -}
-match : Generator t -> List ( Expr.Pattern, Maybe (Generator t), Generator t ) -> Generator t
+match : Builder t -> List ( Expr.Pattern, Maybe (Builder t), Builder t ) -> Builder t
 match { expr } cases =
     let
         isVariable =
@@ -592,7 +598,7 @@ match { expr } cases =
 
 
 {-| -}
-matchCase : String -> ( Expr.Pattern, Maybe (Generator t), Generator t ) -> Pretty.Doc t
+matchCase : String -> ( Expr.Pattern, Maybe (Builder t), Builder t ) -> Pretty.Doc t
 matchCase name ( pat, guard, { expr } ) =
     Pretty.string "if ("
         |> Pretty.a (matchPattern name pat)

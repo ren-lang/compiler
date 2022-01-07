@@ -5,6 +5,7 @@ module Ren.AST.Expr exposing (..)
 import Data.Either exposing (Either)
 import Data.Tuple2
 import Data.Tuple3
+import Ren.Data.Type as Type exposing (Type)
 
 
 
@@ -23,13 +24,22 @@ type Expr meta
 type ExprF expr
     = Access expr (List String)
     | Application expr (List expr)
+    | Annotation expr Type
     | Block (List ( String, expr )) expr
     | Conditional expr expr expr
+    | Error (Maybe Error)
     | Identifier Identifier
     | Infix Operator expr expr
     | Lambda (List Pattern) expr
     | Literal (Literal expr)
     | Match expr (List ( Pattern, Maybe expr, expr ))
+
+
+{-| -}
+type Error
+    = MissingElement
+    | MissingSymbol String
+    | UnexpectedSymbol String
 
 
 {-| -}
@@ -128,6 +138,9 @@ references identifier expr =
                 Application referencedInExpr referencedInArgs ->
                     referencedInExpr || List.any Basics.identity referencedInArgs
 
+                Annotation referencedInExpr _ ->
+                    referencedInExpr
+
                 Block bindings referencedInBody ->
                     let
                         shadowed ( binding, _ ) =
@@ -138,6 +151,9 @@ references identifier expr =
 
                 Conditional referencedInCond referencedInTrue referencedInFalse ->
                     referencedInCond || referencedInTrue || referencedInFalse
+
+                Error _ ->
+                    False
 
                 Identifier id ->
                     identifier == id
@@ -208,6 +224,9 @@ shadows identifier expr =
                         Application shadowedInExpr shadowedInArgs ->
                             shadowedInExpr || List.any Basics.identity shadowedInArgs
 
+                        Annotation shadowedInExpr _ ->
+                            shadowedInExpr
+
                         Block shadowedInBindings shadowedInBody ->
                             List.any (Tuple.first >> (==) name) shadowedInBindings
                                 || List.any Tuple.second shadowedInBindings
@@ -215,6 +234,9 @@ shadows identifier expr =
 
                         Conditional shadowedInCond shadowedInTrue shadowedInFalse ->
                             shadowedInCond || shadowedInTrue || shadowedInFalse
+
+                        Error _ ->
+                            False
 
                         Identifier _ ->
                             False
@@ -344,11 +366,17 @@ map f expression =
         Application expr args ->
             Application (f expr) (List.map f args)
 
+        Annotation expr t ->
+            Annotation (f expr) t
+
         Block bindings body ->
             Block (List.map (Tuple.mapSecond f) bindings) (f body)
 
         Conditional cond true false ->
             Conditional (f cond) (f true) (f false)
+
+        Error e ->
+            Error e
 
         Identifier id ->
             Identifier id
@@ -398,11 +426,17 @@ mapAnnotation f (Expr a expression) =
             Application expr args ->
                 Application (mapAnnotation f expr) (List.map (mapAnnotation f) args)
 
+            Annotation expr t ->
+                Annotation (mapAnnotation f expr) t
+
             Block bindings body ->
                 Block (List.map (Tuple.mapSecond (mapAnnotation f)) bindings) (mapAnnotation f body)
 
             Conditional cond true false ->
                 Conditional (mapAnnotation f cond) (mapAnnotation f true) (mapAnnotation f false)
+
+            Error e ->
+                Error e
 
             Identifier id ->
                 Identifier id

@@ -103,11 +103,20 @@ expression exprF =
         Application expr args ->
             application expr args
 
+        Annotation expr t ->
+            expr
+                |> Pretty.a (Pretty.string " as ")
+                |> Pretty.a (Pretty.string <| Type.toString t)
+                |> Pretty.surround (Pretty.char '(') (Pretty.char ')')
+
         Block bindings expr ->
             block bindings expr
 
         Conditional cond true false ->
             conditional cond true false
+
+        Error _ ->
+            Pretty.empty
 
         Identifier id ->
             identifier id

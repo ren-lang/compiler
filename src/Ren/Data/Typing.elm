@@ -5,6 +5,7 @@ module Ren.Data.Typing exposing (..)
 -- IMPORTS ---------------------------------------------------------------------
 
 import Data.Tuple2
+import Dict
 import Ren.Data.Monoenv as Monoenv exposing (Monoenv)
 import Ren.Data.Substitution as Substitution
 import Ren.Data.Type as Type exposing (Type)
@@ -73,8 +74,23 @@ remove =
     Monoenv.remove >> Tuple.mapFirst
 
 
-reduce : Typing -> Typing
-reduce typing =
+reduce : String -> Typing -> Typing
+reduce var ( env_, t ) =
+    let
+        tau_ftv =
+            Type.free t
+
+        delta =
+            Dict.filter (always keep) <| Monoenv.remove var env_
+
+        keep s =
+            Basics.not <| Set.isEmpty (Set.intersect (Type.free s) tau_ftv)
+    in
+    from delta t
+
+
+simplify : Typing -> Typing
+simplify typing =
     let
         -- Prevents substituting `a` for `a` and causing infinite loops.
         s i v =
@@ -97,7 +113,7 @@ reduce typing =
 {-| -}
 toString : Typing -> String
 toString typing =
-    reduce typing
+    simplify typing
         |> Tuple.mapBoth Monoenv.toString Type.toString
         |> Data.Tuple2.asList (String.join " ⊢ ")
 
@@ -105,11 +121,11 @@ toString typing =
 {-| -}
 toForallString : Typing -> String
 toForallString typing =
-    reduce typing
+    simplify typing
         |> (\( env_, t ) ->
                 if Set.isEmpty (free ( env_, t )) then
                     Type.toString t
 
                 else
-                    "∀ " ++ (String.join " " <| Set.toList <| free <| reduce typing) ++ ". " ++ Type.toString t
+                    "∀ " ++ (String.join " " <| Set.toList <| free <| simplify typing) ++ ". " ++ Type.toString t
            )

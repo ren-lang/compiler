@@ -50,6 +50,14 @@ run transformations declaration =
     }
 
 
+{-| -}
+defaults : List (Transformation meta)
+defaults =
+    [ placeholders
+    , blocks
+    ]
+
+
 
 -- TYPES -----------------------------------------------------------------------
 
@@ -70,7 +78,7 @@ bindings get transformed into lambdas and allow us a simple way to achieve
 positional piping, partial operator application, and more.
 -}
 placeholders : Transformation meta
-placeholders meta expr =
+placeholders meta exprF =
     let
         -- Generate a bunch of id numbers up front so we can create variable names
         -- like `$0`... This is easier than threading some state to increment the
@@ -117,7 +125,7 @@ placeholders meta expr =
                 _ ->
                     Expr m e
     in
-    case expr of
+    case exprF of
         Access ((Expr _ (Identifier (Placeholder _))) as e) accessors ->
             Lambda [ Name "$0" ] <|
                 Expr meta (Access (replace 0 e) accessors)
@@ -128,7 +136,7 @@ placeholders meta expr =
                     Expr meta (Application (replace 0 e) (List.map2 replace (List.drop 1 ids) es))
 
             else
-                expr
+                exprF
 
         Conditional c t f ->
             if List.any isPlaceholder [ c, t, f ] then
@@ -136,7 +144,7 @@ placeholders meta expr =
                     Expr meta (Conditional (replace 0 c) (replace 1 t) (replace 2 f))
 
             else
-                expr
+                exprF
 
         Infix op lhs rhs ->
             if List.any isPlaceholder [ lhs, rhs ] then
@@ -144,11 +152,22 @@ placeholders meta expr =
                     Expr meta (Infix op (replace 0 lhs) (replace 1 rhs))
 
             else
-                expr
+                exprF
 
         Match ((Expr _ (Identifier (Placeholder _))) as e) cases ->
             Lambda [ Name "$0" ] <|
                 Expr meta (Match (replace 0 e) cases)
 
         _ ->
+            exprF
+
+
+{-| -}
+blocks : Transformation meta
+blocks _ exprF =
+    case exprF of
+        Block [] (Expr _ expr) ->
             expr
+
+        _ ->
+            exprF

@@ -3,6 +3,7 @@ module Ren.Compiler.Parse exposing (..)
 -- IMPORTS ---------------------------------------------------------------------
 
 import Data.Either
+import Dict
 import Parser.Advanced as Parser exposing ((|.), (|=))
 import Pratt.Advanced as Pratt
 import Ren.AST.Expr as Expr exposing (Expr(..), ExprF(..))
@@ -191,7 +192,7 @@ expression =
         , match
 
         -- These parsers parse sub expressions
-        --, annotation
+        , annotation
         , lambda
         , application
         , Pratt.literal access
@@ -379,6 +380,23 @@ application config =
                         |> Parser.map Parser.Done
                     ]
             )
+        |> Parser.backtrackable
+        |> Span.parser Expr
+
+
+
+-- EXPRESSION PARSERS: ANNOTATION ----------------------------------------------
+
+
+annotation : Config (Expr Span) -> Parser (Expr Span)
+annotation config =
+    Parser.succeed Annotation
+        |= parenthesised
+        |. Parser.spaces
+        |. keyword "as"
+        |. Parser.commit ()
+        |. Parser.spaces
+        |= type_
         |> Parser.backtrackable
         |> Span.parser Expr
 
@@ -1014,6 +1032,9 @@ type_ =
         , var
         , con
         , any
+        , rec
+        , hole
+        , Parser.lazy (\_ -> subtype)
         ]
 
 
@@ -1031,7 +1052,7 @@ subtype =
 var : Parser Type
 var =
     Parser.succeed Type.Var
-        |= lowercaseName Set.empty
+        |= lowercaseName keywords
 
 
 con : Parser Type
@@ -1053,6 +1074,7 @@ app =
                 , var
                 , con
                 , any
+                , hole
                 ]
     in
     Parser.succeed (\con_ arg args -> Type.App con_ (arg :: args))
@@ -1084,6 +1106,8 @@ fun =
                 , var
                 , con
                 , app
+                , rec
+                , hole
                 ]
     in
     Parser.succeed Type.Fun
@@ -1098,10 +1122,35 @@ fun =
         |> Parser.backtrackable
 
 
+rec : Parser Type
+rec =
+    Parser.succeed (Type.Rec << Dict.fromList)
+        |= Parser.sequence
+            { start = Parser.Token "{" (ExpectingSymbol "{")
+            , separator = Parser.Token "," (ExpectingSymbol ",")
+            , end = Parser.Token "}" (ExpectingSymbol "}")
+            , spaces = Parser.spaces
+            , item =
+                Parser.succeed Tuple.pair
+                    |= lowercaseName keywords
+                    |. Parser.spaces
+                    |. symbol ":"
+                    |. Parser.spaces
+                    |= Parser.lazy (\_ -> type_)
+            , trailing = Parser.Forbidden
+            }
+
+
 any : Parser Type
 any =
     Parser.succeed Type.Any
         |. symbol "*"
+
+
+hole : Parser Type
+hole =
+    Parser.succeed Type.Hole
+        |. symbol "?"
 
 
 
