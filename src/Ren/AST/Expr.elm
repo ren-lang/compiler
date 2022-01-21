@@ -1,4 +1,22 @@
-module Ren.AST.Expr exposing (..)
+module Ren.AST.Expr exposing
+    ( Expr(..), ExprF(..)
+    , Error(..), Identifier(..), Literal(..), Operator(..), Pattern(..)
+    , annotation, references, shadows, bound, binds
+    , map, mapAnnotation, erase
+    , wrap, unwrap, cata, para
+    , coerceToNumber, coerceToBoolean, internalOperatorName
+    )
+
+{-|
+
+@docs Expr, ExprF
+@docs Error, Identifier, Literal, Operator, Pattern
+@docs annotation, references, shadows, bound, binds
+@docs map, mapAnnotation, erase
+@docs wrap, unwrap, cata, para
+@docs coerceToNumber, coerceToBoolean, internalOperatorName
+
+-}
 
 -- IMPORTS ---------------------------------------------------------------------
 
@@ -112,10 +130,6 @@ type Pattern
 annotation : Expr meta -> meta
 annotation (Expr meta _) =
     meta
-
-
-
--- QUERIES ---------------------------------------------------------------------
 
 
 {-| -}

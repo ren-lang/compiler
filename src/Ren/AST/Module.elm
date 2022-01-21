@@ -1,6 +1,16 @@
-module Ren.AST.Module exposing (..)
+module Ren.AST.Module exposing
+    ( Module, Import, Declaration
+    , exposes, imports
+    , map
+    )
 
-{-| -}
+{-|
+
+@docs Module, Import, Declaration
+@docs exposes, imports
+@docs map
+
+-}
 
 -- IMPORTS ---------------------------------------------------------------------
 
