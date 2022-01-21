@@ -247,24 +247,8 @@ annotation inferExpr ann =
         do (unify [ envExpr ] [ tExpr, tAnn ]) <| \t ->
         if ann == Hole then
             ResultM.succeed ( envExpr, tExpr )
-            -- There has to be a better way to do this. This is checking
-            -- if the annotated type is too general, for example if we
-            -- have the following function:
-            --
-            -- let id : a -> a =
-            --   a => 10
-            --
-            -- Then the annot;ated type `a` is too general for the actual
-            -- type `Number`. If we just try and unify the two, though,
-            -- it would succeed because we would produce a substitution
-            -- `a ↦ Number`.
-            --
-            -- To make sure the type annotation isn't more general than it
-            -- should be this is a very crude check to confirm that the
-            -- number of free variables is the same in both the inferred
-            -- type and the annotated one.
 
-        else if Set.size (Typing.free t) /= Set.size (Typing.free ( envAnn, tAnn )) then
+        else if Typing.free (Typing.simplify t) /= Typing.free (Typing.simplify ( envAnn, tAnn )) then
             ResultM.fail <| TypeTooGeneral ann (Typing.type_ t)
 
         else
@@ -520,6 +504,16 @@ pattern p =
         Expr.Spread name ->
             do next <| \a ->
             ResultM.succeed <| Typing.mono name (array a)
+
+        Expr.TemplateDestructure segments ->
+            segments
+                |> List.map (Data.Either.extract (always <| ResultM.succeed <| Typing.poly Type.string) pattern)
+                |> ResultM.sequence
+                |> ResultM.map List.unzip
+                |> ResultM.andThen
+                    (\( envs, ts ) ->
+                        unify envs <| Type.string :: ts
+                    )
 
         Expr.Typeof _ p_ ->
             do (pattern p_) <| \( env, _ ) ->

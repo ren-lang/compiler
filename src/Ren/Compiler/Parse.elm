@@ -151,30 +151,38 @@ import_ =
 {-| -}
 declaration : Parser (Module.Declaration Span)
 declaration =
-    Parser.succeed Module.Declaration
-        |= Parser.oneOf
-            [ Parser.succeed True
-                |. keyword "pub"
-            , Parser.succeed False
-            ]
-        |. Parser.spaces
-        |. keyword "let"
-        |. Parser.spaces
-        |= lowercaseName keywords
-        |. Parser.spaces
-        |= Parser.oneOf
-            [ Parser.succeed Basics.identity
-                |. symbol ":"
-                |. Parser.spaces
-                |= type_
-                |. Parser.spaces
-            , Parser.succeed Type.Any
-            ]
-        |. symbol "="
-        |. Parser.spaces
-        |= expression
-        |> Span.parser (|>)
-        |> Parser.inContext InDeclaration
+    Parser.oneOf
+        [ Parser.succeed (Module.Declaration False "_" Type.Any)
+            |. keyword "run"
+            |. Parser.commit ()
+            |= expression
+            |> Span.parser (|>)
+            |> Parser.inContext InDeclaration
+        , Parser.succeed Module.Declaration
+            |= Parser.oneOf
+                [ Parser.succeed True
+                    |. keyword "pub"
+                , Parser.succeed False
+                ]
+            |. Parser.spaces
+            |. keyword "let"
+            |. Parser.spaces
+            |= lowercaseName keywords
+            |. Parser.spaces
+            |= Parser.oneOf
+                [ Parser.succeed Basics.identity
+                    |. symbol ":"
+                    |. Parser.spaces
+                    |= type_
+                    |. Parser.spaces
+                , Parser.succeed Type.Any
+                ]
+            |. symbol "="
+            |. Parser.spaces
+            |= expression
+            |> Span.parser (|>)
+            |> Parser.inContext InDeclaration
+        ]
 
 
 
@@ -192,14 +200,17 @@ expression =
         , match
 
         -- These parsers parse sub expressions
-        , annotation
+        , Pratt.literal annotation
         , lambda
         , application
         , Pratt.literal access
 
         --
-        , block
         , Pratt.literal identifier
+
+        -- Blocks and record literals can both begin with a `{`. I'm not sure it
+        -- matters which one we try first, though.
+        , block
         , literal
 
         -- Subexpressions are wrapped in parentheses.
@@ -388,8 +399,8 @@ application config =
 -- EXPRESSION PARSERS: ANNOTATION ----------------------------------------------
 
 
-annotation : Config (Expr Span) -> Parser (Expr Span)
-annotation config =
+annotation : Parser (Expr Span)
+annotation =
     Parser.succeed Annotation
         |= parenthesised
         |. Parser.spaces
@@ -437,16 +448,24 @@ block config =
 {-| -}
 binding : Config (Expr Span) -> Parser ( String, Expr Span )
 binding config =
-    Parser.succeed Tuple.pair
-        |. keyword "let"
-        |. Parser.commit ()
-        |. Parser.spaces
-        |= lowercaseName keywords
-        |. Parser.spaces
-        |. symbol "="
-        |. Parser.spaces
-        |= Pratt.subExpression 0 config
-        |> Parser.backtrackable
+    Parser.oneOf
+        [ Parser.succeed (Tuple.pair "_")
+            |. keyword "run"
+            |. Parser.commit ()
+            |. Parser.spaces
+            |= Pratt.subExpression 0 config
+            |> Parser.backtrackable
+        , Parser.succeed Tuple.pair
+            |. keyword "let"
+            |. Parser.commit ()
+            |. Parser.spaces
+            |= lowercaseName keywords
+            |. Parser.spaces
+            |. symbol "="
+            |. Parser.spaces
+            |= Pratt.subExpression 0 config
+            |> Parser.backtrackable
+        ]
 
 
 
@@ -713,6 +732,7 @@ template config =
     in
     Parser.succeed (List.foldl joinSegments [] >> Expr.Template)
         |. Parser.symbol (Parser.Token "`" <| ExpectingSymbol "`")
+        |. Parser.commit ()
         |= Parser.loop []
             (\segments ->
                 Parser.oneOf
@@ -833,6 +853,7 @@ pattern =
         , literalPattern
         , name
         , recordDestructure
+        , templateDestructure
         , typeof
         , variantDestructure
         , wildcard
@@ -968,6 +989,71 @@ spread =
         |. symbol "..."
         |. Parser.commit ()
         |= lowercaseName keywords
+        |> Parser.backtrackable
+
+
+{-| -}
+templateDestructure : Parser Expr.Pattern
+templateDestructure =
+    let
+        char =
+            Parser.oneOf
+                [ Parser.succeed identity
+                    |. Parser.token (Parser.Token "\\" <| ExpectingSymbol "\\")
+                    |= Parser.oneOf
+                        [ Parser.map (\_ -> '\\') (Parser.token (Parser.Token "\\" <| ExpectingSymbol "\\"))
+                        , Parser.map (\_ -> '"') (Parser.token (Parser.Token "\"" <| ExpectingSymbol "\"")) -- " (elm-vscode workaround)
+                        , Parser.map (\_ -> '\'') (Parser.token (Parser.Token "'" <| ExpectingSymbol "'"))
+                        , Parser.map (\_ -> '\n') (Parser.token (Parser.Token "n" <| ExpectingSymbol "n"))
+                        , Parser.map (\_ -> '\t') (Parser.token (Parser.Token "t" <| ExpectingSymbol "t"))
+                        , Parser.map (\_ -> '\u{000D}') (Parser.token (Parser.Token "r" <| ExpectingSymbol "r"))
+                        ]
+                , Parser.token (Parser.Token "`" <| ExpectingSymbol "`")
+                    |> Parser.andThen (\_ -> Parser.problem <| UnexpextedChar '`')
+                , Parser.chompIf ((/=) '\n') ExpectingChar
+                    |> Parser.getChompedString
+                    |> Parser.andThen
+                        (String.uncons
+                            >> Maybe.map (Tuple.first >> Parser.succeed)
+                            >> Maybe.withDefault (Parser.problem <| InternalError "Multiple characters chomped in `parseChar`")
+                        )
+                ]
+
+        -- Each template segment should either be a String or an expression to
+        -- be interpolated. Right now instead of String segments we have Char
+        -- segments, so we use this function in a fold to join all the characters
+        -- into a strings.
+        joinSegments segment segments =
+            case ( segment, segments ) of
+                ( Data.Either.Left c, (Data.Either.Left s) :: rest ) ->
+                    Data.Either.Left (String.cons c s) :: rest
+
+                ( Data.Either.Left c, rest ) ->
+                    Data.Either.Left (String.fromChar c) :: rest
+
+                ( Data.Either.Right e, rest ) ->
+                    Data.Either.Right e :: rest
+    in
+    Parser.succeed (List.foldl joinSegments [] >> Expr.TemplateDestructure)
+        |. symbol "`"
+        |. Parser.commit ()
+        |= Parser.loop []
+            (\segments ->
+                Parser.oneOf
+                    [ Parser.succeed (\expr -> Data.Either.Right expr :: segments)
+                        |. symbol "${"
+                        |= Parser.lazy (\_ -> pattern)
+                        |. symbol "}"
+                        |> Parser.map Parser.Loop
+                    , Parser.succeed (\c -> Data.Either.Left c :: segments)
+                        |= char
+                        |> Parser.backtrackable
+                        |> Parser.map Parser.Loop
+                    , Parser.succeed segments
+                        |> Parser.map Parser.Done
+                    ]
+            )
+        |. symbol "`"
         |> Parser.backtrackable
 
 

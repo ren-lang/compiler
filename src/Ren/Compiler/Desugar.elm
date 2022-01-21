@@ -4,6 +4,8 @@ module Ren.Compiler.Desugar exposing (..)
 
 -- IMPORTS ---------------------------------------------------------------------
 
+import Data.Either exposing (Either(..))
+import Data.Tuple3
 import Ren.AST.Expr as Expr
     exposing
         ( Expr(..)
@@ -168,6 +170,43 @@ blocks _ exprF =
     case exprF of
         Block [] (Expr _ expr) ->
             expr
+
+        _ ->
+            exprF
+
+
+{-| -}
+patterns : Transformation meta
+patterns _ exprF =
+    let
+        simplify pattern =
+            case pattern of
+                -- If the only pattern in an array destructure is a spread then
+                -- it's no different to just binding to a name directly!
+                ArrayDestructure [ Spread name ] ->
+                    Name name
+
+                -- If the only pattern in a record destructure is a spread then
+                -- it's no different to just binding to a name directly!
+                RecordDestructure [ ( _, Just (Spread name) ) ] ->
+                    Name name
+
+                --
+                TemplateDestructure [ Left s ] ->
+                    LiteralPattern <| Expr.String s
+
+                TemplateDestructure [ Right (Name n) ] ->
+                    Name n
+
+                _ ->
+                    pattern
+    in
+    case exprF of
+        Lambda args expr ->
+            Lambda (List.map simplify args) expr
+
+        Match expr cases ->
+            Match expr <| List.map (Data.Tuple3.mapFirst simplify) cases
 
         _ ->
             exprF

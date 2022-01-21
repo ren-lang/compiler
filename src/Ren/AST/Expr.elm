@@ -5,7 +5,7 @@ module Ren.AST.Expr exposing (..)
 import Data.Either exposing (Either)
 import Data.Tuple2
 import Data.Tuple3
-import Ren.Data.Type as Type exposing (Type)
+import Ren.Data.Type exposing (Type)
 
 
 
@@ -98,6 +98,7 @@ type Pattern
     | Name String
     | RecordDestructure (List ( String, Maybe Pattern ))
     | Spread String
+    | TemplateDestructure (List (Either String Pattern))
     | Typeof String Pattern
     | VariantDestructure String (List Pattern)
     | Wildcard (Maybe String)
@@ -309,6 +310,9 @@ bound pattern =
         Spread n ->
             [ n ]
 
+        TemplateDestructure segments ->
+            List.concatMap (Data.Either.extract (always []) bound) segments
+
         Typeof _ pat ->
             bound pat
 
@@ -341,6 +345,9 @@ binds name pattern =
 
         Spread n ->
             name == n
+
+        TemplateDestructure segments ->
+            List.any (Data.Either.extract (always False) (binds name)) segments
 
         Typeof _ pat ->
             binds name pat
@@ -551,9 +558,16 @@ coerceToBoolean expr =
                 Just True
 
         Literal (String s) ->
-            String.toFloat s
-                |> Maybe.map (Number >> Literal)
-                |> Maybe.andThen coerceToBoolean
+            if String.toLower s == "true" then
+                Just True
+
+            else if String.toLower s == "false" then
+                Just False
+
+            else
+                String.toFloat s
+                    |> Maybe.map (Number >> Literal)
+                    |> Maybe.andThen coerceToBoolean
 
         Literal Undefined ->
             Just False
