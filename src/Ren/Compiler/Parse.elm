@@ -1,4 +1,14 @@
-module Ren.Compiler.Parse exposing (..)
+module Ren.Compiler.Parse exposing
+    ( run
+    , Context(..), Error(..)
+    )
+
+{-|
+
+@docs run
+@docs Context, Error
+
+-}
 
 -- IMPORTS ---------------------------------------------------------------------
 

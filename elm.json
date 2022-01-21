@@ -7,7 +7,12 @@
     "exposed-modules": [
         "Ren.AST.Expr",
         "Ren.AST.Module",
-        "Ren.Compiler"
+        "Ren.Compiler",
+        "Ren.Compiler.Check",
+        "Ren.Compiler.Desugar",
+        "Ren.Compiler.Emit",
+        "Ren.Compiler.Optimise",
+        "Ren.Compiler.Parse"
     ],
     "elm-version": "0.19.0 <= v < 0.20.0",
     "dependencies": {

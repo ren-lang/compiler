@@ -1,6 +1,16 @@
-module Ren.Compiler.Desugar exposing (..)
+module Ren.Compiler.Desugar exposing
+    ( Transformation, run
+    , defaults
+    , placeholders, blocks, patterns
+    )
 
-{-| -}
+{-|
+
+@docs Transformation, run
+@docs defaults
+@docs placeholders, blocks, patterns
+
+-}
 
 -- IMPORTS ---------------------------------------------------------------------
 

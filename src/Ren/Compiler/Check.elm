@@ -1,4 +1,14 @@
-module Ren.Compiler.Check exposing (..)
+module Ren.Compiler.Check exposing
+    ( run
+    , Error(..)
+    )
+
+{-|
+
+@docs run
+@docs Error
+
+-}
 
 -- IMPORTS ---------------------------------------------------------------------
 
@@ -7,10 +17,10 @@ import Data.Either
 import Data.Tuple2
 import Dict
 import Ren.AST.Expr as Expr exposing (Expr(..), ExprF(..))
-import Ren.AST.Module as Module
+import Ren.AST.Module as Module exposing (Module)
 import Ren.Compiler.Parse exposing (Error(..))
 import Ren.Data.Monoenv as Monoenv exposing (Monoenv)
-import Ren.Data.Polyenv exposing (Polyenv)
+import Ren.Data.Polyenv as Polyenv exposing (Polyenv)
 import Ren.Data.Substitution as Substitution
 import Ren.Data.Type as Type exposing (..)
 import Ren.Data.Typing as Typing exposing (Typing)
@@ -56,6 +66,23 @@ type Error
     | IncompatibleTypes Type Type
     | MissingField String
     | TypeTooGeneral Type Type
+
+
+
+--
+
+
+{-| -}
+run : Module meta -> Result Error (Module meta)
+run ({ declarations } as m) =
+    let
+        polyenv =
+            List.foldl (\{ name, type_ } env -> Polyenv.insert name (Typing.poly type_) env)
+                Polyenv.empty
+                declarations
+    in
+    List.foldr (\d ds -> Result.map2 (::) (declaration polyenv d) ds) (Ok []) declarations
+        |> Result.map (\ds -> { m | declarations = ds })
 
 
 
@@ -151,7 +178,7 @@ init =
             , ( "$op_join", Typing.poly (fun (array (Var "a")) [ array (Var "a") ] (array (Var "a"))) )
             ]
     , substitution = Dict.empty
-    , vars = List.range 0 (25 * 26 + 26) |> List.map Type.var
+    , vars = List.range 0 (25 * (26 * 2)) |> List.map Type.var
     }
 
 

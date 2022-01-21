@@ -1,4 +1,16 @@
-module Ren.Compiler exposing (..)
+module Ren.Compiler exposing
+    ( Compiler, Toolchain
+    , run
+    , untyped, typed, typecheck, custom
+    )
+
+{-|
+
+@docs Compiler, Toolchain
+@docs run
+@docs untyped, typed, typecheck, custom
+
+-}
 
 -- IMPORTS ---------------------------------------------------------------------
 
@@ -6,23 +18,22 @@ import Parser.Advanced as Parser
 import Ren.AST.Module as Module exposing (Module)
 import Ren.Compiler.Check as Check
 import Ren.Compiler.Desugar as Desugar
-import Ren.Compiler.Emit.ESModule as ESModule
+import Ren.Compiler.Emit as Emit
 import Ren.Compiler.Optimise as Optimise
 import Ren.Compiler.Parse as Parse
-import Ren.Data.Polyenv as Polyenv
 import Ren.Data.Span exposing (Span)
-import Ren.Data.Type as Type
-import Ren.Data.Typing as Typing
 
 
 
 -- TYPES -----------------------------------------------------------------------
 
 
+{-| -}
 type alias Compiler error =
     String -> Result error String
 
 
+{-| -}
 type alias Toolchain error meta =
     { parse : String -> Result error (Module meta)
     , desugar : Module meta -> Module meta
@@ -40,12 +51,6 @@ type Error
     | TypeError Check.Error
 
 
-{-| -}
-type Target
-    = ESModule
-    | Types
-
-
 
 -- TOOLCHAINS ------------------------------------------------------------------
 
@@ -53,13 +58,13 @@ type Target
 {-| -}
 untyped : Toolchain Error Span
 untyped =
-    custom False Desugar.defaults [ Optimise.operators ] ESModule
+    custom False Desugar.defaults [ Optimise.operators ] Emit.ESModule
 
 
 {-| -}
 typed : Toolchain Error Span
 typed =
-    custom True Desugar.defaults [ Optimise.operators ] ESModule
+    custom True Desugar.defaults [ Optimise.operators ] Emit.ESModule
 
 
 {-| This toolchain doesn't emit code at the end; it type checks a module and then
@@ -71,42 +76,23 @@ with emitted pretty-printed code.
 -}
 typecheck : Toolchain Error Span
 typecheck =
-    custom True Desugar.defaults [] Types
+    custom True Desugar.defaults [] Emit.DEBUG_Types
 
 
 {-| -}
-custom : Bool -> List (Desugar.Transformation Span) -> List (Optimise.Optimisation Span) -> Target -> Toolchain Error Span
+custom : Bool -> List (Desugar.Transformation Span) -> List (Optimise.Optimisation Span) -> Emit.Target -> Toolchain Error Span
 custom shouldTypecheck transformations optimisations target =
     { parse = Parse.run >> Result.mapError ParseError
     , desugar = Module.map (Desugar.run transformations)
     , validate = Ok
     , check =
         if shouldTypecheck then
-            \({ declarations } as m) ->
-                let
-                    polyenv =
-                        List.foldl (\{ name, type_ } env -> Polyenv.insert name (Typing.poly type_) env) Polyenv.empty declarations
-                in
-                List.foldr (\d ds -> Result.map2 (::) (Check.declaration polyenv d) ds) (Ok []) declarations
-                    |> Result.mapError TypeError
-                    |> Result.map (\ds -> { m | declarations = ds })
+            Check.run >> Result.mapError TypeError
 
         else
             Ok
     , optimise = Module.map (Optimise.run optimisations)
-    , emit =
-        case target of
-            ESModule ->
-                ESModule.run
-
-            -- This one is a bit ad-hoc. We don't have a proper Emit.* module for
-            -- this target beacuse it's really just for debugging.
-            Types ->
-                let
-                    showDeclaration { name, type_ } =
-                        name ++ " : " ++ (Type.toString <| Type.reduce type_)
-                in
-                .declarations >> List.map showDeclaration >> String.join "\n\n"
+    , emit = Emit.run target
     }
 
 
@@ -125,40 +111,3 @@ run { parse, desugar, validate, check, optimise, emit } =
         >> Result.andThen check
         >> Result.map optimise
         >> Result.map emit
-
-
-
---
-
-
-testInput : String
-testInput =
-    """
-import "ren/array" as Array
-import "ren/console" as Console exposing { log }
-import "ren/file" as File
-import "ren/string" as String
-import "ren/result" as Result
-
-pub let main = [ year, day, part, test ] => {
-    let path = if test then "test.txt" else "input.txt"
-
-    ret File.open path { sync: true } 
-        |> Result.map (String.split " " >> Array.filterMap String.toNumber)
-        |> Result.andThen (solve part)
-}
-
-let solve = part input => where part
-        is "01" => #ok (solvePartOne input)
-        is "02" => #ok (solvePartTwo input)
-        is _    => #err `Unknown part: "${part}".`
-
-
-let solvePartOne = numbers =>
-    Array.map2 (x y => if x < y then 1 else 0) numbers (Array.drop 1 numbers)
-        |> Array.sum
-
-let solvePartTwo = numbers =>
-    Array.map3 (x y z => x + y + z) numbers (Array.drop 1 numbers) (Array.drop 2 numbers)
-        |> solvePartOne
-"""

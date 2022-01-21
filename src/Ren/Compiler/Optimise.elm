@@ -1,6 +1,14 @@
-module Ren.Compiler.Optimise exposing (..)
+module Ren.Compiler.Optimise exposing
+    ( Optimisation, run
+    , operators
+    )
 
-{-| -}
+{-|
+
+@docs Optimisation, run
+@docs operators
+
+-}
 
 -- IMPORTS ---------------------------------------------------------------------
 
