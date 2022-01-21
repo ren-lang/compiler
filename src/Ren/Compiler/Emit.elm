@@ -42,6 +42,7 @@ run target m =
 -- TYPES -----------------------------------------------------------------------
 
 
+{-| -}
 type Target
     = ESModule
     | DEBUG_Types
