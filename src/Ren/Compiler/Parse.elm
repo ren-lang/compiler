@@ -84,6 +84,9 @@ module_ =
                         |= import_
                         |. Parser.spaces
                         |> Parser.map Parser.Loop
+                    , Parser.succeed imports
+                        |. Parser.lineComment (Parser.Token "//" <| ExpectingSymbol "//")
+                        |> Parser.map Parser.Loop
                     , Parser.succeed ()
                         |> Parser.map (\_ -> List.reverse imports)
                         |> Parser.map Parser.Done
@@ -96,6 +99,9 @@ module_ =
                     [ Parser.succeed (\d -> d :: declarations)
                         |= declaration
                         |. Parser.spaces
+                        |> Parser.map Parser.Loop
+                    , Parser.succeed declarations
+                        |. Parser.lineComment (Parser.Token "//" <| ExpectingSymbol "//")
                         |> Parser.map Parser.Loop
                     , Parser.succeed ()
                         |> Parser.map (\_ -> List.reverse declarations)
