@@ -52,12 +52,10 @@ type alias Context =
 {-| -}
 type Error
     = InternalError String
-    | InfiniteType
+    | InfiniteType Type Type
     | IncompatibleTypes Type Type
-    | ContradictingConstraints
     | MissingField String
     | TypeTooGeneral Type Type
-    | NonExhaustivePatternMatch
 
 
 
@@ -597,7 +595,7 @@ mgu equations =
                 -- As an example, say we are trying to unify `t ∪ List t`. Without the
                 -- occurs check this would generate a substitution `t ↦ List t` which
                 -- if we tried to apply would yield `List (List (List (...)))`!
-                ResultM.fail InfiniteType
+                ResultM.fail <| InfiniteType (Var a) t
 
             else
                 --
