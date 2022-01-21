@@ -12,13 +12,13 @@
 // The idiomatic way to handle imports in Ren code is to import a module and qualify
 // it with some namespace, as demonstrated below. Note that the namespace may be 
 // broken up by periods.
-import 'ren/array' as Ren.Array
-import 'ren/array' exposing { map }
-import 'ren/array' as Ren.Array exposing { map }
+import "ren/array" as Ren.Array
+import "ren/array" exposing { map }
+import "ren/array" as Ren.Array exposing { map }
 
 // Imports can also be just for their side effects, although this is only really
 // useful when importing JavaScript directly.
-import 'some-effectful-module'
+import "some-effectful-module"
 
 // The compiler is ostensibly concerned with simply turning Ren source files into
 // compiled JavaScrpt ones. It's down to individual tooling to manage imports and
