@@ -3,7 +3,7 @@
     "name": "ren-lang/compiler",
     "summary": "The compiler for Ren: a dynamically typed, functional scripting language.",
     "license": "MIT",
-    "version": "10.0.1",
+    "version": "11.0.0",
     "exposed-modules": [
         "Ren.AST.Expr",
         "Ren.AST.Module",
