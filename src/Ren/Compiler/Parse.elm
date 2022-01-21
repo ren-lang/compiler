@@ -1346,7 +1346,7 @@ keywords =
             [ [ "import", "as", "exposing" ]
 
             -- Declarations
-            , [ "pub", "extern" ]
+            , [ "pub", "extern", "run" ]
 
             -- Bindings
             , [ "fun", "let", "ret" ]
