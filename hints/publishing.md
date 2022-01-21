@@ -5,8 +5,7 @@ of the package, follow the steps below:
 
 ```bash
 elm bump
-# update package.json version...
-git add elm.json package.json
+git add elm.json
 git commit -m ":bookmark: Bump compiler version to <new package version>"
 git push
 git tag <new package version>
@@ -26,11 +25,8 @@ elm bump
 you've made. You shouldn't ever modify the package version inside the `elm.json`
 manually.
 
-* What you _should_ do, however, is manually update the version inside `package.json`
-to match whatever `elm bump` returned.
-
 ```bash
-git add elm.json package.json
+git add elm.json
 git commit -m ":bookmark: Bump compiler version to <new package version>"
 git push
 ```
