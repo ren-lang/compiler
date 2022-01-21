@@ -748,7 +748,7 @@ template config =
                 Parser.oneOf
                     [ Parser.succeed (\expr -> Data.Either.Right expr :: segments)
                         |. Parser.symbol (Parser.Token "${" <| ExpectingSymbol "${")
-                        |= Pratt.subExpression 0 config
+                        |= Parser.lazy (\_ -> expression)
                         |. Parser.symbol (Parser.Token "}" <| ExpectingSymbol "}")
                         |> Parser.map Parser.Loop
                     , Parser.succeed (\c -> Data.Either.Left c :: segments)
