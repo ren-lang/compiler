@@ -590,6 +590,7 @@ coerceToBoolean expr =
             Nothing
 
 
+{-| -}
 internalOperatorName : Operator -> String
 internalOperatorName op =
     case op of
