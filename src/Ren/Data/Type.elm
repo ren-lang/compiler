@@ -93,7 +93,12 @@ var n =
 -- QUERIES ---------------------------------------------------------------------
 
 
-{-| -}
+{-| This returns a set of all the free type variables in a type. As an example,
+if we have the type `Either a (List b)` we would get back:
+
+    Set.fromList [ "a", "b" ]
+
+-}
 free : Type -> Set String
 free type_ =
     case type_ of
@@ -119,16 +124,23 @@ free type_ =
             Set.empty
 
 
-{-| -}
-tags : List ( String, List Type ) -> Set String
-tags =
-    List.map Tuple.first >> Set.fromList
-
-
 
 -- MANIPULATIONS ---------------------------------------------------------------
 
 
+{-| Applies a substitution to a type, effectively renaming all the type variables
+in a type with those in the substitution map. This follows substitution chains so
+if our map looks like:
+
+    Dict.fromList
+        [ ( "a", Var "b" )
+        , ( "b", Con "String" )
+        ]
+
+and we apply the substitution to the type `List a` we will get back `List String`
+like we'd expect.
+
+-}
 substitute : Substitution -> Type -> Type
 substitute s t =
     case t of
@@ -157,6 +169,18 @@ substitute s t =
             Hole
 
 
+{-| A specific type of substitution that reduces down all the type variables in
+a type such that they start back from "a". That's kind of a weird explanation so
+let's look at an example. Consider we have the the type:
+
+    (d -> e) -> (e -> f) -> d -> f
+
+(This is actually the type of the `(>>)` operator in both Ren and Elm!) By applying
+`reduce` we get the easier-to-read:
+
+    (a -> b) -> (b -> c) -> a -> c
+
+-}
 reduce : Type -> Type
 reduce t =
     let
