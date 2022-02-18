@@ -18,6 +18,7 @@ import Parser.Advanced as Parser exposing ((|.), (|=))
 import Pratt.Advanced as Pratt
 import Ren.AST.Expr as Expr exposing (Expr(..), ExprF(..))
 import Ren.AST.Module as Module exposing (Module)
+import Ren.Compiler.Parse.Util as Util
 import Ren.Data.Span as Span exposing (Span)
 import Ren.Data.Type as Type exposing (Type)
 import Set exposing (Set)
@@ -76,13 +77,13 @@ type Error
 module_ : Parser (Module Span)
 module_ =
     Parser.succeed Module
-        |. Parser.spaces
+        |. Util.whitespace
         |= Parser.loop []
             (\imports ->
                 Parser.oneOf
                     [ Parser.succeed (\i -> i :: imports)
                         |= import_
-                        |. Parser.spaces
+                        |. Util.whitespace
                         |> Parser.map Parser.Loop
                     , Parser.succeed imports
                         |. Parser.lineComment (Parser.Token "//" <| ExpectingSymbol "//")
@@ -92,13 +93,13 @@ module_ =
                         |> Parser.map Parser.Done
                     ]
             )
-        |. Parser.spaces
+        |. Util.whitespace
         |= Parser.loop []
             (\declarations ->
                 Parser.oneOf
                     [ Parser.succeed (\d -> d :: declarations)
                         |= declaration
-                        |. Parser.spaces
+                        |. Util.whitespace
                         |> Parser.map Parser.Loop
                     , Parser.succeed declarations
                         |. Parser.lineComment (Parser.Token "//" <| ExpectingSymbol "//")
@@ -108,7 +109,7 @@ module_ =
                         |> Parser.map Parser.Done
                     ]
             )
-        |. Parser.spaces
+        |. Util.whitespace
         |. Parser.end ExpectingEOF
 
 
@@ -117,16 +118,16 @@ import_ : Parser Module.Import
 import_ =
     Parser.succeed Module.Import
         |. keyword "import"
-        |. Parser.spaces
+        |. Util.whitespace
         -- TODO: This doesn't handle escaped `"` characters.
         |. symbol "\""
         |= (Parser.getChompedString <| Parser.chompWhile ((/=) '"'))
         |. symbol "\""
-        |. Parser.spaces
+        |. Util.whitespace
         |= Parser.oneOf
             [ Parser.succeed Basics.identity
                 |. keyword "as"
-                |. Parser.spaces
+                |. Util.whitespace
                 |= Parser.loop []
                     (\names ->
                         Parser.oneOf
@@ -145,16 +146,16 @@ import_ =
                     )
             , Parser.succeed []
             ]
-        |. Parser.spaces
+        |. Util.whitespace
         |= Parser.oneOf
             [ Parser.succeed Basics.identity
                 |. keyword "exposing"
-                |. Parser.spaces
+                |. Util.whitespace
                 |= Parser.sequence
                     { start = Parser.Token "{" (ExpectingSymbol "{")
                     , separator = Parser.Token "," (ExpectingSymbol ",")
                     , end = Parser.Token "}" (ExpectingSymbol "}")
-                    , spaces = Parser.spaces
+                    , spaces = Util.whitespace
                     , item = lowercaseName keywords
                     , trailing = Parser.Forbidden
                     }
@@ -180,21 +181,21 @@ declaration =
                     |. keyword "pub"
                 , Parser.succeed False
                 ]
-            |. Parser.spaces
+            |. Util.whitespace
             |. keyword "let"
-            |. Parser.spaces
+            |. Util.whitespace
             |= lowercaseName keywords
-            |. Parser.spaces
+            |. Util.whitespace
             |= Parser.oneOf
                 [ Parser.succeed Basics.identity
                     |. symbol ":"
-                    |. Parser.spaces
+                    |. Util.whitespace
                     |= type_
-                    |. Parser.spaces
+                    |. Util.whitespace
                 , Parser.succeed Type.Any
                 ]
             |. symbol "="
-            |. Parser.spaces
+            |. Util.whitespace
             |= expression
             |> Span.parser (|>)
             |> Parser.inContext InDeclaration
@@ -300,7 +301,7 @@ prattExpression parsers =
             , infix_ Pratt.infixRight 7 "^" Expr.Pow
             , infix_ Pratt.infixRight 7 "%" Expr.Mod
             ]
-        , spaces = Parser.spaces
+        , spaces = Util.whitespace
         }
         |> Parser.inContext InExpr
 
@@ -310,9 +311,9 @@ subexpression : Parser (Expr Span)
 subexpression =
     Parser.succeed identity
         |. symbol "("
-        |. Parser.spaces
+        |. Util.whitespace
         |= expression
-        |. Parser.spaces
+        |. Util.whitespace
         |. symbol ")"
 
 
@@ -340,7 +341,7 @@ parenthesised =
                 , Pratt.literal identifier
                 ]
             , andThenOneOf = []
-            , spaces = Parser.spaces
+            , spaces = Util.whitespace
             }
             |> Parser.inContext InExpr
         , Parser.lazy (\_ -> subexpression)
@@ -356,11 +357,11 @@ access : Parser (Expr Span)
 access =
     Parser.succeed (\expr accessor accessors -> Access expr (accessor :: accessors))
         |= Parser.lazy (\_ -> parenthesised)
-        |. Parser.spaces
+        |. Util.whitespace
         |. symbol "."
         |. Parser.commit ()
         |= lowercaseName Set.empty
-        |. Parser.spaces
+        |. Util.whitespace
         |= Parser.loop []
             (\accessors ->
                 Parser.oneOf
@@ -391,16 +392,16 @@ application config =
             , Parser.lazy (\_ -> subexpression)
             , identifier
             ]
-        |. Parser.spaces
+        |. Util.whitespace
         |= parenthesised
         |. Parser.commit ()
-        |. Parser.spaces
+        |. Util.whitespace
         |= Parser.loop []
             (\args ->
                 Parser.oneOf
                     [ Parser.succeed (\arg -> arg :: args)
                         |= parenthesised
-                        |. Parser.spaces
+                        |. Util.whitespace
                         |> Parser.map Parser.Loop
                     , Parser.succeed ()
                         |> Parser.map (\_ -> List.reverse args)
@@ -419,10 +420,10 @@ annotation : Parser (Expr Span)
 annotation =
     Parser.succeed Annotation
         |= parenthesised
-        |. Parser.spaces
+        |. Util.whitespace
         |. keyword "as"
         |. Parser.commit ()
-        |. Parser.spaces
+        |. Util.whitespace
         |= type_
         |> Parser.backtrackable
         |> Span.parser Expr
@@ -437,25 +438,25 @@ block : Config (Expr Span) -> Parser (Expr Span)
 block config =
     Parser.succeed Block
         |. symbol "{"
-        |. Parser.spaces
+        |. Util.whitespace
         |= Parser.loop []
             (\bindings ->
                 Parser.oneOf
                     [ Parser.succeed (\b -> b :: bindings)
                         |= binding config
                         |. Parser.commit ()
-                        |. Parser.spaces
+                        |. Util.whitespace
                         |> Parser.map Parser.Loop
                     , Parser.succeed ()
                         |> Parser.map (\_ -> List.reverse bindings)
                         |> Parser.map Parser.Done
                     ]
             )
-        |. Parser.spaces
+        |. Util.whitespace
         |. keyword "ret"
         |. Parser.commit ()
         |= Pratt.subExpression 0 config
-        |. Parser.spaces
+        |. Util.whitespace
         |. symbol "}"
         |> Parser.backtrackable
         |> Span.parser Expr
@@ -468,17 +469,17 @@ binding config =
         [ Parser.succeed (Tuple.pair "_")
             |. keyword "run"
             |. Parser.commit ()
-            |. Parser.spaces
+            |. Util.whitespace
             |= Pratt.subExpression 0 config
             |> Parser.backtrackable
         , Parser.succeed Tuple.pair
             |. keyword "let"
             |. Parser.commit ()
-            |. Parser.spaces
+            |. Util.whitespace
             |= lowercaseName keywords
-            |. Parser.spaces
+            |. Util.whitespace
             |. symbol "="
-            |. Parser.spaces
+            |. Util.whitespace
             |= Pratt.subExpression 0 config
             |> Parser.backtrackable
         ]
@@ -494,15 +495,15 @@ conditional config =
     Parser.succeed Conditional
         |. keyword "if"
         |. Parser.commit ()
-        |. Parser.spaces
+        |. Util.whitespace
         |= Pratt.subExpression 0 config
-        |. Parser.spaces
+        |. Util.whitespace
         |. keyword "then"
-        |. Parser.spaces
+        |. Util.whitespace
         |= Pratt.subExpression 0 config
-        |. Parser.spaces
+        |. Util.whitespace
         |. keyword "else"
-        |. Parser.spaces
+        |. Util.whitespace
         |= Pratt.subExpression 0 config
         |> Parser.backtrackable
         |> Span.parser Expr
@@ -564,23 +565,23 @@ lambda : Config (Expr Span) -> Parser (Expr Span)
 lambda config =
     Parser.succeed (\arg args body -> Lambda (arg :: args) body)
         |= pattern
-        |. Parser.spaces
+        |. Util.whitespace
         |= Parser.loop []
             (\args ->
                 Parser.oneOf
                     [ Parser.succeed (\arg -> arg :: args)
                         |= pattern
-                        |. Parser.spaces
+                        |. Util.whitespace
                         |> Parser.map Parser.Loop
                     , Parser.succeed ()
                         |> Parser.map (\_ -> List.reverse args)
                         |> Parser.map Parser.Done
                     ]
             )
-        |. Parser.spaces
+        |. Util.whitespace
         |. symbol "=>"
         |. Parser.commit ()
-        |. Parser.spaces
+        |. Util.whitespace
         |= Pratt.subExpression 0 config
         |> Parser.backtrackable
         |> Span.parser Expr
@@ -616,7 +617,7 @@ array config =
             , separator = Parser.Token "," <| ExpectingSymbol ","
             , end = Parser.Token "]" <| ExpectingSymbol "]"
             , item = Pratt.subExpression 0 config
-            , spaces = Parser.spaces
+            , spaces = Util.whitespace
             , trailing = Parser.Forbidden
             }
 
@@ -673,10 +674,10 @@ record config =
                 Parser.oneOf
                     [ Parser.succeed Tuple.pair
                         |= lowercaseName keywords
-                        |. Parser.spaces
+                        |. Util.whitespace
                         |. Parser.symbol (Parser.Token ":" <| ExpectingSymbol ":")
                         |. Parser.commit ()
-                        |. Parser.spaces
+                        |. Util.whitespace
                         |= Pratt.subExpression 0 config
                         |> Parser.backtrackable
 
@@ -691,7 +692,7 @@ record config =
                         |= Parser.getPosition
                         |> Parser.map (\( loc, key ) -> ( key, Expr loc (Identifier (Expr.Local key)) ))
                     ]
-            , spaces = Parser.spaces
+            , spaces = Util.whitespace
             , trailing = Parser.Forbidden
             }
         |> Parser.backtrackable
@@ -781,13 +782,13 @@ variant =
     Parser.succeed Expr.Variant
         |. symbol "#"
         |= lowercaseName Set.empty
-        |. Parser.spaces
+        |. Util.whitespace
         |= Parser.loop []
             (\exprs ->
                 Parser.oneOf
                     [ Parser.succeed (\expr -> expr :: exprs)
                         |= parenthesised
-                        |. Parser.spaces
+                        |. Util.whitespace
                         |> Parser.map Parser.Loop
                     , Parser.succeed ()
                         |> Parser.map (\_ -> List.reverse exprs)
@@ -806,21 +807,21 @@ match config =
     Parser.succeed Match
         |. keyword "where"
         |. Parser.commit ()
-        |. Parser.spaces
+        |. Util.whitespace
         |= Pratt.subExpression 0 config
-        |. Parser.spaces
+        |. Util.whitespace
         |= Parser.loop []
             (\cases ->
                 Parser.oneOf
                     [ Parser.succeed (\pat guard body -> ( pat, guard, body ) :: cases)
                         |. keyword "is"
-                        |. Parser.spaces
+                        |. Util.whitespace
                         |= pattern
-                        |. Parser.spaces
+                        |. Util.whitespace
                         |= Parser.oneOf
                             [ Parser.succeed Just
                                 |. keyword "if"
-                                |. Parser.spaces
+                                |. Util.whitespace
                                 |= prattExpression
                                     -- These parsers start with a keyword
                                     [ conditional
@@ -841,9 +842,9 @@ match config =
                                     ]
                             , Parser.succeed Nothing
                             ]
-                        |. Parser.spaces
+                        |. Util.whitespace
                         |. symbol "=>"
-                        |. Parser.spaces
+                        |. Util.whitespace
                         |= Pratt.subExpression 0 config
                         |> Parser.map Parser.Loop
                     , Parser.succeed ()
@@ -882,23 +883,23 @@ arrayDestructure =
     Parser.succeed Expr.ArrayDestructure
         |. symbol "["
         |. Parser.commit ()
-        |. Parser.spaces
+        |. Util.whitespace
         |= Parser.oneOf
             [ Parser.succeed (::)
                 |= Parser.lazy (\_ -> pattern)
-                |. Parser.spaces
+                |. Util.whitespace
                 |= Parser.loop []
                     (\patterns ->
                         Parser.oneOf
                             [ Parser.succeed (\pat -> pat :: patterns)
                                 |. symbol ","
-                                |. Parser.spaces
+                                |. Util.whitespace
                                 |= Parser.lazy (\_ -> pattern)
                                 |> Parser.backtrackable
                                 |> Parser.map Parser.Loop
                             , Parser.succeed (\pat -> pat :: patterns)
                                 |. symbol ","
-                                |. Parser.spaces
+                                |. Util.whitespace
                                 |= spread
                                 |> Parser.map List.reverse
                                 |> Parser.map Parser.Done
@@ -909,7 +910,7 @@ arrayDestructure =
                     )
             , Parser.succeed []
             ]
-        |. Parser.spaces
+        |. Util.whitespace
         |. symbol "]"
         |> Parser.backtrackable
 
@@ -940,11 +941,11 @@ recordDestructure =
         keyAndPattern =
             Parser.succeed Tuple.pair
                 |= lowercaseName keywords
-                |. Parser.spaces
+                |. Util.whitespace
                 |= Parser.oneOf
                     [ Parser.succeed Just
                         |. symbol ":"
-                        |. Parser.spaces
+                        |. Util.whitespace
                         |= Parser.lazy (\_ -> pattern)
                     , Parser.succeed Nothing
                     ]
@@ -952,23 +953,23 @@ recordDestructure =
     Parser.succeed Expr.RecordDestructure
         |. symbol "{"
         |. Parser.commit ()
-        |. Parser.spaces
+        |. Util.whitespace
         |= Parser.oneOf
             [ Parser.succeed (::)
                 |= keyAndPattern
-                |. Parser.spaces
+                |. Util.whitespace
                 |= Parser.loop []
                     (\patterns ->
                         Parser.oneOf
                             [ Parser.succeed (\pat -> pat :: patterns)
                                 |. symbol ","
-                                |. Parser.spaces
+                                |. Util.whitespace
                                 |= keyAndPattern
                                 |> Parser.backtrackable
                                 |> Parser.map Parser.Loop
                             , Parser.succeed Basics.identity
                                 |. symbol ","
-                                |. Parser.spaces
+                                |. Util.whitespace
                                 |= spread
                                 -- We need to get the name of the binding
                                 -- introduced by the spread pattern so we can
@@ -993,7 +994,7 @@ recordDestructure =
                     )
             , Parser.succeed []
             ]
-        |. Parser.spaces
+        |. Util.whitespace
         |. symbol "}"
         |> Parser.backtrackable
 
@@ -1080,7 +1081,7 @@ typeof =
         |. symbol "@"
         |. Parser.commit ()
         |= uppercaseName Set.empty
-        |. Parser.spaces
+        |. Util.whitespace
         |= Parser.lazy (\_ -> pattern)
         |> Parser.backtrackable
 
@@ -1092,13 +1093,13 @@ variantDestructure =
         |. symbol "#"
         |. Parser.commit ()
         |= lowercaseName Set.empty
-        |. Parser.spaces
+        |. Util.whitespace
         |= Parser.loop []
             (\patterns ->
                 Parser.oneOf
                     [ Parser.succeed (\pat -> pat :: patterns)
                         |= Parser.lazy (\_ -> pattern)
-                        |. Parser.spaces
+                        |. Util.whitespace
                         |> Parser.map Parser.Loop
                     , Parser.succeed ()
                         |> Parser.map (\_ -> List.reverse patterns)
@@ -1144,9 +1145,9 @@ subtype : Parser Type
 subtype =
     Parser.succeed identity
         |. symbol "("
-        |. Parser.spaces
+        |. Util.whitespace
         |= Parser.lazy (\_ -> type_)
-        |. Parser.spaces
+        |. Util.whitespace
         |. symbol ")"
         |> Parser.backtrackable
 
@@ -1181,15 +1182,15 @@ app =
     in
     Parser.succeed (\con_ arg args -> Type.App con_ (arg :: args))
         |= typeWithoutApp
-        |. Parser.spaces
+        |. Util.whitespace
         |= typeWithoutApp
-        |. Parser.spaces
+        |. Util.whitespace
         |= Parser.loop []
             (\args ->
                 Parser.oneOf
                     [ Parser.succeed (\arg -> arg :: args)
                         |= typeWithoutApp
-                        |. Parser.spaces
+                        |. Util.whitespace
                         |> Parser.map Parser.Loop
                     , Parser.succeed (List.reverse args)
                         |> Parser.map Parser.Done
@@ -1204,22 +1205,22 @@ fun =
         typeWithoutFun =
             Parser.oneOf
                 [ subtype
+                , app
                 , any
                 , var
                 , con
-                , app
                 , rec
                 , hole
                 ]
     in
     Parser.succeed Type.Fun
         |= typeWithoutFun
-        |. Parser.spaces
+        |. Util.whitespace
         |. Parser.oneOf
             [ symbol "->"
             , symbol "→"
             ]
-        |. Parser.spaces
+        |. Util.whitespace
         |= Parser.lazy (\_ -> type_)
         |> Parser.backtrackable
 
@@ -1231,13 +1232,13 @@ rec =
             { start = Parser.Token "{" (ExpectingSymbol "{")
             , separator = Parser.Token "," (ExpectingSymbol ",")
             , end = Parser.Token "}" (ExpectingSymbol "}")
-            , spaces = Parser.spaces
+            , spaces = Util.whitespace
             , item =
                 Parser.succeed Tuple.pair
                     |= lowercaseName keywords
-                    |. Parser.spaces
+                    |. Util.whitespace
                     |. symbol ":"
-                    |. Parser.spaces
+                    |. Util.whitespace
                     |= Parser.lazy (\_ -> type_)
             , trailing = Parser.Forbidden
             }
