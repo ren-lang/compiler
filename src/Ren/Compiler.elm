@@ -1,12 +1,12 @@
 module Ren.Compiler exposing
-    ( Compiler, Toolchain
+    ( Compiler, Toolchain, Error(..)
     , run
     , untyped, typed, typecheck, custom
     )
 
 {-|
 
-@docs Compiler, Toolchain
+@docs Compiler, Toolchain, Error
 @docs run
 @docs untyped, typed, typecheck, custom
 
