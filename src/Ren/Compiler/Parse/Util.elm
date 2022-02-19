@@ -6,6 +6,40 @@ import Parser.Advanced as Parser exposing ((|.), (|=), Parser)
 
 
 
+-- COMBINATORS -----------------------------------------------------------------
+
+
+{-| -}
+many : Parser c x a -> Parser c x (List a)
+many p =
+    Parser.loop []
+        (\xs ->
+            Parser.oneOf
+                [ Parser.succeed (\x -> x :: xs)
+                    |= p
+                    |> Parser.map Parser.Loop
+                , Parser.succeed ()
+                    |> Parser.map (\_ -> List.reverse xs)
+                    |> Parser.map Parser.Done
+                ]
+        )
+
+
+{-| -}
+oneOrMoreOf : x -> Parser c x a -> Parser c x (List a)
+oneOrMoreOf x p =
+    many p
+        |> Parser.andThen
+            (\xs ->
+                if List.isEmpty xs then
+                    Parser.problem x
+
+                else
+                    Parser.succeed xs
+            )
+
+
+
 -- WHITESPACE PARSERS ----------------------------------------------------------
 
 
@@ -54,14 +88,4 @@ comment commentToken =
 {-| -}
 ignorables : Parser.Token x -> Parser c x ()
 ignorables commentToken =
-    Parser.spaces
-        |. Parser.loop ()
-            (\_ ->
-                Parser.oneOf
-                    [ Parser.lineComment commentToken
-                        |. Parser.spaces
-                        |> Parser.map Parser.Loop
-                    , Parser.succeed ()
-                        |> Parser.map Parser.Done
-                    ]
-            )
+    whitespace |. many (whitespace |. Parser.lineComment commentToken |. whitespace)

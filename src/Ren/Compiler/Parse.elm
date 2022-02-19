@@ -77,16 +77,14 @@ type Error
 module_ : Parser (Module Span)
 module_ =
     Parser.succeed Module
-        |. Util.whitespace
+        |. Util.ignorables (Parser.Token "//" <| ExpectingSymbol "//")
         |= Parser.loop []
             (\imports ->
                 Parser.oneOf
                     [ Parser.succeed (\i -> i :: imports)
+                        |. Util.ignorables (Parser.Token "//" <| ExpectingSymbol "//")
                         |= import_
-                        |. Util.whitespace
-                        |> Parser.map Parser.Loop
-                    , Parser.succeed imports
-                        |. Parser.lineComment (Parser.Token "//" <| ExpectingSymbol "//")
+                        |. Util.ignorables (Parser.Token "//" <| ExpectingSymbol "//")
                         |> Parser.map Parser.Loop
                     , Parser.succeed ()
                         |> Parser.map (\_ -> List.reverse imports)
@@ -98,11 +96,9 @@ module_ =
             (\declarations ->
                 Parser.oneOf
                     [ Parser.succeed (\d -> d :: declarations)
+                        |. Util.ignorables (Parser.Token "//" <| ExpectingSymbol "//")
                         |= declaration
-                        |. Util.whitespace
-                        |> Parser.map Parser.Loop
-                    , Parser.succeed declarations
-                        |. Parser.lineComment (Parser.Token "//" <| ExpectingSymbol "//")
+                        |. Util.ignorables (Parser.Token "//" <| ExpectingSymbol "//")
                         |> Parser.map Parser.Loop
                     , Parser.succeed ()
                         |> Parser.map (\_ -> List.reverse declarations)
@@ -301,7 +297,7 @@ prattExpression parsers =
             , infix_ Pratt.infixRight 7 "^" Expr.Pow
             , infix_ Pratt.infixRight 7 "%" Expr.Mod
             ]
-        , spaces = Util.whitespace
+        , spaces = Util.ignorables (Parser.Token "//" <| ExpectingSymbol "//")
         }
         |> Parser.inContext InExpr
 
@@ -341,7 +337,7 @@ parenthesised =
                 , Pratt.literal identifier
                 ]
             , andThenOneOf = []
-            , spaces = Util.whitespace
+            , spaces = Util.ignorables (Parser.Token "//" <| ExpectingSymbol "//")
             }
             |> Parser.inContext InExpr
         , Parser.lazy (\_ -> subexpression)
@@ -1279,7 +1275,7 @@ lowercaseName : Set String -> Parser String
 lowercaseName reserved =
     Parser.variable
         { expecting = ExpectingCamelCase
-        , start = Char.isLower
+        , start = \c -> Char.isLower c || c == '_'
         , inner = Char.isAlphaNum
         , reserved = reserved
         }
