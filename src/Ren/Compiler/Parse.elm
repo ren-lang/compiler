@@ -865,15 +865,27 @@ match config =
 {-| -}
 pattern : Parser Expr.Pattern
 pattern =
+    let
+        patterns =
+            Parser.oneOf
+                [ arrayDestructure
+                , literalPattern
+                , name
+                , recordDestructure
+                , templateDestructure
+                , typeof
+                , variantDestructure
+                , wildcard
+                ]
+    in
     Parser.oneOf
-        [ arrayDestructure
-        , literalPattern
-        , name
-        , recordDestructure
-        , templateDestructure
-        , typeof
-        , variantDestructure
-        , wildcard
+        [ Parser.succeed Basics.identity
+            |. symbol "("
+            |. Util.whitespace
+            |= patterns
+            |. Util.whitespace
+            |. symbol ")"
+        , patterns
         ]
 
 
