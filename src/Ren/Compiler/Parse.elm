@@ -1269,14 +1269,13 @@ hole =
 -- UTILITIES -------------------------------------------------------------------
 --                                                                            --
 
-
 {-| -}
 lowercaseName : Set String -> Parser String
 lowercaseName reserved =
     Parser.variable
         { expecting = ExpectingCamelCase
         , start = \c -> Char.isLower c || c == '_'
-        , inner = Char.isAlphaNum
+        , inner = \c -> Char.isAlphaNum c || c == '_'
         , reserved = reserved
         }
 
@@ -1287,7 +1286,7 @@ uppercaseName reserved =
     Parser.variable
         { expecting = ExpectingCapitalCase
         , start = Char.isUpper
-        , inner = Char.isAlphaNum
+        , inner = \c -> Char.isAlphaNum c || c == '_'
         , reserved = reserved
         }
 
