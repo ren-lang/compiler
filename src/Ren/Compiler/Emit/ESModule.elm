@@ -739,7 +739,7 @@ matchPattern name pat =
 
         Expr.TemplateDestructure segments ->
             Pretty.string "new RegExp('^"
-                |> Pretty.a (Pretty.string <| String.join "" <| List.map (Data.Either.extract Basics.identity (Basics.always "(.*)")) segments)
+                |> Pretty.a (Pretty.string <| String.join "" <| List.map (Data.Either.extract escapeRegex (Basics.always "(.*)")) segments)
                 |> Pretty.a (Pretty.string "$').test(")
                 |> Pretty.a (Pretty.string name)
                 |> Pretty.a (Pretty.string ")")
@@ -843,10 +843,6 @@ matchBindings name pat =
             ]
 
         Expr.TemplateDestructure segments ->
-            let
-                sanitise s =
-                    Basics.identity s
-            in
             case Expr.bound (Expr.TemplateDestructure segments) of
                 [] ->
                     []
@@ -855,7 +851,7 @@ matchBindings name pat =
                     [ Pretty.string "const [ , "
                         |> Pretty.a (Pretty.join (Pretty.string ", ") <| List.map Pretty.string bindings)
                         |> Pretty.a (Pretty.string " ] = new RegExp('^")
-                        |> Pretty.a (Pretty.string <| String.join "" <| List.map (Data.Either.extract sanitise (Basics.always "(.*)")) segments)
+                        |> Pretty.a (Pretty.string <| String.join "" <| List.map (Data.Either.extract escapeRegex (Basics.always "(.*)")) segments)
                         |> Pretty.a (Pretty.string "$').exec(")
                         |> Pretty.a (Pretty.string name)
                         |> Pretty.a (Pretty.string ")")
@@ -883,3 +879,12 @@ iife ( arg, expr ) body =
         |> Pretty.a body
         |> Pretty.a (Pretty.string ")")
         |> Pretty.a (Pretty.parens expr)
+
+{-| -}
+escapeRegex : String -> String
+escapeRegex =
+    let
+        regexEscape = Regex.fromString "[.*+?^${}()|[\\]\\\\]" |> Maybe.withDefault Regex.never
+        replaceFunc reMatch = "\\" ++ reMatch.match
+    in
+    Regex.replace regexEscape replaceFunc
