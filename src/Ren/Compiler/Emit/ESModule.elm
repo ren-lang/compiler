@@ -241,13 +241,17 @@ application { wrap, expr } args =
 block : List ( String, Builder t ) -> Builder t -> Builder t
 block bindings { wrap, expr } =
     let
-        binding ( name, gen ) =
-            Pretty.join (Pretty.char ' ')
-                [ Pretty.string "const"
-                , Pretty.string name
-                , Pretty.char '='
-                , gen.expr
-                ]
+        binding b =
+            case b  of
+                ( "_", gen ) -> gen.expr
+
+                ( name, gen ) ->
+                    Pretty.join (Pretty.char ' ')
+                        [ Pretty.string "const"
+                        , Pretty.string name
+                        , Pretty.char '='
+                        , gen.expr
+                        ]
     in
     if List.isEmpty bindings then
         { wrap = wrap, expr = expr }
