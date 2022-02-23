@@ -93,13 +93,16 @@ function mainForCommandLine() {
     let inputIsStdin = false;
     let inputFile = null;
     let outputFile = null;
+    let usePrettier = false;
 
     for (let i = 2; i < process.argv.length; i++) {
         let [option, arg] = process.argv.slice(i);
 
         ({
             '--output': () => { outputFile = arg; i++; },
+            '-': () => { inputIsStdin = true; }, // Specifying - as a file name commonly means stdin
             '--stdin': () => { inputIsStdin = true; },
+            '--use-prettier': () => { usePrettier = true; },
             '--validate': () => { assert_(false, '--validate is not supported.'); },
             '--yes': () => { },
         }[option] || (() => { inputFile = option; })
@@ -123,9 +126,12 @@ function mainForCommandLine() {
     // Run elm-format
     //
     let cp = require('child_process');
-    let result = cp.spawnSync('elm-format', ['--stdin'], {
+    let result = cp.spawnSync(
+        usePrettier ? 'npm' : 'elm-format',
+        usePrettier ? ['exec', 'prettier', '--', '--parser', 'elm']  : ['--stdin'], {
         stdio: [inputStream, 'pipe', process.stderr],
         encoding: 'utf-8',
+        env: { PATH: process.env.PATH },
     });
 
     exitOnError(result.error);
