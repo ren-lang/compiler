@@ -17,7 +17,7 @@ import Dict
 import Parser.Advanced as Parser exposing ((|.), (|=))
 import Pratt.Advanced as Pratt
 import Ren.AST.Expr as Expr exposing (Expr(..), ExprF(..))
-import Ren.AST.Module as Module exposing (Module)
+import Ren.AST.Module as Module exposing (ImportSpecifier(..), Module)
 import Ren.Compiler.Parse.Util as Util
 import Ren.Data.Span as Span exposing (Span)
 import Ren.Data.Type as Type exposing (Type)
@@ -110,15 +110,37 @@ module_ =
 
 
 {-| -}
+importSpecifier : Parser Module.ImportSpecifier
+importSpecifier =
+    let
+        path =
+            Parser.succeed Basics.identity
+                -- TODO: This doesn't handle escaped `"` characters.
+                |. symbol "\""
+                |= (Parser.getChompedString <| Parser.chompWhile ((/=) '"'))
+                |. symbol "\""
+    in
+    Parser.oneOf
+        [ Parser.succeed ExternalImport
+            |. keyword "ext"
+            |. Util.whitespace
+            |= path
+        , Parser.succeed PackageImport
+            |. keyword "pkg"
+            |. Util.whitespace
+            |= path
+        , Parser.succeed LocalImport
+            |= path
+        ]
+
+
+{-| -}
 import_ : Parser Module.Import
 import_ =
     Parser.succeed Module.Import
         |. keyword "import"
         |. Util.whitespace
-        -- TODO: This doesn't handle escaped `"` characters.
-        |. symbol "\""
-        |= (Parser.getChompedString <| Parser.chompWhile ((/=) '"'))
-        |. symbol "\""
+        |= importSpecifier
         |. Util.whitespace
         |= Parser.oneOf
             [ Parser.succeed Basics.identity
@@ -1269,6 +1291,7 @@ hole =
 -- UTILITIES -------------------------------------------------------------------
 --                                                                            --
 
+
 {-| -}
 lowercaseName : Set String -> Parser String
 lowercaseName reserved =
@@ -1357,7 +1380,7 @@ keywords =
     Set.fromList <|
         List.concat
             -- Imports
-            [ [ "import", "as", "exposing" ]
+            [ [ "import", "as", "exposing", "ext", "pkg" ]
 
             -- Declarations
             , [ "pub", "extern", "run" ]

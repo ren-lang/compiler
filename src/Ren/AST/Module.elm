@@ -1,5 +1,5 @@
 module Ren.AST.Module exposing
-    ( Module, Import, Declaration
+    ( Module, Import, ImportSpecifier(..), Declaration
     , exposes, imports
     , map
     )
@@ -31,10 +31,17 @@ type alias Module meta =
 
 {-| -}
 type alias Import =
-    { path : String
+    { path : ImportSpecifier
     , name : List String
     , exposed : List String
     }
+
+
+{-| -}
+type ImportSpecifier
+    = ExternalImport String
+    | LocalImport String
+    | PackageImport String
 
 
 {-| -}
@@ -58,7 +65,7 @@ exposes n m =
 
 
 {-| -}
-imports : String -> Module meta -> Bool
+imports : ImportSpecifier -> Module meta -> Bool
 imports p m =
     List.any (\{ path } -> path == p) m.imports
 
