@@ -17,7 +17,7 @@ import Dict
 import Parser.Advanced as Parser exposing ((|.), (|=))
 import Pratt.Advanced as Pratt
 import Ren.AST.Expr as Expr exposing (Expr(..), ExprF(..))
-import Ren.AST.Module as Module exposing (Module, ImportSpecifier(..))
+import Ren.AST.Module as Module exposing (ImportSpecifier(..), Module)
 import Ren.Compiler.Parse.Util as Util
 import Ren.Data.Span as Span exposing (Span)
 import Ren.Data.Type as Type exposing (Type)
@@ -108,32 +108,30 @@ module_ =
         |. Util.whitespace
         |. Parser.end ExpectingEOF
 
+
 {-| -}
-import_specifier : Parser Module.ImportSpecifier
-import_specifier =
-    let _ = () in
+importSpecifier : Parser Module.ImportSpecifier
+importSpecifier =
+    let
+        path =
+            Parser.succeed Basics.identity
+                -- TODO: This doesn't handle escaped `"` characters.
+                |. symbol "\""
+                |= (Parser.getChompedString <| Parser.chompWhile ((/=) '"'))
+                |. symbol "\""
+    in
     Parser.oneOf
         [ Parser.succeed ExternalImport
             |. keyword "ext"
             |. Util.whitespace
-            -- TODO: This doesn't handle escaped `"` characters.
-            |. symbol "\""
-            |= (Parser.getChompedString <| Parser.chompWhile ((/=) '"'))
-            |. symbol "\""
+            |= path
         , Parser.succeed PackageImport
             |. keyword "pkg"
             |. Util.whitespace
-            -- TODO: This doesn't handle escaped `"` characters.
-            |. symbol "\""
-            |= (Parser.getChompedString <| Parser.chompWhile ((/=) '"'))
-            |. symbol "\""
+            |= path
         , Parser.succeed LocalImport
-            -- TODO: This doesn't handle escaped `"` characters.
-            |. symbol "\""
-            |= (Parser.getChompedString <| Parser.chompWhile ((/=) '"'))
-            |. symbol "\""
+            |= path
         ]
-
 
 
 {-| -}
@@ -142,7 +140,7 @@ import_ =
     Parser.succeed Module.Import
         |. keyword "import"
         |. Util.whitespace
-        |= import_specifier
+        |= importSpecifier
         |. Util.whitespace
         |= Parser.oneOf
             [ Parser.succeed Basics.identity
@@ -1292,6 +1290,7 @@ hole =
 --                                                                            --
 -- UTILITIES -------------------------------------------------------------------
 --                                                                            --
+
 
 {-| -}
 lowercaseName : Set String -> Parser String
