@@ -17,7 +17,7 @@ import Dict
 import Parser.Advanced as Parser exposing ((|.), (|=))
 import Pratt.Advanced as Pratt
 import Ren.AST.Expr as Expr exposing (Expr(..), ExprF(..))
-import Ren.AST.Module as Module exposing (Module)
+import Ren.AST.Module as Module exposing (Module, ImportSpecifier(..))
 import Ren.Compiler.Parse.Util as Util
 import Ren.Data.Span as Span exposing (Span)
 import Ren.Data.Type as Type exposing (Type)
@@ -108,6 +108,33 @@ module_ =
         |. Util.whitespace
         |. Parser.end ExpectingEOF
 
+{-| -}
+import_specifier : Parser Module.ImportSpecifier
+import_specifier =
+    let _ = () in
+    Parser.oneOf
+        [ Parser.succeed ExternalImport
+            |. keyword "ext"
+            |. Util.whitespace
+            -- TODO: This doesn't handle escaped `"` characters.
+            |. symbol "\""
+            |= (Parser.getChompedString <| Parser.chompWhile ((/=) '"'))
+            |. symbol "\""
+        , Parser.succeed PackageImport
+            |. keyword "pkg"
+            |. Util.whitespace
+            -- TODO: This doesn't handle escaped `"` characters.
+            |. symbol "\""
+            |= (Parser.getChompedString <| Parser.chompWhile ((/=) '"'))
+            |. symbol "\""
+        , Parser.succeed LocalImport
+            -- TODO: This doesn't handle escaped `"` characters.
+            |. symbol "\""
+            |= (Parser.getChompedString <| Parser.chompWhile ((/=) '"'))
+            |. symbol "\""
+        ]
+
+
 
 {-| -}
 import_ : Parser Module.Import
@@ -115,10 +142,7 @@ import_ =
     Parser.succeed Module.Import
         |. keyword "import"
         |. Util.whitespace
-        -- TODO: This doesn't handle escaped `"` characters.
-        |. symbol "\""
-        |= (Parser.getChompedString <| Parser.chompWhile ((/=) '"'))
-        |. symbol "\""
+        |= import_specifier
         |. Util.whitespace
         |= Parser.oneOf
             [ Parser.succeed Basics.identity
@@ -1357,7 +1381,7 @@ keywords =
     Set.fromList <|
         List.concat
             -- Imports
-            [ [ "import", "as", "exposing" ]
+            [ [ "import", "as", "exposing", "ext", "pkg" ]
 
             -- Declarations
             , [ "pub", "extern", "run" ]
