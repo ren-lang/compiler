@@ -14,7 +14,7 @@ import Ren.AST.Expr as Expr
         , Identifier(..)
         , Pattern(..)
         )
-import Ren.AST.Module as Module exposing (Module, ImportSpecifier(..))
+import Ren.AST.Module as Module exposing (ImportSpecifier(..), Module)
 import Ren.Compiler.Emit.Util as Util
 import Ren.Data.Type as Type
 
@@ -77,9 +77,14 @@ import_ { path, name, exposed } =
 import_specifier : Module.ImportSpecifier -> Pretty.Doc t
 import_specifier specifier =
     case specifier of
-        ExternalImport path -> Pretty.string path
-        PackageImport path -> Pretty.string path
-        LocalImport path -> Pretty.string path
+        ExternalImport path ->
+            Pretty.string path
+
+        PackageImport path ->
+            Pretty.string path
+
+        LocalImport path ->
+            Pretty.string path
 
 
 declaration : Module.Declaration meta -> Pretty.Doc t

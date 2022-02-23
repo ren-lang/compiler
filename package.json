@@ -1,31 +1,32 @@
 {
-	"name": "ren-compiler",
-	"version": "0.0.1",
-	"description": "The compiler for Ren: a dynamically typed, functional scripting language.",
-	"scripts": {
-		"test": "elm-test",
-		"docs": "elm-doc-preview"
-	},
-	"repository": {
-		"type": "git",
-		"url": "git+https://github.com/ren-lang/ren-compiler.git"
-	},
-	"keywords": [
-		"programming-language",
-		"compiler",
-		"functional",
-		"elm"
-	],
-	"author": "Hayleigh Thompson",
-	"license": "MIT",
-	"bugs": {
-		"url": "https://github.com/ren-lang/ren-compiler/issues"
-	},
-	"homepage": "https://github.com/ren-lang/ren-compiler#readme",
-	"devDependencies": {
-		"elm-doc-preview": "^5.0.5",
-		"elm-test": "*",
-		"prettier": "^2.5.1",
-		"prettier-plugin-elm": "^0.8.0"
-	}
+    "name": "ren-compiler",
+    "version": "0.0.1",
+    "author": "Hayleigh Thompson",
+    "description": "The compiler for Ren: a dynamically typed, functional scripting language.",
+    "license": "MIT",
+    "homepage": "https://github.com/ren-lang/ren-compiler#readme",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/ren-lang/ren-compiler.git"
+    },
+    "bugs": {
+        "url": "https://github.com/ren-lang/ren-compiler/issues"
+    },
+    "keywords": [
+        "programming-language",
+        "compiler",
+        "functional",
+        "elm"
+    ],
+    "devDependencies": {
+        "elm-doc-preview": "^5.0.5",
+        "elm-format": "^0.8.5",
+        "elm-test": "*",
+        "prettier": "^2.5.1"
+    },
+    "scripts": {
+        "docs": "elm-doc-preview",
+        "fmt": "prettier --write .",
+        "test": "elm-test"
+    }
 }

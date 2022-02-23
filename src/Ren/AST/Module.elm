@@ -6,7 +6,7 @@ module Ren.AST.Module exposing
 
 {-|
 
-@docs Module, Import, Declaration
+@docs Module, Import, ImportSpecifier, Declaration
 @docs exposes, imports
 @docs map
 
