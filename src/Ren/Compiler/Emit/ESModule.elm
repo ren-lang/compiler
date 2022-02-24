@@ -409,12 +409,10 @@ infix_ op lhs rhs =
                 _ ->
                     Nothing
 
-        wrapLowerPrecedence { wrap, precedence, expr } =
+        wrapLowerPrecedence { precedence, expr } =
             case Maybe.map2 (\child parent -> child < parent) precedence esPrecedence of
                 Just True ->
-                    -- Should this just always Pretty.parens?
-                    -- I will leave it like this until we overhaul the wrap function
-                    wrap expr
+                    Pretty.parens expr
 
                 _ ->
                     expr
