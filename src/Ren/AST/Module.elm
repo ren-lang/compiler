@@ -1,14 +1,14 @@
 module Ren.AST.Module exposing
     ( Module, Import, ImportSpecifier(..), Declaration
     , exposes, imports
-    , map
+    , map, mapImports
     )
 
 {-|
 
-@docs Module, Import, Declaration
+@docs Module, Import, ImportSpecifier, Declaration
 @docs exposes, imports
-@docs map
+@docs map, mapImports
 
 -}
 
@@ -80,3 +80,9 @@ map f m =
     { imports = m.imports
     , declarations = List.map f m.declarations
     }
+
+
+{-| -}
+mapImports : (Import -> Import) -> Module meta -> Module meta
+mapImports f m =
+    { m | imports = List.map f m.imports }
