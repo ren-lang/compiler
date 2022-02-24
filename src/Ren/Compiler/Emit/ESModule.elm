@@ -14,7 +14,7 @@ import Ren.AST.Expr as Expr
         , Identifier(..)
         , Pattern(..)
         )
-import Ren.AST.Module as Module exposing (Module, ImportSpecifier(..))
+import Ren.AST.Module as Module exposing (ImportSpecifier(..), Module)
 import Ren.Compiler.Emit.Util as Util
 import Ren.Data.Type as Type
 
@@ -77,9 +77,14 @@ import_ { path, name, exposed } =
 import_specifier : Module.ImportSpecifier -> Pretty.Doc t
 import_specifier specifier =
     case specifier of
-        ExternalImport path -> Pretty.string path
-        PackageImport path -> Pretty.string path
-        LocalImport path -> Pretty.string path
+        ExternalImport path ->
+            Pretty.string path
+
+        PackageImport path ->
+            Pretty.string path
+
+        LocalImport path ->
+            Pretty.string path
 
 
 declaration : Module.Declaration meta -> Pretty.Doc t
@@ -166,6 +171,7 @@ declaration { public, name, type_, expr } =
 {-| -}
 type alias Builder t =
     { wrap : Pretty.Doc t -> Pretty.Doc t
+    , precedence : Maybe Int
     , expr : Pretty.Doc t
     }
 
@@ -195,7 +201,7 @@ expression exprF =
             conditional cond true false
 
         Error _ ->
-            { wrap = Basics.identity, expr = Pretty.empty }
+            { wrap = Basics.identity, precedence = Nothing, expr = Pretty.empty }
 
         Identifier id ->
             identifier id
@@ -221,6 +227,7 @@ expression exprF =
 access : Builder t -> List String -> Builder t
 access { wrap, expr } accessors =
     { wrap = Basics.identity
+    , precedence = Nothing
     , expr =
         Pretty.join (Pretty.char '.')
             (wrap expr :: List.map Pretty.string accessors)
@@ -235,6 +242,7 @@ access { wrap, expr } accessors =
 application : Builder t -> List (Builder t) -> Builder t
 application { wrap, expr } args =
     { wrap = Pretty.parens
+    , precedence = Nothing
     , expr =
         Pretty.join (Pretty.char ' ')
             (wrap expr :: List.map (.expr >> Pretty.parens) args)
@@ -263,10 +271,11 @@ block bindings { wrap, expr } =
                         ]
     in
     if List.isEmpty bindings then
-        { wrap = wrap, expr = expr }
+        { wrap = wrap, precedence = Nothing, expr = expr }
 
     else
         { wrap = iife ( "", Pretty.empty )
+        , precedence = Nothing
         , expr =
             Pretty.char '{'
                 |> Pretty.a Pretty.line
@@ -292,6 +301,7 @@ block bindings { wrap, expr } =
 conditional : Builder t -> Builder t -> Builder t -> Builder t
 conditional cond true false =
     { wrap = Pretty.parens
+    , precedence = Nothing
     , expr =
         Pretty.join (Pretty.char ' ')
             [ cond.expr
@@ -313,11 +323,13 @@ identifier id =
     case id of
         Expr.Local var ->
             { wrap = Basics.identity
+            , precedence = Nothing
             , expr = Pretty.string var
             }
 
         Expr.Scoped namespace ((Expr.Scoped _ _) as id_) ->
             { wrap = Basics.identity
+            , precedence = Nothing
             , expr =
                 Pretty.string namespace
                     |> Pretty.a (Pretty.char '$')
@@ -326,6 +338,7 @@ identifier id =
 
         Expr.Scoped namespace id_ ->
             { wrap = Basics.identity
+            , precedence = Nothing
             , expr =
                 Pretty.string namespace
                     |> Pretty.a (Pretty.char '.')
@@ -334,6 +347,7 @@ identifier id =
 
         Expr.Placeholder _ ->
             { wrap = Basics.identity
+            , precedence = Nothing
             , expr = Pretty.empty
             }
 
@@ -346,12 +360,72 @@ identifier id =
 infix_ : Expr.Operator -> Builder t -> Builder t -> Builder t
 infix_ op lhs rhs =
     let
+        -- Uses precedence numbers from
+        -- <https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Operator_Precedence>
+        esPrecedence =
+            case op of
+                Expr.Add ->
+                    Just 14
+
+                Expr.Sub ->
+                    Just 14
+
+                Expr.Mul ->
+                    Just 15
+
+                Expr.Div ->
+                    Just 15
+
+                Expr.Pow ->
+                    Just 16
+
+                Expr.Mod ->
+                    Just 15
+
+                Expr.Eq ->
+                    Just 11
+
+                Expr.NotEq ->
+                    Just 11
+
+                Expr.Lt ->
+                    Just 12
+
+                Expr.Lte ->
+                    Just 12
+
+                Expr.Gt ->
+                    Just 12
+
+                Expr.Gte ->
+                    Just 12
+
+                Expr.And ->
+                    Just 7
+
+                Expr.Or ->
+                    Just 6
+
+                _ ->
+                    Nothing
+
+        wrapLowerPrecedence { wrap, precedence, expr } =
+            case Maybe.map2 (\child parent -> child < parent) precedence esPrecedence of
+                Just True ->
+                    -- Should this just always Pretty.parens?
+                    -- I will leave it like this until we overhaul the wrap function
+                    wrap expr
+
+                _ ->
+                    expr
+
         binop s =
             { wrap = Pretty.parens
+            , precedence = esPrecedence
             , expr =
                 Pretty.join (Pretty.string <| " " ++ s ++ " ")
-                    [ lhs.wrap lhs.expr
-                    , rhs.wrap rhs.expr
+                    [ wrapLowerPrecedence lhs
+                    , wrapLowerPrecedence rhs
                     ]
             }
     in
@@ -407,6 +481,7 @@ infix_ op lhs rhs =
 
         Expr.Cons ->
             { wrap = Pretty.parens
+            , precedence = Nothing
             , expr =
                 [ lhs.expr
                 , Pretty.string "..." |> Pretty.a (rhs.wrap rhs.expr)
@@ -417,6 +492,7 @@ infix_ op lhs rhs =
 
         Expr.Join ->
             { wrap = Pretty.parens
+            , precedence = Nothing
             , expr =
                 [ Pretty.string "..." |> Pretty.a (lhs.wrap lhs.expr)
                 , Pretty.string "..." |> Pretty.a (rhs.wrap rhs.expr)
@@ -434,6 +510,7 @@ infix_ op lhs rhs =
 lambda : List Expr.Pattern -> Builder t -> Builder t
 lambda args { wrap, expr } =
     { wrap = Pretty.parens
+    , precedence = Nothing
     , expr =
         List.map (lambdaPattern >> Pretty.parens) args
             |> Pretty.join (Pretty.string " => ")
@@ -505,6 +582,7 @@ literal lit =
     case lit of
         Expr.Array elements ->
             { wrap = Basics.identity
+            , precedence = Nothing
             , expr =
                 Pretty.brackets <|
                     Pretty.join
@@ -514,16 +592,19 @@ literal lit =
 
         Expr.Boolean True ->
             { wrap = Basics.identity
+            , precedence = Nothing
             , expr = Pretty.string "true"
             }
 
         Expr.Boolean False ->
             { wrap = Basics.identity
+            , precedence = Nothing
             , expr = Pretty.string "false"
             }
 
         Expr.Number n ->
             { wrap = Basics.identity
+            , precedence = Nothing
             , expr = Pretty.string <| String.fromFloat n
             }
 
@@ -535,6 +616,7 @@ literal lit =
                         |> Pretty.a expr
             in
             { wrap = Pretty.parens
+            , precedence = Nothing
             , expr =
                 Pretty.braces <|
                     Pretty.join
@@ -544,6 +626,7 @@ literal lit =
 
         Expr.String s ->
             { wrap = Basics.identity
+            , precedence = Nothing
             , expr =
                 Pretty.surround
                     (Pretty.char '"')
@@ -559,6 +642,7 @@ literal lit =
                         (.expr >> Pretty.surround (Pretty.string "${") (Pretty.string "}"))
             in
             { wrap = Basics.identity
+            , precedence = Nothing
             , expr =
                 Pretty.join Pretty.empty (List.map segment segments)
                     |> Pretty.surround (Pretty.char '`') (Pretty.char '`')
@@ -566,11 +650,13 @@ literal lit =
 
         Expr.Undefined ->
             { wrap = Basics.identity
+            , precedence = Nothing
             , expr = Pretty.string "undefined"
             }
 
         Expr.Variant name args ->
             { wrap = Basics.identity
+            , precedence = Nothing
             , expr =
                 Pretty.join
                     (Pretty.string ", ")
@@ -601,6 +687,7 @@ match { expr } cases =
                 "$match"
     in
     { wrap = Basics.identity
+    , precedence = Nothing
     , expr =
         Pretty.char '{'
             |> Pretty.a Pretty.line
