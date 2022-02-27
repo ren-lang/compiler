@@ -201,6 +201,7 @@ declaration =
                 ]
             |. Util.whitespace
             |. keyword "ext"
+            |. Parser.commit ()
             |. Util.whitespace
             |= lowercaseName keywords
             |. Util.whitespace
@@ -214,6 +215,7 @@ declaration =
                 ]
             |> Span.parser (|>)
             |> Parser.inContext InDeclaration
+            |> Parser.backtrackable
         , Parser.succeed Module.Let
             |= Parser.oneOf
                 [ Parser.succeed True
