@@ -87,7 +87,7 @@ importSpecifier moduleName specifier =
             Pretty.string path
 
         FfiImport ->
-            Pretty.string <| moduleName ++ ".ffi.js"
+            Pretty.string <| moduleName ++ ".ffi.mjs"
 
 
 declaration : Module.Declaration meta -> Pretty.Doc t
