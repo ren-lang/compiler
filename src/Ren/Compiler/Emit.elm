@@ -12,7 +12,7 @@ module Ren.Compiler.Emit exposing
 
 -- IMPORTS ---------------------------------------------------------------------
 
-import Ren.AST.Module exposing (Module)
+import Ren.AST.Module as Module exposing (Module)
 import Ren.Compiler.Emit.ESModule as ESModule
 import Ren.Data.Type as Type
 
@@ -30,11 +30,19 @@ run target m =
 
         DEBUG_Types ->
             let
-                showDeclaration { name, type_ } =
-                    name ++ " : " ++ (Type.toString <| Type.reduce type_)
+                showDeclaration declr =
+                    case declr of
+                        Module.Ext _ name type_ _ ->
+                            Just <| name ++ " : " ++ (Type.toString <| Type.reduce type_)
+
+                        Module.Let _ name type_ _ _ ->
+                            Just <| name ++ " : " ++ (Type.toString <| Type.reduce type_)
+
+                        Module.Run _ _ ->
+                            Nothing
             in
             m.declarations
-                |> List.map showDeclaration
+                |> List.filterMap showDeclaration
                 |> String.join "\n\n"
 
 

@@ -77,7 +77,18 @@ run : Module meta -> Result Error (Module meta)
 run ({ declarations } as m) =
     let
         polyenv =
-            List.foldl (\{ name, type_ } env -> Polyenv.insert name (Typing.poly type_) env)
+            List.foldl
+                (\declr env ->
+                    case declr of
+                        Module.Ext _ name type_ _ ->
+                            Polyenv.insert name (Typing.poly type_) env
+
+                        Module.Let _ name type_ _ _ ->
+                            Polyenv.insert name (Typing.poly type_) env
+
+                        Module.Run _ _ ->
+                            env
+                )
                 Polyenv.empty
                 declarations
     in
@@ -91,37 +102,44 @@ run ({ declarations } as m) =
 
 {-| -}
 declaration : Polyenv -> Module.Declaration meta -> Result Error (Module.Declaration meta)
-declaration polyenv ({ type_, expr } as declr) =
-    if type_ == Type.Any then
-        Ok declr
+declaration polyenv declr =
+    case declr of
+        Module.Ext _ _ _ _ ->
+            Ok declr
 
-    else
-        Result.andThen
-            (\( envDec, tDec ) ->
-                ResultM.runM init <|
-                    do (inst <| Typing.poly type_) <| \( envAnn, tAnn ) ->
-                    do next <| \_ ->
-                    do (unify [ envDec, envAnn ] [ tDec, tAnn ]) <| \t ->
-                    if tAnn == Type.Hole then
-                        ResultM.succeed { declr | type_ = Typing.type_ t }
+        Module.Let _ _ Type.Any _ _ ->
+            Ok declr
 
-                    else if Typing.free (Typing.simplify t) /= Typing.free (Typing.simplify (Typing.poly type_)) then
-                        ResultM.fail <| TypeTooGeneral type_ (Typing.type_ t)
+        Module.Let pub name type_ expr meta ->
+            Result.andThen
+                (\( envDec, tDec ) ->
+                    ResultM.runM init <|
+                        do (inst <| Typing.poly type_) <| \( envAnn, tAnn ) ->
+                        do next <| \_ ->
+                        do (unify [ envDec, envAnn ] [ tDec, tAnn ]) <| \t ->
+                        if tAnn == Type.Hole then
+                            ResultM.succeed <| Module.Let pub name (Typing.type_ t) expr meta
 
-                    else
-                        -- It is a requirement for the inferred type to match the
-                        -- annotated one, so this might seem like a superfluous
-                        -- operation. But we allow type holes in annotation as a
-                        -- way for the developer to say "I don't know the type of
-                        -- this thing, work it out for me."
-                        --
-                        -- Running the code formatting will insert type annotations
-                        -- so by setting the type of the declaration to be the
-                        -- inferred type, we have a way for the compiler to answer
-                        -- that question!
-                        ResultM.succeed { declr | type_ = Typing.type_ t }
-            )
-            (expression polyenv expr)
+                        else if Typing.free (Typing.simplify t) /= Typing.free (Typing.simplify (Typing.poly type_)) then
+                            ResultM.fail <| TypeTooGeneral type_ (Typing.type_ t)
+
+                        else
+                            -- It is a requirement for the inferred type to match the
+                            -- annotated one, so this might seem like a superfluous
+                            -- operation. But we allow type holes in annotation as a
+                            -- way for the developer to say "I don't know the type of
+                            -- this thing, work it out for me."
+                            --
+                            -- Running the code formatting will insert type annotations
+                            -- so by setting the type of the declaration to be the
+                            -- inferred type, we have a way for the compiler to answer
+                            -- that question!
+                            ResultM.succeed <| Module.Let pub name (Typing.type_ t) expr meta
+                )
+                (expression polyenv expr)
+
+        Module.Run _ _ ->
+            Ok declr
 
 
 {-| Infer the type of an expression, taking in some existing polymorphic environment

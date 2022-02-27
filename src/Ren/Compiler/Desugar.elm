@@ -27,12 +27,23 @@ import Ren.AST.Module as Module
 
 
 
+-- TYPES -----------------------------------------------------------------------
+
+
+{-| A transformation is any function that takes both the metadata and expression
+node in the AST and returns a new AST node.
+-}
+type alias Transformation meta =
+    meta -> ExprF (Expr meta) -> ExprF (Expr meta)
+
+
+
 -- RUNNING TRANSFORMATIONS -----------------------------------------------------
 
 
 {-| -}
 run : List (Transformation meta) -> Module.Declaration meta -> Module.Declaration meta
-run transformations declaration =
+run transformations declr =
     let
         -- This continuously applies transformations until they no longer change
         -- the AST. It's possible to blow the stack up if one transformation undoes
@@ -48,18 +59,25 @@ run transformations declaration =
             else
                 apply meta result
     in
-    { declaration
-        | expr =
-            Expr.cata
-                (\meta expression ->
-                    apply meta expression
-                        -- After all the transformations have been applied we wrap the
-                        -- expression back up in our `Expr` wrapper with the original
-                        -- metadata attached.
-                        |> Expr meta
-                )
-                declaration.expr
-    }
+    case declr of
+        Module.Ext pub name type_ meta ->
+            Module.Let pub
+                name
+                type_
+                (Expr meta <| Identifier <| Scoped "$FFI" <| Local name)
+                meta
+
+        Module.Let pub name type_ expr meta ->
+            Module.Let pub
+                name
+                type_
+                (Expr.cata (\meta_ expression -> Expr meta_ <| apply meta_ expression) expr)
+                meta
+
+        Module.Run expr meta ->
+            Module.Run
+                (Expr.cata (\meta_ expression -> Expr meta_ <| apply meta_ expression) expr)
+                meta
 
 
 {-| -}
@@ -68,17 +86,6 @@ defaults =
     [ placeholders
     , blocks
     ]
-
-
-
--- TYPES -----------------------------------------------------------------------
-
-
-{-| A transformation is any function that takes both the metadata and expression
-node in the AST and returns a new AST node.
--}
-type alias Transformation meta =
-    meta -> ExprF (Expr meta) -> ExprF (Expr meta)
 
 
 

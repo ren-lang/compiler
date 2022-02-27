@@ -15,7 +15,7 @@ module Ren.Compiler exposing
 -- IMPORTS ---------------------------------------------------------------------
 
 import Parser.Advanced as Parser
-import Ren.AST.Module as Module exposing (Module)
+import Ren.AST.Module as Module exposing (Import, Module)
 import Ren.Compiler.Check as Check
 import Ren.Compiler.Desugar as Desugar
 import Ren.Compiler.Emit as Emit
@@ -35,7 +35,7 @@ type alias Compiler error =
 
 {-| -}
 type alias Toolchain error meta =
-    { parse : String -> Result error (Module meta)
+    { parse : String -> String -> Result error (Module meta)
     , desugar : Module meta -> Module meta
     , validate : Module meta -> Result error (Module meta)
     , check : Module meta -> Result error (Module meta)
@@ -82,8 +82,15 @@ typecheck =
 {-| -}
 custom : Bool -> List (Desugar.Transformation Span) -> List (Optimise.Optimisation Span) -> Emit.Target -> Toolchain Error Span
 custom shouldTypecheck transformations optimisations target =
-    { parse = Parse.run >> Result.mapError ParseError
-    , desugar = Module.map (Desugar.run transformations)
+    { parse = \name input -> Parse.run name input |> Result.mapError ParseError
+    , desugar =
+        \m ->
+            if List.isEmpty <| Module.externs m then
+                Module.map (Desugar.run transformations) m
+
+            else
+                { m | imports = Import Module.FfiImport [ "$FFI" ] [] :: m.imports }
+                    |> Module.map (Desugar.run transformations)
     , validate = Ok
     , check =
         if shouldTypecheck then
@@ -103,9 +110,9 @@ custom shouldTypecheck transformations optimisations target =
 {-| Chains together the various steps of a given toolchain to be run against
 some Ren code input.
 -}
-run : Toolchain error meta -> Compiler error
-run { parse, desugar, validate, check, optimise, emit } =
-    parse
+run : String -> Toolchain error meta -> Compiler error
+run name { parse, desugar, validate, check, optimise, emit } =
+    parse name
         >> Result.map desugar
         >> Result.andThen validate
         >> Result.andThen check

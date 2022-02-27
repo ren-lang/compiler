@@ -25,9 +25,9 @@ import Set exposing (Set)
 
 
 {-| -}
-run : String -> Result (List (Parser.DeadEnd Context Error)) (Module Span)
-run =
-    Parser.run module_
+run : String -> String -> Result (List (Parser.DeadEnd Context Error)) (Module Span)
+run name_ input =
+    Parser.run (module_ name_) input
 
 
 
@@ -74,9 +74,9 @@ type Error
 
 
 {-| -}
-module_ : Parser (Module Span)
-module_ =
-    Parser.succeed Module
+module_ : String -> Parser (Module Span)
+module_ name_ =
+    Parser.succeed (Module name_)
         |. Util.ignorables (Parser.Token "//" <| ExpectingSymbol "//")
         |= Parser.loop []
             (\imports ->
@@ -187,13 +187,34 @@ import_ =
 declaration : Parser (Module.Declaration Span)
 declaration =
     Parser.oneOf
-        [ Parser.succeed (Module.Declaration False "_" Type.Any)
+        [ Parser.succeed Module.Run
             |. keyword "run"
             |. Parser.commit ()
             |= expression
             |> Span.parser (|>)
             |> Parser.inContext InDeclaration
-        , Parser.succeed Module.Declaration
+        , Parser.succeed Module.Ext
+            |= Parser.oneOf
+                [ Parser.succeed True
+                    |. keyword "pub"
+                , Parser.succeed False
+                ]
+            |. Util.whitespace
+            |. keyword "ext"
+            |. Util.whitespace
+            |= lowercaseName keywords
+            |. Util.whitespace
+            |= Parser.oneOf
+                [ Parser.succeed Basics.identity
+                    |. symbol ":"
+                    |. Util.whitespace
+                    |= type_
+                    |. Util.whitespace
+                , Parser.succeed Type.Any
+                ]
+            |> Span.parser (|>)
+            |> Parser.inContext InDeclaration
+        , Parser.succeed Module.Let
             |= Parser.oneOf
                 [ Parser.succeed True
                     |. keyword "pub"

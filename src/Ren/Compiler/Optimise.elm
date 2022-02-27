@@ -28,7 +28,7 @@ import Ren.AST.Module as Module
 
 {-| -}
 run : List (Optimisation meta) -> Module.Declaration meta -> Module.Declaration meta
-run optimisations declaration =
+run optimisations declr =
     let
         -- This continuously applies optimisations until they no longer change
         -- the AST. It's possible to blow the stack up if one optimisation undoes
@@ -44,18 +44,21 @@ run optimisations declaration =
             else
                 apply meta result
     in
-    { declaration
-        | expr =
-            Expr.cata
-                (\meta expression ->
-                    apply meta expression
-                        -- After all the optimisations have been applied we wrap the
-                        -- expression back up in our `Expr` wrapper with the original
-                        -- metadata attached.
-                        |> Expr meta
-                )
-                declaration.expr
-    }
+    case declr of
+        Module.Ext pub name type_ meta ->
+            Module.Ext pub name type_ meta
+
+        Module.Let pub name type_ expr meta ->
+            Module.Let pub
+                name
+                type_
+                (Expr.cata (\meta_ expression -> Expr meta_ <| apply meta expression) expr)
+                meta
+
+        Module.Run expr meta ->
+            Module.Run
+                (Expr.cata (\meta_ expression -> Expr meta_ <| apply meta expression) expr)
+                meta
 
 
 

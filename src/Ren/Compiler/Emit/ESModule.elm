@@ -32,23 +32,23 @@ run =
 
 
 module_ : Module meta -> Pretty.Doc t
-module_ { imports, declarations } =
+module_ { name, imports, declarations } =
     if List.isEmpty imports then
         Pretty.join Util.doubleline (List.map declaration declarations)
 
     else
-        Pretty.join Pretty.line (List.map import_ imports)
+        Pretty.join Pretty.line (List.map (import_ name) imports)
             |> Pretty.a Util.doubleline
             |> Pretty.a (Pretty.join Util.doubleline (List.map declaration declarations))
 
 
-import_ : Module.Import -> Pretty.Doc t
-import_ { path, name, exposed } =
+import_ : String -> Module.Import -> Pretty.Doc t
+import_ moduleName { path, name, exposed } =
     case ( name, exposed ) of
         ( [], [] ) ->
             Pretty.string "import "
                 |> Pretty.a (Pretty.char '"')
-                |> Pretty.a (importSpecifier path)
+                |> Pretty.a (importSpecifier moduleName path)
                 |> Pretty.a (Pretty.char '"')
 
         ( parts, [] ) ->
@@ -56,7 +56,7 @@ import_ { path, name, exposed } =
                 |> Pretty.a (Pretty.join (Pretty.char '$') <| List.map Pretty.string parts)
                 |> Pretty.a (Pretty.string " from ")
                 |> Pretty.a (Pretty.char '"')
-                |> Pretty.a (importSpecifier path)
+                |> Pretty.a (importSpecifier moduleName path)
                 |> Pretty.a (Pretty.char '"')
 
         ( [], bindings ) ->
@@ -64,18 +64,18 @@ import_ { path, name, exposed } =
                 |> Pretty.a (Pretty.braces <| Pretty.join (Pretty.string ", ") <| List.map Pretty.string bindings)
                 |> Pretty.a (Pretty.string " from ")
                 |> Pretty.a (Pretty.char '"')
-                |> Pretty.a (importSpecifier path)
+                |> Pretty.a (importSpecifier moduleName path)
                 |> Pretty.a (Pretty.char '"')
 
         ( parts, bindings ) ->
             Pretty.join Pretty.line
-                [ import_ { path = path, name = parts, exposed = [] }
-                , import_ { path = path, name = [], exposed = bindings }
+                [ import_ moduleName { path = path, name = parts, exposed = [] }
+                , import_ moduleName { path = path, name = [], exposed = bindings }
                 ]
 
 
-importSpecifier : Module.ImportSpecifier -> Pretty.Doc t
-importSpecifier specifier =
+importSpecifier : String -> Module.ImportSpecifier -> Pretty.Doc t
+importSpecifier moduleName specifier =
     case specifier of
         ExternalImport path ->
             Pretty.string path
@@ -86,80 +86,87 @@ importSpecifier specifier =
         LocalImport path ->
             Pretty.string path
 
+        FfiImport ->
+            Pretty.string <| moduleName ++ ".ffi.js"
+
 
 declaration : Module.Declaration meta -> Pretty.Doc t
-declaration { public, name, type_, expr } =
-    if name == "_" then
-        Expr.cata (always expression) expr
-            |> .expr
+declaration declr =
+    case declr of
+        Module.Ext _ name _ _ ->
+            Pretty.string <| "// Internal Error! Trying to emit an external declrattion: " ++ name
 
-    else
-        Pretty.string "// "
-            |> Pretty.a (Pretty.string name)
-            |> Pretty.a (Pretty.string " :: ")
-            |> Pretty.a (Pretty.string <| Type.toString type_)
-            |> Pretty.a Pretty.line
-            |> Pretty.a
-                (case expr of
-                    Expr _ (Lambda [ arg ] body) ->
-                        Pretty.string "function "
-                            |> Pretty.a (Pretty.string name)
-                            |> Pretty.a Pretty.space
-                            |> Pretty.a (Pretty.parens <| lambdaPattern arg)
-                            |> Pretty.a Pretty.space
-                            |> Pretty.a (Pretty.char '{')
-                            |> Pretty.a Pretty.line
-                            |> Pretty.a
-                                (Pretty.string "return "
-                                    |> Pretty.a (wrapBuilder <| Expr.cata (always expression) body)
-                                    |> Pretty.indent 4
-                                )
-                            |> Pretty.a Pretty.line
-                            |> Pretty.a (Pretty.char '}')
-                            |> Pretty.append
-                                (if public then
-                                    Pretty.string "export "
+        Module.Let pub name type_ expr _ ->
+            Pretty.string "// "
+                |> Pretty.a (Pretty.string name)
+                |> Pretty.a (Pretty.string " :: ")
+                |> Pretty.a (Pretty.string <| Type.toString type_)
+                |> Pretty.a Pretty.line
+                |> Pretty.a
+                    (case expr of
+                        Expr _ (Lambda [ arg ] body) ->
+                            Pretty.string "function "
+                                |> Pretty.a (Pretty.string name)
+                                |> Pretty.a Pretty.space
+                                |> Pretty.a (Pretty.parens <| lambdaPattern arg)
+                                |> Pretty.a Pretty.space
+                                |> Pretty.a (Pretty.char '{')
+                                |> Pretty.a Pretty.line
+                                |> Pretty.a
+                                    (Pretty.string "return "
+                                        |> Pretty.a (wrapBuilder <| Expr.cata (always expression) body)
+                                        |> Pretty.indent 4
+                                    )
+                                |> Pretty.a Pretty.line
+                                |> Pretty.a (Pretty.char '}')
+                                |> Pretty.append
+                                    (if pub then
+                                        Pretty.string "export "
 
-                                 else
-                                    Pretty.empty
-                                )
+                                     else
+                                        Pretty.empty
+                                    )
 
-                    Expr meta (Lambda (arg :: args) body) ->
-                        Pretty.string "function "
-                            |> Pretty.a (Pretty.string name)
-                            |> Pretty.a Pretty.space
-                            |> Pretty.a (Pretty.parens <| lambdaPattern arg)
-                            |> Pretty.a Pretty.space
-                            |> Pretty.a (Pretty.char '{')
-                            |> Pretty.a Pretty.line
-                            |> Pretty.a
-                                (Pretty.string "return "
-                                    |> Pretty.a (wrapBuilder <| Expr.cata (always expression) <| Expr meta (Lambda args body))
-                                    |> Pretty.indent 4
-                                )
-                            |> Pretty.a Pretty.line
-                            |> Pretty.a (Pretty.char '}')
-                            |> Pretty.append
-                                (if public then
-                                    Pretty.string "export "
+                        Expr meta (Lambda (arg :: args) body) ->
+                            Pretty.string "function "
+                                |> Pretty.a (Pretty.string name)
+                                |> Pretty.a Pretty.space
+                                |> Pretty.a (Pretty.parens <| lambdaPattern arg)
+                                |> Pretty.a Pretty.space
+                                |> Pretty.a (Pretty.char '{')
+                                |> Pretty.a Pretty.line
+                                |> Pretty.a
+                                    (Pretty.string "return "
+                                        |> Pretty.a (wrapBuilder <| Expr.cata (always expression) <| Expr meta (Lambda args body))
+                                        |> Pretty.indent 4
+                                    )
+                                |> Pretty.a Pretty.line
+                                |> Pretty.a (Pretty.char '}')
+                                |> Pretty.append
+                                    (if pub then
+                                        Pretty.string "export "
 
-                                 else
-                                    Pretty.empty
-                                )
+                                     else
+                                        Pretty.empty
+                                    )
 
-                    _ ->
-                        Pretty.string "const "
-                            |> Pretty.a (Pretty.string name)
-                            |> Pretty.a (Pretty.string " = ")
-                            |> Pretty.a (wrapBuilder <| Expr.cata (always expression) expr)
-                            |> Pretty.append
-                                (if public then
-                                    Pretty.string "export "
+                        _ ->
+                            Pretty.string "const "
+                                |> Pretty.a (Pretty.string name)
+                                |> Pretty.a (Pretty.string " = ")
+                                |> Pretty.a (wrapBuilder <| Expr.cata (always expression) expr)
+                                |> Pretty.append
+                                    (if pub then
+                                        Pretty.string "export "
 
-                                 else
-                                    Pretty.empty
-                                )
-                )
+                                     else
+                                        Pretty.empty
+                                    )
+                    )
+
+        Module.Run expr _ ->
+            Expr.cata (always expression) expr
+                |> .expr
 
 
 
