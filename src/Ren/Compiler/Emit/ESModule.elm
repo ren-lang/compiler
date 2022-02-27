@@ -14,7 +14,7 @@ import Ren.AST.Expr as Expr
         , Identifier(..)
         , Pattern(..)
         )
-import Ren.AST.Module as Module exposing (Module, ImportSpecifier(..))
+import Ren.AST.Module as Module exposing (ImportSpecifier(..), Module)
 import Ren.Compiler.Emit.Util as Util
 import Ren.Data.Type as Type
 
@@ -48,7 +48,7 @@ import_ { path, name, exposed } =
         ( [], [] ) ->
             Pretty.string "import "
                 |> Pretty.a (Pretty.char '"')
-                |> Pretty.a (import_specifier path)
+                |> Pretty.a (importSpecifier path)
                 |> Pretty.a (Pretty.char '"')
 
         ( parts, [] ) ->
@@ -56,7 +56,7 @@ import_ { path, name, exposed } =
                 |> Pretty.a (Pretty.join (Pretty.char '$') <| List.map Pretty.string parts)
                 |> Pretty.a (Pretty.string " from ")
                 |> Pretty.a (Pretty.char '"')
-                |> Pretty.a (import_specifier path)
+                |> Pretty.a (importSpecifier path)
                 |> Pretty.a (Pretty.char '"')
 
         ( [], bindings ) ->
@@ -64,7 +64,7 @@ import_ { path, name, exposed } =
                 |> Pretty.a (Pretty.braces <| Pretty.join (Pretty.string ", ") <| List.map Pretty.string bindings)
                 |> Pretty.a (Pretty.string " from ")
                 |> Pretty.a (Pretty.char '"')
-                |> Pretty.a (import_specifier path)
+                |> Pretty.a (importSpecifier path)
                 |> Pretty.a (Pretty.char '"')
 
         ( parts, bindings ) ->
@@ -74,12 +74,17 @@ import_ { path, name, exposed } =
                 ]
 
 
-import_specifier : Module.ImportSpecifier -> Pretty.Doc t
-import_specifier specifier =
+importSpecifier : Module.ImportSpecifier -> Pretty.Doc t
+importSpecifier specifier =
     case specifier of
-        ExternalImport path -> Pretty.string path
-        PackageImport path -> Pretty.string path
-        LocalImport path -> Pretty.string path
+        ExternalImport path ->
+            Pretty.string path
+
+        PackageImport path ->
+            Pretty.string path
+
+        LocalImport path ->
+            Pretty.string path
 
 
 declaration : Module.Declaration meta -> Pretty.Doc t
