@@ -93,8 +93,9 @@ importSpecifier moduleName specifier =
 declaration : Module.Declaration meta -> Pretty.Doc t
 declaration declr =
     case declr of
-        Module.Ext _ name _ _ ->
-            Pretty.string <| "// Internal Error! Trying to emit an external declrattion: " ++ name
+        Module.Ext pub name type_ meta ->
+            Module.Let pub name type_ (Expr meta <| Identifier <| Scoped "$FFI" <| Local name) meta
+                |> declaration
 
         Module.Let pub name type_ expr _ ->
             Pretty.string "// "

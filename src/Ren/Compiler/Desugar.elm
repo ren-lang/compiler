@@ -61,11 +61,7 @@ run transformations declr =
     in
     case declr of
         Module.Ext pub name type_ meta ->
-            Module.Let pub
-                name
-                type_
-                (Expr meta <| Identifier <| Scoped "$FFI" <| Local name)
-                meta
+            Module.Ext pub name type_ meta
 
         Module.Let pub name type_ expr meta ->
             Module.Let pub
