@@ -635,10 +635,11 @@ match { expr } cases =
 matchCase : String -> ( Expr.Pattern, Maybe (Builder t), Builder t ) -> Pretty.Doc t
 matchCase name ( pat, guard, { expr } ) =
     Pretty.string "if ("
-        |> Pretty.a (matchPattern name pat)
         |> Pretty.a
-            (Maybe.map (.expr >> Pretty.append (Pretty.string " && ")) guard
-                |> Maybe.withDefault Pretty.empty
+            (Pretty.join (Pretty.string " && ")
+                [ matchPattern name pat
+                , Maybe.map .expr guard |> Maybe.withDefault Pretty.empty
+                ]
             )
         |> Pretty.a (Pretty.string ") {")
         |> Pretty.a Pretty.line
@@ -772,7 +773,7 @@ matchPattern name pat =
 
         Expr.Typeof "Array" p ->
             Pretty.join (Pretty.string " && ")
-                [ Pretty.string "Array.isArray("
+                [ Pretty.string "globalThis.Array.isArray("
                     |> Pretty.a (Pretty.string name)
                     |> Pretty.a (Pretty.string ")")
                 , matchPattern name p
