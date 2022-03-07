@@ -911,12 +911,12 @@ pattern =
             Parser.oneOf
                 [ arrayDestructure
                 , literalPattern
+                , wildcard
                 , name
                 , recordDestructure
                 , templateDestructure
                 , typeof
                 , variantDestructure
-                , wildcard
                 ]
     in
     Parser.oneOf

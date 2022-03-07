@@ -619,7 +619,7 @@ match { expr } cases =
             |> Pretty.a Pretty.line
             |> Pretty.a
                 (List.map (matchCase matchVariable) cases
-                    |> Pretty.join Pretty.line
+                    |> Pretty.join (Pretty.line |> Pretty.a Pretty.line)
                     |> Pretty.a Pretty.line
                     |> Pretty.a Pretty.line
                     |> Pretty.a (Pretty.string "throw new Error(\"Incomplete pattern match.\")")
@@ -832,7 +832,7 @@ matchPattern name pat =
         -- ```
         --
         Expr.Wildcard _ ->
-            Pretty.string "true"
+            Pretty.empty
 
 
 {-| -}
