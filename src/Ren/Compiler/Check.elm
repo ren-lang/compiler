@@ -1,12 +1,8 @@
-module Ren.Compiler.Check exposing
-    ( run
-    , Error(..)
-    )
+module Ren.Compiler.Check exposing (run)
 
 {-|
 
 @docs run
-@docs Error
 
 -}
 
@@ -18,7 +14,7 @@ import Data.Tuple2
 import Dict
 import Ren.AST.Expr as Expr exposing (Expr(..), ExprF(..))
 import Ren.AST.Module as Module exposing (Module)
-import Ren.Compiler.Parse exposing (Error(..))
+import Ren.Compiler.Error as Error exposing (Error)
 import Ren.Data.Monoenv as Monoenv exposing (Monoenv)
 import Ren.Data.Polyenv as Polyenv exposing (Polyenv)
 import Ren.Data.Substitution as Substitution
@@ -47,7 +43,7 @@ we perform a monadic action and bind its result to be used later.
 
 -}
 type alias InferM a =
-    ResultM Context Error a
+    ResultM Context Error.TypeError a
 
 
 {-| The context is the state we thread through our inference algorithm.
@@ -57,15 +53,6 @@ type alias Context =
     , substitution : Substitution
     , vars : List String
     }
-
-
-{-| -}
-type Error
-    = InternalError String
-    | InfiniteType Type Type
-    | IncompatibleTypes Type Type
-    | MissingField String
-    | TypeTooGeneral Type Type
 
 
 
@@ -94,6 +81,7 @@ run ({ declarations } as m) =
     in
     List.foldr (\d ds -> Result.map2 (::) (declaration polyenv d) ds) (Ok []) declarations
         |> Result.map (\ds -> { m | declarations = ds })
+        |> Result.mapError Error.TypeError
 
 
 
@@ -101,7 +89,7 @@ run ({ declarations } as m) =
 
 
 {-| -}
-declaration : Polyenv -> Module.Declaration meta -> Result Error (Module.Declaration meta)
+declaration : Polyenv -> Module.Declaration meta -> Result Error.TypeError (Module.Declaration meta)
 declaration polyenv declr =
     case declr of
         Module.Ext _ _ _ _ ->
@@ -121,7 +109,7 @@ declaration polyenv declr =
                             ResultM.succeed <| Module.Let pub name (Typing.type_ t) expr meta
 
                         else if Typing.free (Typing.simplify t) /= Typing.free (Typing.simplify (Typing.poly type_)) then
-                            ResultM.fail <| TypeTooGeneral type_ (Typing.type_ t)
+                            ResultM.fail <| Error.typeTooGeneral type_ (Typing.type_ t)
 
                         else
                             -- It is a requirement for the inferred type to match the
@@ -158,7 +146,7 @@ We should look at using `Expr.para` instead of cata, or perhaps another recursio
 scheme to annotate the expressions as we go.
 
 -}
-expression : Polyenv -> Expr meta -> Result Error Typing
+expression : Polyenv -> Expr meta -> Result Error.TypeError Typing
 expression polyenv expr =
     Expr.cata (always infer) expr
         |> ResultM.runM { init | polyenv = Dict.union init.polyenv polyenv }
@@ -211,7 +199,7 @@ infer : ExprF (InferM Typing) -> InferM Typing
 infer exprF =
     case exprF of
         Access _ _ ->
-            ResultM.fail <| InternalError "Type inference for record accessors is currently not supported!"
+            ResultM.fail <| Error.internalTypeError "Type inference for record accessors is currently not supported!"
 
         Application expr args ->
             application expr args
@@ -292,7 +280,7 @@ annotation inferExpr ann =
             ResultM.succeed ( envExpr, tExpr )
 
         else if Typing.free (Typing.simplify t) /= Typing.free (Typing.simplify ( envAnn, tAnn )) then
-            ResultM.fail <| TypeTooGeneral ann (Typing.type_ t)
+            ResultM.fail <| Error.typeTooGeneral ann (Typing.type_ t)
 
         else
             ResultM.succeed t
@@ -365,10 +353,10 @@ identifier id =
                     ResultM.succeed (Typing.mono name a)
 
         Expr.Scoped _ _ ->
-            ResultM.fail <| InternalError "Type inference for scoped identifiers is currently not supported!"
+            ResultM.fail <| Error.internalTypeError "Type inference for scoped identifiers is currently not supported!"
 
         Expr.Placeholder _ ->
-            ResultM.fail <| InternalError "Type inference for placeholder identifiers is currently not supported!"
+            ResultM.fail <| Error.internalTypeError "Type inference for placeholder identifiers is currently not supported!"
 
 
 
@@ -458,7 +446,7 @@ literal lit =
             ResultM.succeed <| Typing.poly (Con "()")
 
         Expr.Variant _ _ ->
-            ResultM.fail <| InternalError "Type inference for variant literals is currently not supported!"
+            ResultM.fail <| Error.internalTypeError "Type inference for variant literals is currently not supported!"
 
 
 
@@ -476,7 +464,7 @@ match inferExpr inferCases =
             ResultM.succeed <| Typing.from env r
 
         _ ->
-            ResultM.fail <| InternalError "Inferred pattern match to be something other than a function."
+            ResultM.fail <| Error.internalTypeError "Inferred pattern match to be something other than a function."
 
 
 case_ : ( Expr.Pattern, Maybe (InferM Typing), InferM Typing ) -> InferM Typing
@@ -514,7 +502,7 @@ pattern p =
                     ResultM.succeed <| Typing.from env (array t)
 
         Expr.LiteralPattern (Expr.Array _) ->
-            ResultM.fail <| InternalError "Cannot infer type of array literal pattern."
+            ResultM.fail <| Error.internalTypeError "Cannot infer type of array literal pattern."
 
         Expr.LiteralPattern (Expr.Boolean _) ->
             ResultM.succeed <| Typing.poly (Con "Boolean")
@@ -523,26 +511,26 @@ pattern p =
             ResultM.succeed <| Typing.poly (Con "Number")
 
         Expr.LiteralPattern (Expr.Record _) ->
-            ResultM.fail <| InternalError "Cannot infer type of record literal pattern."
+            ResultM.fail <| Error.internalTypeError "Cannot infer type of record literal pattern."
 
         Expr.LiteralPattern (Expr.String _) ->
             ResultM.succeed <| Typing.poly (Con "String")
 
         Expr.LiteralPattern (Expr.Template _) ->
-            ResultM.fail <| InternalError "Cannot infer type of template literal pattern."
+            ResultM.fail <| Error.internalTypeError "Cannot infer type of template literal pattern."
 
         Expr.LiteralPattern Expr.Undefined ->
             ResultM.succeed <| Typing.poly (Con "()")
 
         Expr.LiteralPattern (Expr.Variant _ _) ->
-            ResultM.fail <| InternalError "Cannot infer type of variant literal pattern."
+            ResultM.fail <| Error.internalTypeError "Cannot infer type of variant literal pattern."
 
         Expr.Name name ->
             do next <| \a ->
             ResultM.succeed <| Typing.mono name a
 
         Expr.RecordDestructure _ ->
-            ResultM.fail <| InternalError "Type inference for record destructure patterns is currently not supported!"
+            ResultM.fail <| Error.internalTypeError "Type inference for record destructure patterns is currently not supported!"
 
         Expr.Spread name ->
             do next <| \a ->
@@ -563,7 +551,7 @@ pattern p =
             ResultM.succeed <| Typing.from env Any
 
         Expr.VariantDestructure _ _ ->
-            ResultM.fail <| InternalError "Type inference for variant destructure patterns is currently not supported!"
+            ResultM.fail <| Error.internalTypeError "Type inference for variant destructure patterns is currently not supported!"
 
         Expr.Wildcard _ ->
             do next <| \a ->
@@ -640,7 +628,7 @@ mgu equations =
                 -- As an example, say we are trying to unify `t ∪ List t`. Without the
                 -- occurs check this would generate a substitution `t ↦ List t` which
                 -- if we tried to apply would yield `List (List (List (...)))`!
-                ResultM.fail <| InfiniteType (Var a) t
+                ResultM.fail <| Error.infiniteType (Var a) t
 
             else
                 --
@@ -660,7 +648,7 @@ mgu equations =
                 mgu rest
 
             else
-                ResultM.fail (IncompatibleTypes (Con c1) (Con c2))
+                ResultM.fail (Error.incompatibleTypes (Con c1) (Con c2))
 
         ( Any, Any ) :: rest ->
             mgu rest
@@ -675,7 +663,7 @@ mgu equations =
             -- Of course, the number of parameters in our type applications must
             -- be the same length or they cannot possibly be the same type.
             if List.length u1 /= List.length u2 then
-                ResultM.fail (IncompatibleTypes (App t1 u1) (App t2 u2))
+                ResultM.fail (Error.incompatibleTypes (App t1 u1) (App t2 u2))
 
             else
                 mgu <| rest ++ ( t1, t2 ) :: List.map2 Tuple.pair u1 u2
@@ -688,16 +676,16 @@ mgu equations =
             -- For now, though, this is just a straight check to see if the two
             -- record types are identical.
             if Dict.size t1 /= Dict.size t2 then
-                ResultM.fail <| IncompatibleTypes (Rec t1) (Rec t2)
+                ResultM.fail <| Error.incompatibleTypes (Rec t1) (Rec t2)
 
             else if Dict.keys t1 /= Dict.keys t2 then
-                ResultM.fail <| IncompatibleTypes (Rec t1) (Rec t2)
+                ResultM.fail <| Error.incompatibleTypes (Rec t1) (Rec t2)
 
             else
                 mgu <| rest ++ List.map2 Tuple.pair (Dict.values t1) (Dict.values t2)
 
         ( t1, t2 ) :: _ ->
-            ResultM.fail (IncompatibleTypes t1 t2)
+            ResultM.fail (Error.incompatibleTypes t1 t2)
 
 
 
@@ -749,7 +737,7 @@ lookupBuiltin name =
             inst t
 
         Nothing ->
-            ResultM.fail (InternalError <| "Missing typing for builtin: `" ++ name ++ "`")
+            ResultM.fail (Error.internalTypeError <| "Missing typing for builtin: `" ++ name ++ "`")
 
 
 {-| Generates a new type variable as in `next` but ensures it is fresh by trying
@@ -774,7 +762,7 @@ next =
                 ( { context | vars = rest }, Ok (Var var) )
 
             [] ->
-                ( context, Err <| InternalError "Ran out of fresh type variables." )
+                ( context, Err <| Error.internalTypeError "Ran out of fresh type variables." )
 
 
 {-| -}

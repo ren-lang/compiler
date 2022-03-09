@@ -11,6 +11,7 @@
         "Ren.Compiler.Check",
         "Ren.Compiler.Desugar",
         "Ren.Compiler.Emit",
+        "Ren.Compiler.Error",
         "Ren.Compiler.Optimise",
         "Ren.Compiler.Parse"
     ],

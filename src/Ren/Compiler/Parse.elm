@@ -1,12 +1,8 @@
-module Ren.Compiler.Parse exposing
-    ( run
-    , Context(..), Error(..)
-    )
+module Ren.Compiler.Parse exposing (run)
 
 {-|
 
 @docs run
-@docs Context, Error
 
 -}
 
@@ -18,6 +14,7 @@ import Parser.Advanced as Parser exposing ((|.), (|=))
 import Pratt.Advanced as Pratt
 import Ren.AST.Expr as Expr exposing (Expr(..), ExprF(..))
 import Ren.AST.Module as Module exposing (ImportSpecifier(..), Module)
+import Ren.Compiler.Error as Error exposing (Error)
 import Ren.Compiler.Parse.Util as Util
 import Ren.Data.Span as Span exposing (Span)
 import Ren.Data.Type as Type exposing (Type)
@@ -25,9 +22,10 @@ import Set exposing (Set)
 
 
 {-| -}
-run : String -> String -> Result (List (Parser.DeadEnd Context Error)) (Module Span)
+run : String -> String -> Result Error (Module Span)
 run name_ input =
     Parser.run (module_ name_) input
+        |> Result.mapError Error.ParseError
 
 
 
@@ -36,35 +34,12 @@ run name_ input =
 
 {-| -}
 type alias Parser a =
-    Parser.Parser Context Error a
+    Parser.Parser Error.ParseContext Error.ParseError a
 
 
 {-| -}
 type alias Config a =
-    Pratt.Config Context Error a
-
-
-{-| -}
-type Context
-    = InImport
-    | InDeclaration
-    | InExpr
-
-
-{-| -}
-type Error
-    = ExpectingKeyword String
-    | ExpectingSymbol String
-    | ExpectingOperator String
-    | ExpectingTypePattern (List String)
-    | ExpectingChar
-    | UnexpextedChar Char
-    | ExpectingNumber
-    | ExpectingEOF
-    | ExpectingWhitespace
-    | ExpectingCamelCase
-    | ExpectingCapitalCase
-    | InternalError String
+    Pratt.Config Error.ParseContext Error.ParseError a
 
 
 
@@ -77,14 +52,14 @@ type Error
 module_ : String -> Parser (Module Span)
 module_ name_ =
     Parser.succeed (Module name_)
-        |. Util.ignorables (Parser.Token "//" <| ExpectingSymbol "//")
+        |. Util.ignorables (Parser.Token "//" <| Error.expectingSymbol "//")
         |= Parser.loop []
             (\imports ->
                 Parser.oneOf
                     [ Parser.succeed (\i -> i :: imports)
-                        |. Util.ignorables (Parser.Token "//" <| ExpectingSymbol "//")
+                        |. Util.ignorables (Parser.Token "//" <| Error.expectingSymbol "//")
                         |= import_
-                        |. Util.ignorables (Parser.Token "//" <| ExpectingSymbol "//")
+                        |. Util.ignorables (Parser.Token "//" <| Error.expectingSymbol "//")
                         |> Parser.map Parser.Loop
                     , Parser.succeed ()
                         |> Parser.map (\_ -> List.reverse imports)
@@ -96,9 +71,9 @@ module_ name_ =
             (\declarations ->
                 Parser.oneOf
                     [ Parser.succeed (\d -> d :: declarations)
-                        |. Util.ignorables (Parser.Token "//" <| ExpectingSymbol "//")
+                        |. Util.ignorables (Parser.Token "//" <| Error.expectingSymbol "//")
                         |= declaration
-                        |. Util.ignorables (Parser.Token "//" <| ExpectingSymbol "//")
+                        |. Util.ignorables (Parser.Token "//" <| Error.expectingSymbol "//")
                         |> Parser.map Parser.Loop
                     , Parser.succeed ()
                         |> Parser.map (\_ -> List.reverse declarations)
@@ -106,7 +81,7 @@ module_ name_ =
                     ]
             )
         |. Util.whitespace
-        |. Parser.end ExpectingEOF
+        |. Parser.end Error.expectingEOF
 
 
 {-| -}
@@ -170,9 +145,9 @@ import_ =
                 |. keyword "exposing"
                 |. Util.whitespace
                 |= Parser.sequence
-                    { start = Parser.Token "{" (ExpectingSymbol "{")
-                    , separator = Parser.Token "," (ExpectingSymbol ",")
-                    , end = Parser.Token "}" (ExpectingSymbol "}")
+                    { start = Parser.Token "{" (Error.expectingSymbol "{")
+                    , separator = Parser.Token "," (Error.expectingSymbol ",")
+                    , end = Parser.Token "}" (Error.expectingSymbol "}")
                     , spaces = Util.whitespace
                     , item = lowercaseName keywords
                     , trailing = Parser.Forbidden
@@ -180,7 +155,7 @@ import_ =
                 |> Parser.backtrackable
             , Parser.succeed []
             ]
-        |> Parser.inContext InImport
+        |> Parser.inContext Error.InImport
 
 
 {-| -}
@@ -192,7 +167,7 @@ declaration =
             |. Parser.commit ()
             |= expression
             |> Span.parser (|>)
-            |> Parser.inContext InDeclaration
+            |> Parser.inContext Error.InDeclaration
         , Parser.succeed Module.Ext
             |= Parser.oneOf
                 [ Parser.succeed True
@@ -214,7 +189,7 @@ declaration =
                 , Parser.succeed Type.Any
                 ]
             |> Span.parser (|>)
-            |> Parser.inContext InDeclaration
+            |> Parser.inContext Error.InDeclaration
             |> Parser.backtrackable
         , Parser.succeed Module.Let
             |= Parser.oneOf
@@ -239,7 +214,7 @@ declaration =
             |. Util.whitespace
             |= expression
             |> Span.parser (|>)
-            |> Parser.inContext InDeclaration
+            |> Parser.inContext Error.InDeclaration
         ]
 
 
@@ -317,7 +292,7 @@ prattExpression parsers =
                                         |> Parser.succeed
 
                                 _ ->
-                                    InternalError "Parsed something other than an `Infix` expression in `andThenOneOf`"
+                                    Error.internalParseError "Parsed something other than an `Infix` expression in `andThenOneOf`"
                                         |> Parser.problem
                         )
                         (parser expr)
@@ -342,9 +317,9 @@ prattExpression parsers =
             , infix_ Pratt.infixRight 7 "^" Expr.Pow
             , infix_ Pratt.infixRight 7 "%" Expr.Mod
             ]
-        , spaces = Util.ignorables (Parser.Token "//" <| ExpectingSymbol "//")
+        , spaces = Util.ignorables (Parser.Token "//" <| Error.expectingSymbol "//")
         }
-        |> Parser.inContext InExpr
+        |> Parser.inContext Error.InExpr
 
 
 {-| -}
@@ -382,9 +357,9 @@ parenthesised =
                 , Pratt.literal identifier
                 ]
             , andThenOneOf = []
-            , spaces = Util.ignorables (Parser.Token "//" <| ExpectingSymbol "//")
+            , spaces = Util.ignorables (Parser.Token "//" <| Error.expectingSymbol "//")
             }
-            |> Parser.inContext InExpr
+            |> Parser.inContext Error.InExpr
         , Parser.lazy (\_ -> subexpression)
         ]
 
@@ -655,9 +630,9 @@ array : Config (Expr Span) -> Parser (Expr.Literal (Expr Span))
 array config =
     Parser.succeed Expr.Array
         |= Parser.sequence
-            { start = Parser.Token "[" <| ExpectingSymbol "["
-            , separator = Parser.Token "," <| ExpectingSymbol ","
-            , end = Parser.Token "]" <| ExpectingSymbol "]"
+            { start = Parser.Token "[" <| Error.expectingSymbol "["
+            , separator = Parser.Token "," <| Error.expectingSymbol ","
+            , end = Parser.Token "]" <| Error.expectingSymbol "]"
             , item = Parser.lazy (\_ -> expression)
             , spaces = Util.whitespace
             , trailing = Parser.Forbidden
@@ -670,9 +645,9 @@ boolean =
     Parser.succeed Expr.Boolean
         |= Parser.oneOf
             [ Parser.succeed True
-                |. Parser.keyword (Parser.Token "true" <| ExpectingKeyword "true")
+                |. Parser.keyword (Parser.Token "true" <| Error.expectingKeyword "true")
             , Parser.succeed False
-                |. Parser.keyword (Parser.Token "false" <| ExpectingKeyword "false")
+                |. Parser.keyword (Parser.Token "false" <| Error.expectingKeyword "false")
             ]
 
 
@@ -686,20 +661,20 @@ number =
             , octal = Ok Basics.toFloat
             , binary = Ok Basics.toFloat
             , float = Ok identity
-            , invalid = ExpectingNumber
-            , expecting = ExpectingNumber
+            , invalid = Error.expectingNumber
+            , expecting = Error.expectingNumber
             }
     in
     Parser.succeed Expr.Number
         |= Parser.oneOf
             [ Parser.succeed Basics.negate
-                |. Parser.symbol (Parser.Token "-" <| ExpectingSymbol "-")
+                |. Parser.symbol (Parser.Token "-" <| Error.expectingSymbol "-")
                 |= Parser.number numberConfig
             , Parser.number numberConfig
             ]
         |. Parser.oneOf
-            [ Parser.chompIf Char.isAlpha ExpectingNumber
-                |> Parser.andThen (\_ -> Parser.problem ExpectingNumber)
+            [ Parser.chompIf Char.isAlpha Error.expectingNumber
+                |> Parser.andThen (\_ -> Parser.problem Error.expectingNumber)
             , Parser.succeed ()
             ]
 
@@ -709,15 +684,15 @@ record : Config (Expr Span) -> Parser (Expr.Literal (Expr Span))
 record config =
     Parser.succeed Expr.Record
         |= Parser.sequence
-            { start = Parser.Token "{" <| ExpectingSymbol "{"
-            , separator = Parser.Token "," <| ExpectingSymbol ","
-            , end = Parser.Token "}" <| ExpectingSymbol "}"
+            { start = Parser.Token "{" <| Error.expectingSymbol "{"
+            , separator = Parser.Token "," <| Error.expectingSymbol ","
+            , end = Parser.Token "}" <| Error.expectingSymbol "}"
             , item =
                 Parser.oneOf
                     [ Parser.succeed Tuple.pair
                         |= lowercaseName keywords
                         |. Util.whitespace
-                        |. Parser.symbol (Parser.Token ":" <| ExpectingSymbol ":")
+                        |. Parser.symbol (Parser.Token ":" <| Error.expectingSymbol ":")
                         |. Parser.commit ()
                         |. Util.whitespace
                         |= Parser.lazy (\_ -> expression)
@@ -754,23 +729,23 @@ template config =
         char =
             Parser.oneOf
                 [ Parser.succeed identity
-                    |. Parser.token (Parser.Token "\\" <| ExpectingSymbol "\\")
+                    |. Parser.token (Parser.Token "\\" <| Error.expectingSymbol "\\")
                     |= Parser.oneOf
-                        [ Parser.map (\_ -> '\\') (Parser.token (Parser.Token "\\" <| ExpectingSymbol "\\"))
-                        , Parser.map (\_ -> '"') (Parser.token (Parser.Token "\"" <| ExpectingSymbol "\"")) -- " (elm-vscode workaround)
-                        , Parser.map (\_ -> '\'') (Parser.token (Parser.Token "'" <| ExpectingSymbol "'"))
-                        , Parser.map (\_ -> '\n') (Parser.token (Parser.Token "n" <| ExpectingSymbol "n"))
-                        , Parser.map (\_ -> '\t') (Parser.token (Parser.Token "t" <| ExpectingSymbol "t"))
-                        , Parser.map (\_ -> '\u{000D}') (Parser.token (Parser.Token "r" <| ExpectingSymbol "r"))
+                        [ Parser.map (\_ -> '\\') (Parser.token (Parser.Token "\\" <| Error.expectingSymbol "\\"))
+                        , Parser.map (\_ -> '"') (Parser.token (Parser.Token "\"" <| Error.expectingSymbol "\"")) -- " (elm-vscode workaround)
+                        , Parser.map (\_ -> '\'') (Parser.token (Parser.Token "'" <| Error.expectingSymbol "'"))
+                        , Parser.map (\_ -> '\n') (Parser.token (Parser.Token "n" <| Error.expectingSymbol "n"))
+                        , Parser.map (\_ -> '\t') (Parser.token (Parser.Token "t" <| Error.expectingSymbol "t"))
+                        , Parser.map (\_ -> '\u{000D}') (Parser.token (Parser.Token "r" <| Error.expectingSymbol "r"))
                         ]
-                , Parser.token (Parser.Token "`" <| ExpectingSymbol "`")
-                    |> Parser.andThen (\_ -> Parser.problem <| UnexpextedChar '`')
-                , Parser.chompIf ((/=) '\n') ExpectingChar
+                , Parser.token (Parser.Token "`" <| Error.expectingSymbol "`")
+                    |> Parser.andThen (\_ -> Parser.problem <| Error.unexpectedChar '`')
+                , Parser.chompIf ((/=) '\n') Error.expectingChar
                     |> Parser.getChompedString
                     |> Parser.andThen
                         (String.uncons
                             >> Maybe.map (Tuple.first >> Parser.succeed)
-                            >> Maybe.withDefault (Parser.problem <| InternalError "Multiple characters chomped in `parseChar`")
+                            >> Maybe.withDefault (Parser.problem <| Error.internalParseError "Multiple characters chomped in `parseChar`")
                         )
                 ]
 
@@ -790,15 +765,15 @@ template config =
                     Data.Either.Right e :: rest
     in
     Parser.succeed (List.foldl joinSegments [] >> Expr.Template)
-        |. Parser.symbol (Parser.Token "`" <| ExpectingSymbol "`")
+        |. Parser.symbol (Parser.Token "`" <| Error.expectingSymbol "`")
         |. Parser.commit ()
         |= Parser.loop []
             (\segments ->
                 Parser.oneOf
                     [ Parser.succeed (\expr -> Data.Either.Right expr :: segments)
-                        |. Parser.symbol (Parser.Token "${" <| ExpectingSymbol "${")
+                        |. Parser.symbol (Parser.Token "${" <| Error.expectingSymbol "${")
                         |= Parser.lazy (\_ -> expression)
-                        |. Parser.symbol (Parser.Token "}" <| ExpectingSymbol "}")
+                        |. Parser.symbol (Parser.Token "}" <| Error.expectingSymbol "}")
                         |> Parser.map Parser.Loop
                     , Parser.succeed (\c -> Data.Either.Left c :: segments)
                         |= char
@@ -808,7 +783,7 @@ template config =
                         |> Parser.map Parser.Done
                     ]
             )
-        |. Parser.symbol (Parser.Token "`" <| ExpectingSymbol "`")
+        |. Parser.symbol (Parser.Token "`" <| Error.expectingSymbol "`")
 
 
 {-| -}
@@ -1036,7 +1011,7 @@ recordDestructure =
                                                     |> Parser.succeed
 
                                             _ ->
-                                                InternalError ""
+                                                Error.internalParseError ""
                                                     |> Parser.problem
                                     )
                                 |> Parser.map List.reverse
@@ -1070,23 +1045,23 @@ templateDestructure =
         char =
             Parser.oneOf
                 [ Parser.succeed identity
-                    |. Parser.token (Parser.Token "\\" <| ExpectingSymbol "\\")
+                    |. Parser.token (Parser.Token "\\" <| Error.expectingSymbol "\\")
                     |= Parser.oneOf
-                        [ Parser.map (\_ -> '\\') (Parser.token (Parser.Token "\\" <| ExpectingSymbol "\\"))
-                        , Parser.map (\_ -> '"') (Parser.token (Parser.Token "\"" <| ExpectingSymbol "\"")) -- " (elm-vscode workaround)
-                        , Parser.map (\_ -> '\'') (Parser.token (Parser.Token "'" <| ExpectingSymbol "'"))
-                        , Parser.map (\_ -> '\n') (Parser.token (Parser.Token "n" <| ExpectingSymbol "n"))
-                        , Parser.map (\_ -> '\t') (Parser.token (Parser.Token "t" <| ExpectingSymbol "t"))
-                        , Parser.map (\_ -> '\u{000D}') (Parser.token (Parser.Token "r" <| ExpectingSymbol "r"))
+                        [ Parser.map (\_ -> '\\') (Parser.token (Parser.Token "\\" <| Error.expectingSymbol "\\"))
+                        , Parser.map (\_ -> '"') (Parser.token (Parser.Token "\"" <| Error.expectingSymbol "\"")) -- " (elm-vscode workaround)
+                        , Parser.map (\_ -> '\'') (Parser.token (Parser.Token "'" <| Error.expectingSymbol "'"))
+                        , Parser.map (\_ -> '\n') (Parser.token (Parser.Token "n" <| Error.expectingSymbol "n"))
+                        , Parser.map (\_ -> '\t') (Parser.token (Parser.Token "t" <| Error.expectingSymbol "t"))
+                        , Parser.map (\_ -> '\u{000D}') (Parser.token (Parser.Token "r" <| Error.expectingSymbol "r"))
                         ]
-                , Parser.token (Parser.Token "`" <| ExpectingSymbol "`")
-                    |> Parser.andThen (\_ -> Parser.problem <| UnexpextedChar '`')
-                , Parser.chompIf ((/=) '\n') ExpectingChar
+                , Parser.token (Parser.Token "`" <| Error.expectingSymbol "`")
+                    |> Parser.andThen (\_ -> Parser.problem <| Error.unexpectedChar '`')
+                , Parser.chompIf ((/=) '\n') Error.expectingChar
                     |> Parser.getChompedString
                     |> Parser.andThen
                         (String.uncons
                             >> Maybe.map (Tuple.first >> Parser.succeed)
-                            >> Maybe.withDefault (Parser.problem <| InternalError "Multiple characters chomped in `parseChar`")
+                            >> Maybe.withDefault (Parser.problem <| Error.internalParseError "Multiple characters chomped in `parseChar`")
                         )
                 ]
 
@@ -1218,7 +1193,7 @@ con =
         [ Parser.succeed Type.Con
             |= uppercaseName Set.empty
         , Parser.succeed (Type.Con "()")
-            |. Parser.symbol (Parser.Token "()" <| ExpectingSymbol "()")
+            |. Parser.symbol (Parser.Token "()" <| Error.expectingSymbol "()")
         ]
 
 
@@ -1283,9 +1258,9 @@ rec : Parser Type
 rec =
     Parser.succeed (Type.Rec << Dict.fromList)
         |= Parser.sequence
-            { start = Parser.Token "{" (ExpectingSymbol "{")
-            , separator = Parser.Token "," (ExpectingSymbol ",")
-            , end = Parser.Token "}" (ExpectingSymbol "}")
+            { start = Parser.Token "{" (Error.expectingSymbol "{")
+            , separator = Parser.Token "," (Error.expectingSymbol ",")
+            , end = Parser.Token "}" (Error.expectingSymbol "}")
             , spaces = Util.whitespace
             , item =
                 Parser.succeed Tuple.pair
@@ -1320,7 +1295,7 @@ hole =
 lowercaseName : Set String -> Parser String
 lowercaseName reserved =
     Parser.variable
-        { expecting = ExpectingCamelCase
+        { expecting = Error.expectingCamelCase
         , start = \c -> Char.isLower c || c == '_'
         , inner = \c -> Char.isAlphaNum c || c == '_'
         , reserved = reserved
@@ -1331,7 +1306,7 @@ lowercaseName reserved =
 uppercaseName : Set String -> Parser String
 uppercaseName reserved =
     Parser.variable
-        { expecting = ExpectingCapitalCase
+        { expecting = Error.expectingCapitalCase
         , start = Char.isUpper
         , inner = \c -> Char.isAlphaNum c || c == '_'
         , reserved = reserved
@@ -1341,19 +1316,19 @@ uppercaseName reserved =
 {-| -}
 symbol : String -> Parser ()
 symbol s =
-    Parser.symbol (Parser.Token s <| ExpectingSymbol s)
+    Parser.symbol (Parser.Token s <| Error.expectingSymbol s)
 
 
 {-| -}
 keyword : String -> Parser ()
 keyword s =
-    Parser.keyword (Parser.Token s <| ExpectingKeyword s)
+    Parser.keyword (Parser.Token s <| Error.expectingKeyword s)
 
 
 {-| -}
 operator : String -> Parser ()
 operator s =
-    Parser.symbol (Parser.Token s <| ExpectingOperator s)
+    Parser.symbol (Parser.Token s <| Error.expectingOperator s)
 
 
 {-| -}
@@ -1372,13 +1347,13 @@ quotedString quote =
                         , Parser.map (\_ -> '"') (symbol "\"") -- " (elm-vscode workaround)
                         ]
                 , symbol s
-                    |> Parser.andThen (\_ -> Parser.problem <| UnexpextedChar quote)
-                , Parser.chompIf ((/=) '\n') ExpectingChar
+                    |> Parser.andThen (\_ -> Parser.problem <| Error.unexpectedChar quote)
+                , Parser.chompIf ((/=) '\n') Error.expectingChar
                     |> Parser.getChompedString
                     |> Parser.andThen
                         (String.uncons
                             >> Maybe.map (Tuple.first >> Parser.succeed)
-                            >> Maybe.withDefault (Parser.problem <| InternalError "Multiple characters chomped in `character`")
+                            >> Maybe.withDefault (Parser.problem <| Error.internalParseError "Multiple characters chomped in `character`")
                         )
                 ]
     in

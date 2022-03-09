@@ -1,5 +1,5 @@
 module Ren.Compiler exposing
-    ( Compiler, Toolchain, Error(..)
+    ( Compiler, Toolchain, Error
     , run
     , untyped, typed, typecheck, custom
     )
@@ -19,6 +19,7 @@ import Ren.AST.Module as Module exposing (Import, Module)
 import Ren.Compiler.Check as Check
 import Ren.Compiler.Desugar as Desugar
 import Ren.Compiler.Emit as Emit
+import Ren.Compiler.Error as Error
 import Ren.Compiler.Optimise as Optimise
 import Ren.Compiler.Parse as Parse
 import Ren.Data.Span exposing (Span)
@@ -45,10 +46,8 @@ type alias Toolchain error meta =
 
 
 {-| -}
-type Error
-    = ParseError (List (Parser.DeadEnd Parse.Context Parse.Error))
-    | ValidationError
-    | TypeError Check.Error
+type alias Error =
+    Error.Error
 
 
 
@@ -82,7 +81,7 @@ typecheck =
 {-| -}
 custom : Bool -> List (Desugar.Transformation Span) -> List (Optimise.Optimisation Span) -> Emit.Target -> Toolchain Error Span
 custom shouldTypecheck transformations optimisations target =
-    { parse = \name input -> Parse.run name input |> Result.mapError ParseError
+    { parse = \name input -> Parse.run name input
     , desugar =
         \m ->
             if List.isEmpty <| Module.externs m then
@@ -94,7 +93,7 @@ custom shouldTypecheck transformations optimisations target =
     , validate = Ok
     , check =
         if shouldTypecheck then
-            Check.run >> Result.mapError TypeError
+            Check.run
 
         else
             Ok
