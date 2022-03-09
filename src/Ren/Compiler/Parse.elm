@@ -266,13 +266,13 @@ expression =
         --
         , Pratt.literal identifier
 
+        -- Subexpressions are wrapped in parentheses.
+        , Pratt.literal (Parser.lazy (\_ -> subexpression))
+
         -- Blocks and record literals can both begin with a `{`. I'm not sure it
         -- matters which one we try first, though.
         , block
         , literal
-
-        -- Subexpressions are wrapped in parentheses.
-        , Pratt.literal (Parser.lazy (\_ -> subexpression))
         ]
 
 
@@ -444,6 +444,7 @@ application config =
                         |= parenthesised
                         |. Util.whitespace
                         |> Parser.map Parser.Loop
+                        |> Parser.backtrackable
                     , Parser.succeed ()
                         |> Parser.map (\_ -> List.reverse args)
                         |> Parser.map Parser.Done
@@ -496,7 +497,7 @@ block config =
         |. Util.whitespace
         |. keyword "ret"
         |. Parser.commit ()
-        |= Pratt.subExpression 0 config
+        |= Parser.lazy (\_ -> expression)
         |. Util.whitespace
         |. symbol "}"
         |> Parser.backtrackable
@@ -511,7 +512,7 @@ binding config =
             |. keyword "run"
             |. Parser.commit ()
             |. Util.whitespace
-            |= Pratt.subExpression 0 config
+            |= Parser.lazy (\_ -> expression)
             |> Parser.backtrackable
         , Parser.succeed Tuple.pair
             |. keyword "let"
@@ -521,7 +522,7 @@ binding config =
             |. Util.whitespace
             |. symbol "="
             |. Util.whitespace
-            |= Pratt.subExpression 0 config
+            |= Parser.lazy (\_ -> expression)
             |> Parser.backtrackable
         ]
 
@@ -537,15 +538,15 @@ conditional config =
         |. keyword "if"
         |. Parser.commit ()
         |. Util.whitespace
-        |= Pratt.subExpression 0 config
+        |= Parser.lazy (\_ -> expression)
         |. Util.whitespace
         |. keyword "then"
         |. Util.whitespace
-        |= Pratt.subExpression 0 config
+        |= Parser.lazy (\_ -> expression)
         |. Util.whitespace
         |. keyword "else"
         |. Util.whitespace
-        |= Pratt.subExpression 0 config
+        |= Parser.lazy (\_ -> expression)
         |> Parser.backtrackable
         |> Span.parser Expr
 
@@ -623,7 +624,7 @@ lambda config =
         |. symbol "=>"
         |. Parser.commit ()
         |. Util.whitespace
-        |= Pratt.subExpression 0 config
+        |= Parser.lazy (\_ -> expression)
         |> Parser.backtrackable
         |> Span.parser Expr
 
@@ -657,7 +658,7 @@ array config =
             { start = Parser.Token "[" <| ExpectingSymbol "["
             , separator = Parser.Token "," <| ExpectingSymbol ","
             , end = Parser.Token "]" <| ExpectingSymbol "]"
-            , item = Pratt.subExpression 0 config
+            , item = Parser.lazy (\_ -> expression)
             , spaces = Util.whitespace
             , trailing = Parser.Forbidden
             }
@@ -719,7 +720,7 @@ record config =
                         |. Parser.symbol (Parser.Token ":" <| ExpectingSymbol ":")
                         |. Parser.commit ()
                         |. Util.whitespace
-                        |= Pratt.subExpression 0 config
+                        |= Parser.lazy (\_ -> expression)
                         |> Parser.backtrackable
 
                     -- We support record literal shorthand like JavaScript that
@@ -849,7 +850,7 @@ match config =
         |. keyword "where"
         |. Parser.commit ()
         |. Util.whitespace
-        |= Pratt.subExpression 0 config
+        |= Parser.lazy (\_ -> expression)
         |. Util.whitespace
         |= Parser.loop []
             (\cases ->
@@ -886,7 +887,7 @@ match config =
                         |. Util.whitespace
                         |. symbol "=>"
                         |. Util.whitespace
-                        |= Pratt.subExpression 0 config
+                        |= Parser.lazy (\_ -> expression)
                         |> Parser.map Parser.Loop
                     , Parser.succeed ()
                         |> Parser.map (\_ -> List.reverse cases)
