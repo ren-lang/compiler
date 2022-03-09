@@ -6,7 +6,7 @@ module Ren.Compiler.Error exposing
 
 {-|
 
-@docs Error, internalError
+@docs Error
 @docs ParseError, ParseContext, expectingKeyword, expectingSymbol, expectingOperator, expectingTypePattern, expectingChar, expectingNumber, expectingEOF, expectingWhitespace, expectingCamelCase, expectingCapitalCase, unexpectedChar, internalParseError
 @docs TypeError, infiniteType, incompatibleTypes, missingField, typeTooGeneral, internalTypeError
 
@@ -22,6 +22,7 @@ import Ren.Data.Type exposing (Type)
 -- TYPES -----------------------------------------------------------------------
 
 
+{-| -}
 type Error
     = ParseError (List (Parser.Advanced.DeadEnd ParseContext ParseError))
     | TypeError TypeError
@@ -63,61 +64,73 @@ type TypeError
 -- CONSTRUCTORS: PARSE ERRORS --------------------------------------------------
 
 
+{-| -}
 expectingKeyword : String -> ParseError
 expectingKeyword keyword =
     ExpectingKeyword keyword
 
 
+{-| -}
 expectingSymbol : String -> ParseError
 expectingSymbol symbol =
     ExpectingSymbol symbol
 
 
+{-| -}
 expectingOperator : String -> ParseError
 expectingOperator operator =
     ExpectingOperator operator
 
 
+{-| -}
 expectingTypePattern : List String -> ParseError
 expectingTypePattern patterns =
     ExpectingTypePattern patterns
 
 
+{-| -}
 expectingChar : ParseError
 expectingChar =
     ExpectingChar
 
 
+{-| -}
 expectingNumber : ParseError
 expectingNumber =
     ExpectingNumber
 
 
+{-| -}
 expectingEOF : ParseError
 expectingEOF =
     ExpectingEOF
 
 
+{-| -}
 expectingWhitespace : ParseError
 expectingWhitespace =
     ExpectingWhitespace
 
 
+{-| -}
 expectingCamelCase : ParseError
 expectingCamelCase =
     ExpectingCamelCase
 
 
+{-| -}
 expectingCapitalCase : ParseError
 expectingCapitalCase =
     ExpectingCapitalCase
 
 
+{-| -}
 unexpectedChar : Char -> ParseError
 unexpectedChar char =
     UnexpextedChar char
 
 
+{-| -}
 internalParseError : String -> ParseError
 internalParseError message =
     InternalParseError message
@@ -127,26 +140,31 @@ internalParseError message =
 -- CONSTRUCTORS: TYPE ERRORS ---------------------------------------------------
 
 
+{-| -}
 infiniteType : Type -> Type -> TypeError
 infiniteType t1 t2 =
     InfiniteType t1 t2
 
 
+{-| -}
 incompatibleTypes : Type -> Type -> TypeError
 incompatibleTypes t1 t2 =
     IncompatibleTypes t1 t2
 
 
+{-| -}
 missingField : String -> TypeError
 missingField field =
     MissingField field
 
 
+{-| -}
 typeTooGeneral : Type -> Type -> TypeError
 typeTooGeneral t1 t2 =
     TypeTooGeneral t1 t2
 
 
+{-| -}
 internalTypeError : String -> TypeError
 internalTypeError message =
     InternalTypeError message
