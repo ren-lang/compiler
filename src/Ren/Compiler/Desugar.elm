@@ -75,6 +75,9 @@ run transformations declr =
                 (Expr.cata (\meta_ expression -> Expr meta_ <| apply meta_ expression) expr)
                 meta
 
+        Module.Type _ _ _ _ _ ->
+            declr
+
 
 {-| -}
 defaults : List (Transformation meta)

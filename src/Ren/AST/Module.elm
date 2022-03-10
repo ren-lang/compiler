@@ -1,12 +1,12 @@
 module Ren.AST.Module exposing
-    ( Module, Import, ImportSpecifier(..), Declaration(..)
+    ( Module, Import, ImportSpecifier(..), Declaration(..), TypeDeclaration(..)
     , exposes, imports, externs
     , map, mapImports
     )
 
 {-|
 
-@docs Module, Import, ImportSpecifier, Declaration
+@docs Module, Import, ImportSpecifier, Declaration, TypeDeclaration
 @docs exposes, imports, externs
 @docs map, mapImports
 
@@ -14,6 +14,7 @@ module Ren.AST.Module exposing
 
 -- IMPORTS ---------------------------------------------------------------------
 
+import Dict exposing (Dict)
 import Ren.AST.Expr exposing (Expr)
 import Ren.Data.Type exposing (Type)
 
@@ -51,6 +52,14 @@ type Declaration meta
     = Ext Bool String Type meta
     | Let Bool String Type (Expr meta) meta
     | Run (Expr meta) meta
+    | Type Bool String (List String) TypeDeclaration meta
+
+
+{-| -}
+type TypeDeclaration
+    = Enum (Dict String (List Type))
+    | Record (Dict String Type)
+    | Abstract
 
 
 
@@ -67,6 +76,9 @@ exposes n m =
                     name == n
 
                 Let True name _ _ _ ->
+                    name == n
+
+                Type True name _ _ _ ->
                     name == n
 
                 _ ->

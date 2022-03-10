@@ -11,7 +11,7 @@ module Ren.Compiler.Check exposing (run)
 import Control.ResultM as ResultM exposing (ResultM, do)
 import Data.Either
 import Data.Tuple2
-import Dict
+import Dict exposing (Dict)
 import Ren.AST.Expr as Expr exposing (Expr(..), ExprF(..))
 import Ren.AST.Module as Module exposing (Module)
 import Ren.Compiler.Error as Error exposing (Error)
@@ -52,6 +52,7 @@ type alias Context =
     { polyenv : Polyenv
     , substitution : Substitution
     , vars : List String
+    , constructors : Dict String Int
     }
 
 
@@ -74,6 +75,9 @@ run ({ declarations } as m) =
                             Polyenv.insert name (Typing.poly type_) env
 
                         Module.Run _ _ ->
+                            env
+
+                        _ ->
                             env
                 )
                 Polyenv.empty
@@ -127,6 +131,9 @@ declaration polyenv declr =
                 (expression polyenv expr)
 
         Module.Run _ _ ->
+            Ok declr
+
+        _ ->
             Ok declr
 
 
@@ -185,6 +192,13 @@ init =
             ]
     , substitution = Dict.empty
     , vars = List.range 0 (25 * (26 * 2)) |> List.map Type.var
+    , constructors =
+        Dict.fromList
+            [ ( "Array", 1 )
+            , ( "Boolean", 0 )
+            , ( "Number", 0 )
+            , ( "String", 0 )
+            ]
     }
 
 
@@ -445,7 +459,7 @@ literal lit =
         Expr.Undefined ->
             ResultM.succeed <| Typing.poly (Con "()")
 
-        Expr.Variant _ _ ->
+        Expr.Variant tag params ->
             ResultM.fail <| Error.internalTypeError "Type inference for variant literals is currently not supported!"
 
 
@@ -616,6 +630,7 @@ mgu equations =
                 s =
                     Substitution.singleton a t
             in
+            ResultM.do (lookupConstructor t) <| \_ ->
             if Var a == t then
                 mgu rest
 
@@ -660,6 +675,8 @@ mgu equations =
             mgu <| rest ++ [ ( t1, t2 ), ( u1, u2 ) ]
 
         ( App t1 u1, App t2 u2 ) :: rest ->
+            ResultM.do (lookupConstructor (App t1 u1)) <| \_ ->
+            ResultM.do (lookupConstructor (App t2 u2)) <| \_ ->
             -- Of course, the number of parameters in our type applications must
             -- be the same length or they cannot possibly be the same type.
             if List.length u1 /= List.length u2 then
@@ -682,10 +699,20 @@ mgu equations =
                 ResultM.fail <| Error.incompatibleTypes (Rec t1) (Rec t2)
 
             else
-                mgu <| rest ++ List.map2 Tuple.pair (Dict.values t1) (Dict.values t2)
+                -- We want to catch any type errors and report that the entire
+                -- record is incompatible.
+                ResultM.catch
+                    (\_ -> ResultM.fail <| Error.incompatibleTypes (Rec t1) (Rec t2))
+                    (mgu <| rest ++ List.map2 Tuple.pair (Dict.values t1) (Dict.values t2))
 
         ( t1, t2 ) :: _ ->
-            ResultM.fail (Error.incompatibleTypes t1 t2)
+            ResultM.do (lookupConstructor t1) <| \_ ->
+            ResultM.do (lookupConstructor t2) <| \_ ->
+            if t1 == t2 then
+                ResultM.succeed Substitution.empty
+
+            else
+                ResultM.fail (Error.incompatibleTypes t1 t2)
 
 
 
@@ -716,6 +743,49 @@ lookup : String -> InferM (Maybe Typing)
 lookup name =
     \({ polyenv } as context) ->
         ( context, Ok <| Dict.get name polyenv )
+
+
+lookupConstructor : Type -> InferM ()
+lookupConstructor type_ =
+    \({ constructors } as context) ->
+        case Debug.log "type" type_ of
+            App (Con name) params ->
+                ( context
+                , Dict.get name constructors
+                    |> Maybe.map
+                        (\arity ->
+                            if arity == List.length params then
+                                Ok ()
+
+                            else
+                                Err <| Error.arityMismatch name arity (List.length params)
+                        )
+                    |> Maybe.withDefault (Err <| Error.unknownType (Con name))
+                )
+
+            App _ _ ->
+                ( context
+                , Err <| Error.unknownType type_
+                )
+
+            Con name ->
+                ( context
+                , Dict.get name constructors
+                    |> Maybe.map
+                        (\arity ->
+                            if arity == 0 then
+                                Ok ()
+
+                            else
+                                Err <| Error.arityMismatch name arity 0
+                        )
+                    |> Maybe.withDefault (Err <| Error.unknownType (Con name))
+                )
+
+            _ ->
+                ( context
+                , Ok ()
+                )
 
 
 {-| -}

@@ -169,6 +169,11 @@ declaration declr =
             Expr.cata (always expression) expr
                 |> .expr
 
+        -- Type declarations don't exist at runtime and don't need to be emitted
+        -- as JavaScript.
+        _ ->
+            Pretty.empty
+
 
 
 --                                                                            --

@@ -60,6 +60,9 @@ run optimisations declr =
                 (Expr.cata (\meta_ expression -> Expr meta_ <| apply meta expression) expr)
                 meta
 
+        Module.Type _ _ _ _ _ ->
+            declr
+
 
 
 -- TYPES -----------------------------------------------------------------------

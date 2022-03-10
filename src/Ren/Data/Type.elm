@@ -36,6 +36,7 @@ type Type
     | App Type (List Type)
     | Fun Type Type
     | Rec (Dict String Type)
+    | Sum (Dict String (List Type))
     | Any
     | Hole
 
@@ -117,6 +118,9 @@ free type_ =
         Rec tN ->
             Dict.foldl (always <| Set.union << free) Set.empty tN
 
+        Sum tN ->
+            Dict.foldl (\_ params set -> List.foldl (Set.union << free) set params) Set.empty tN
+
         Any ->
             Set.empty
 
@@ -161,6 +165,9 @@ substitute s t =
 
         Rec tN ->
             Rec <| Dict.map (always <| substitute s) tN
+
+        Sum tN ->
+            Sum <| Dict.map (always <| List.map (substitute s)) tN
 
         Any ->
             Any
@@ -221,7 +228,10 @@ toString type_ =
             toString t1 ++ " → " ++ toString t2
 
         Rec tN ->
-            "{" ++ (String.join ", " <| List.map (Tuple.mapSecond toString >> Data.Tuple2.asList (String.join ": ")) <| Dict.toList tN) ++ " }"
+            "{ " ++ (String.join ", " <| List.map (Tuple.mapSecond toString >> Data.Tuple2.asList (String.join ": ")) <| Dict.toList tN) ++ " }"
+
+        Sum tN ->
+            String.join " | " <| List.map (Tuple.mapSecond (List.map toParenthesisedString >> String.join " ") >> Data.Tuple2.asList (String.join " ") >> (++) "#") <| Dict.toList tN
 
         Any ->
             "*"
@@ -241,6 +251,9 @@ toParenthesisedString type_ =
 
         Fun t1 t2 ->
             "(" ++ toParenthesisedString t1 ++ " → " ++ toString t2 ++ ")"
+
+        Sum _ ->
+            "(" ++ toString type_ ++ ")"
 
         _ ->
             toString type_

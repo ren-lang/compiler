@@ -158,64 +158,160 @@ import_ =
         |> Parser.inContext Error.InImport
 
 
+
+--                                                                            --
+-- EXPRESSION PARSERS ----------------------------------------------------------
+--                                                                            --
+
+
 {-| -}
 declaration : Parser (Module.Declaration Span)
 declaration =
     Parser.oneOf
-        [ Parser.succeed Module.Run
-            |. keyword "run"
-            |. Parser.commit ()
-            |= expression
-            |> Span.parser (|>)
-            |> Parser.inContext Error.InDeclaration
-        , Parser.succeed Module.Ext
-            |= Parser.oneOf
-                [ Parser.succeed True
-                    |. keyword "pub"
-                , Parser.succeed False
-                ]
-            |. Util.whitespace
-            |. keyword "ext"
-            |. Parser.commit ()
-            |. Util.whitespace
-            |= lowercaseName keywords
-            |. Util.whitespace
-            |= Parser.oneOf
-                [ Parser.succeed Basics.identity
-                    |. symbol ":"
-                    |. Util.whitespace
-                    |= type_
-                    |. Util.whitespace
-                , Parser.succeed Type.Any
-                ]
-            |> Span.parser (|>)
-            |> Parser.inContext Error.InDeclaration
-            |> Parser.backtrackable
-        , Parser.succeed Module.Let
-            |= Parser.oneOf
-                [ Parser.succeed True
-                    |. keyword "pub"
-                , Parser.succeed False
-                ]
-            |. Util.whitespace
-            |. keyword "let"
-            |. Util.whitespace
-            |= lowercaseName keywords
-            |. Util.whitespace
-            |= Parser.oneOf
-                [ Parser.succeed Basics.identity
-                    |. symbol ":"
-                    |. Util.whitespace
-                    |= type_
-                    |. Util.whitespace
-                , Parser.succeed Type.Any
-                ]
-            |. symbol "="
-            |. Util.whitespace
-            |= expression
-            |> Span.parser (|>)
-            |> Parser.inContext Error.InDeclaration
+        [ run_
+        , ext
+        , let_
+        , typedef
         ]
+
+
+run_ : Parser (Module.Declaration Span)
+run_ =
+    Parser.succeed Module.Run
+        |. keyword "run"
+        |. Parser.commit ()
+        |= expression
+        |> Span.parser (|>)
+        |> Parser.inContext Error.InDeclaration
+
+
+ext : Parser (Module.Declaration Span)
+ext =
+    Parser.succeed Module.Ext
+        |= Parser.oneOf
+            [ Parser.succeed True
+                |. keyword "pub"
+            , Parser.succeed False
+            ]
+        |. Util.whitespace
+        |. keyword "ext"
+        |. Parser.commit ()
+        |. Util.whitespace
+        |= lowercaseName keywords
+        |. Util.whitespace
+        |= Parser.oneOf
+            [ Parser.succeed Basics.identity
+                |. symbol ":"
+                |. Util.whitespace
+                |= type_
+                |. Util.whitespace
+            , Parser.succeed Type.Any
+            ]
+        |> Span.parser (|>)
+        |> Parser.inContext Error.InDeclaration
+        |> Parser.backtrackable
+
+
+let_ : Parser (Module.Declaration Span)
+let_ =
+    Parser.succeed Module.Let
+        |= Parser.oneOf
+            [ Parser.succeed True
+                |. keyword "pub"
+            , Parser.succeed False
+            ]
+        |. Util.whitespace
+        |. keyword "let"
+        |. Util.whitespace
+        |= lowercaseName keywords
+        |. Util.whitespace
+        |= Parser.oneOf
+            [ Parser.succeed Basics.identity
+                |. symbol ":"
+                |. Util.whitespace
+                |= type_
+                |. Util.whitespace
+            , Parser.succeed Type.Any
+            ]
+        |. symbol "="
+        |. Util.whitespace
+        |= expression
+        |> Span.parser (|>)
+        |> Parser.inContext Error.InDeclaration
+
+
+typedef : Parser (Module.Declaration Span)
+typedef =
+    Parser.succeed Module.Type
+        |= Parser.oneOf
+            [ Parser.succeed True
+                |. keyword "pub"
+            , Parser.succeed False
+            ]
+        |. Util.whitespace
+        |. keyword "type"
+        |. Util.whitespace
+        |= uppercaseName types
+        |. Util.whitespace
+        |= Parser.loop []
+            (\tvars ->
+                Parser.oneOf
+                    [ Parser.succeed (\tvar -> tvar :: tvars)
+                        |= lowercaseName Set.empty
+                        |. Util.whitespace
+                        |> Parser.map Parser.Loop
+                    , Parser.succeed ()
+                        |> Parser.map (\_ -> List.reverse tvars)
+                        |> Parser.map Parser.Done
+                    ]
+            )
+        |. Util.whitespace
+        |> Parser.andThen
+            (\f ->
+                Parser.oneOf
+                    [ Parser.succeed (\first rest -> f <| Module.Enum <| Dict.fromList (first :: rest))
+                        |. symbol "="
+                        |. Util.whitespace
+                        |= variantT
+                        |. Parser.commit ()
+                        |= Parser.loop []
+                            (\variants ->
+                                Parser.oneOf
+                                    [ Parser.succeed (\( tag, params ) -> ( tag, params ) :: variants)
+                                        |. Util.whitespace
+                                        |. symbol "|"
+                                        |. Util.whitespace
+                                        |= variantT
+                                        |> Parser.map Parser.Loop
+                                    , Parser.succeed ()
+                                        |> Parser.map (\_ -> List.reverse variants)
+                                        |> Parser.map Parser.Done
+                                    ]
+                            )
+                        |> Parser.backtrackable
+                    , Parser.succeed (\fields -> f <| Module.Record <| Dict.fromList fields)
+                        |. symbol "="
+                        |. Util.whitespace
+                        |. symbol "{"
+                        |. Parser.commit ()
+                        |= Parser.sequence
+                            { start = Parser.Token "" (Error.expectingSymbol "")
+                            , separator = Parser.Token "," (Error.expectingSymbol ",")
+                            , end = Parser.Token "}" (Error.expectingSymbol "}")
+                            , spaces = Util.whitespace
+                            , item =
+                                Parser.succeed Tuple.pair
+                                    |= lowercaseName keywords
+                                    |. Util.whitespace
+                                    |. symbol ":"
+                                    |. Util.whitespace
+                                    |= Parser.lazy (\_ -> type_)
+                            , trailing = Parser.Forbidden
+                            }
+                    , Parser.succeed (f Module.Abstract)
+                    ]
+            )
+        |> Span.parser (|>)
 
 
 
@@ -1165,8 +1261,10 @@ type_ =
         , con
         , any
         , rec
+        , sum
         , hole
         , Parser.lazy (\_ -> subtype)
+        , Parser.problem Error.expectingType
         ]
 
 
@@ -1205,6 +1303,8 @@ app =
                 [ subtype
                 , var
                 , con
+                , rec
+                , sum
                 , any
                 , hole
                 ]
@@ -1239,6 +1339,7 @@ fun =
                 , var
                 , con
                 , rec
+                , sum
                 , hole
                 ]
     in
@@ -1271,6 +1372,56 @@ rec =
                     |= Parser.lazy (\_ -> type_)
             , trailing = Parser.Forbidden
             }
+
+
+sum : Parser Type
+sum =
+    Parser.succeed (\first rest -> Type.Sum <| Dict.fromList (first :: rest))
+        |= variantT
+        |= Parser.loop []
+            (\variants ->
+                Parser.oneOf
+                    [ Parser.succeed (\( tag, params ) -> ( tag, params ) :: variants)
+                        |= variantT
+                        |> Parser.map Parser.Loop
+                    , Parser.succeed ()
+                        |> Parser.map (\_ -> List.reverse variants)
+                        |> Parser.map Parser.Done
+                    ]
+            )
+
+
+variantT : Parser ( String, List Type )
+variantT =
+    let
+        typeWithoutApp =
+            Parser.oneOf
+                [ subtype
+                , var
+                , con
+                , rec
+                , any
+                , hole
+                ]
+    in
+    Parser.succeed Tuple.pair
+        |. symbol "#"
+        |. Parser.commit ()
+        |= lowercaseName Set.empty
+        |. Util.whitespace
+        |= Parser.loop []
+            (\params ->
+                Parser.oneOf
+                    [ Parser.succeed (\param -> param :: params)
+                        |= typeWithoutApp
+                        |. Util.whitespace
+                        |> Parser.map Parser.Loop
+                        |> Parser.backtrackable
+                    , Parser.succeed ()
+                        |> Parser.map (\_ -> List.reverse params)
+                        |> Parser.map Parser.Done
+                    ]
+            )
 
 
 any : Parser Type
@@ -1323,6 +1474,7 @@ symbol s =
 keyword : String -> Parser ()
 keyword s =
     Parser.keyword (Parser.Token s <| Error.expectingKeyword s)
+        |. Parser.commit ()
 
 
 {-| -}
@@ -1396,3 +1548,14 @@ keywords =
             -- Literals
             , [ "true", "false" ]
             ]
+
+
+{-| -}
+types : Set String
+types =
+    Set.fromList
+        [ "Array"
+        , "Boolean"
+        , "Number"
+        , "String"
+        ]

@@ -40,6 +40,9 @@ run target m =
 
                         Module.Run _ _ ->
                             Nothing
+
+                        Module.Type _ _ _ _ _ ->
+                            Nothing
             in
             m.declarations
                 |> List.filterMap showDeclaration
