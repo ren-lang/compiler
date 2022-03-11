@@ -52,7 +52,7 @@ type alias Context =
     { polyenv : Polyenv
     , substitution : Substitution
     , vars : List String
-    , constructors : Dict String Int
+    , constructors : Dict String Typing
     }
 
 
@@ -77,13 +77,54 @@ run ({ declarations } as m) =
                         Module.Run _ _ ->
                             env
 
-                        _ ->
+                        Module.Type _ name vars (Module.Enum variants) _ ->
+                            Dict.foldl
+                                (\tag params env_ ->
+                                    case params of
+                                        [] ->
+                                            Polyenv.insert
+                                                ("#" ++ tag)
+                                                (Typing.poly <| App (Con name) (List.map Var vars))
+                                                env_
+
+                                        param :: rest ->
+                                            Polyenv.insert
+                                                ("#" ++ tag)
+                                                (Typing.poly <| fun param rest (App (Con name) (List.map Var vars)))
+                                                env_
+                                )
+                                env
+                                variants
+
+                        Module.Type _ _ _ _ _ ->
                             env
                 )
-                Polyenv.empty
+                init.polyenv
                 declarations
+
+        constructors =
+            List.foldl
+                (\declr ctors ->
+                    case declr of
+                        Module.Type _ name _ (Module.Enum variants) _ ->
+                            Dict.insert name (Typing.poly <| Sum variants) ctors
+
+                        Module.Type _ name _ (Module.Record fields) _ ->
+                            Dict.insert name (Typing.poly <| Rec fields) ctors
+
+                        Module.Type _ name vars Module.Abstract _ ->
+                            Dict.insert name (Typing.poly <| App (Con name) (List.map Var vars)) ctors
+
+                        _ ->
+                            ctors
+                )
+                init.constructors
+                declarations
+
+        context =
+            { init | polyenv = polyenv, constructors = constructors }
     in
-    List.foldr (\d ds -> Result.map2 (::) (declaration polyenv d) ds) (Ok []) declarations
+    List.foldr (\d ds -> Result.map2 (::) (declaration context d) ds) (Ok []) declarations
         |> Result.map (\ds -> { m | declarations = ds })
         |> Result.mapError Error.TypeError
 
@@ -93,8 +134,8 @@ run ({ declarations } as m) =
 
 
 {-| -}
-declaration : Polyenv -> Module.Declaration meta -> Result Error.TypeError (Module.Declaration meta)
-declaration polyenv declr =
+declaration : Context -> Module.Declaration meta -> Result Error.TypeError (Module.Declaration meta)
+declaration context declr =
     case declr of
         Module.Ext _ _ _ _ ->
             Ok declr
@@ -105,7 +146,7 @@ declaration polyenv declr =
         Module.Let pub name type_ expr meta ->
             Result.andThen
                 (\( envDec, tDec ) ->
-                    ResultM.runM init <|
+                    ResultM.runM context <|
                         do (inst <| Typing.poly type_) <| \( envAnn, tAnn ) ->
                         do next <| \_ ->
                         do (unify [ envDec, envAnn ] [ tDec, tAnn ]) <| \t ->
@@ -128,7 +169,7 @@ declaration polyenv declr =
                             -- that question!
                             ResultM.succeed <| Module.Let pub name (Typing.type_ t) expr meta
                 )
-                (expression polyenv expr)
+                (expression context expr)
 
         Module.Run _ _ ->
             Ok declr
@@ -153,10 +194,10 @@ We should look at using `Expr.para` instead of cata, or perhaps another recursio
 scheme to annotate the expressions as we go.
 
 -}
-expression : Polyenv -> Expr meta -> Result Error.TypeError Typing
-expression polyenv expr =
+expression : Context -> Expr meta -> Result Error.TypeError Typing
+expression context expr =
     Expr.cata (always infer) expr
-        |> ResultM.runM { init | polyenv = Dict.union init.polyenv polyenv }
+        |> ResultM.runM context
 
 
 
@@ -194,10 +235,10 @@ init =
     , vars = List.range 0 (25 * (26 * 2)) |> List.map Type.var
     , constructors =
         Dict.fromList
-            [ ( "Array", 1 )
-            , ( "Boolean", 0 )
-            , ( "Number", 0 )
-            , ( "String", 0 )
+            [ ( "Array", Typing.poly <| App (Con "Array") [ Var "a" ] )
+            , ( "Boolean", Typing.poly <| Con "Boolean" )
+            , ( "Number", Typing.poly <| Con "Number" )
+            , ( "String", Typing.poly <| Con "String" )
             ]
     }
 
@@ -459,8 +500,15 @@ literal lit =
         Expr.Undefined ->
             ResultM.succeed <| Typing.poly (Con "()")
 
-        Expr.Variant tag params ->
-            ResultM.fail <| Error.internalTypeError "Type inference for variant literals is currently not supported!"
+        Expr.Variant tag inferParams ->
+            do (lookup ("#" ++ tag)) <| \t ->
+            case t of
+                Just typing ->
+                    -- This double `inst` thing
+                    application (ResultM.andThen inst <| inst typing) inferParams
+
+                Nothing ->
+                    ResultM.fail <| Error.internalTypeError "Type inference for variant literals is currently not supported!"
 
 
 
@@ -630,7 +678,6 @@ mgu equations =
                 s =
                     Substitution.singleton a t
             in
-            ResultM.do (lookupConstructor t) <| \_ ->
             if Var a == t then
                 mgu rest
 
@@ -659,6 +706,8 @@ mgu equations =
         -- For concrete types, there is no unification necessary, but we must
         -- fail if they are not the same.
         ( Con c1, Con c2 ) :: rest ->
+            ResultM.do (lookupConstructor (Con c1)) <| \_ ->
+            ResultM.do (lookupConstructor (Con c2)) <| \_ ->
             if c1 == c2 then
                 mgu rest
 
@@ -675,8 +724,6 @@ mgu equations =
             mgu <| rest ++ [ ( t1, t2 ), ( u1, u2 ) ]
 
         ( App t1 u1, App t2 u2 ) :: rest ->
-            ResultM.do (lookupConstructor (App t1 u1)) <| \_ ->
-            ResultM.do (lookupConstructor (App t2 u2)) <| \_ ->
             -- Of course, the number of parameters in our type applications must
             -- be the same length or they cannot possibly be the same type.
             if List.length u1 /= List.length u2 then
@@ -706,8 +753,6 @@ mgu equations =
                     (mgu <| rest ++ List.map2 Tuple.pair (Dict.values t1) (Dict.values t2))
 
         ( t1, t2 ) :: _ ->
-            ResultM.do (lookupConstructor t1) <| \_ ->
-            ResultM.do (lookupConstructor t2) <| \_ ->
             if t1 == t2 then
                 ResultM.succeed Substitution.empty
 
@@ -745,47 +790,22 @@ lookup name =
         ( context, Ok <| Dict.get name polyenv )
 
 
-lookupConstructor : Type -> InferM ()
+{-| Given some type, check if it actually exists?
+-}
+lookupConstructor : Type -> InferM Typing
 lookupConstructor type_ =
     \({ constructors } as context) ->
-        case Debug.log "type" type_ of
-            App (Con name) params ->
-                ( context
-                , Dict.get name constructors
-                    |> Maybe.map
-                        (\arity ->
-                            if arity == List.length params then
-                                Ok ()
-
-                            else
-                                Err <| Error.arityMismatch name arity (List.length params)
-                        )
-                    |> Maybe.withDefault (Err <| Error.unknownType (Con name))
-                )
-
-            App _ _ ->
-                ( context
-                , Err <| Error.unknownType type_
-                )
-
+        case type_ of
             Con name ->
-                ( context
-                , Dict.get name constructors
-                    |> Maybe.map
-                        (\arity ->
-                            if arity == 0 then
-                                Ok ()
+                case Dict.get name constructors of
+                    Just typing ->
+                        inst typing context
 
-                            else
-                                Err <| Error.arityMismatch name arity 0
-                        )
-                    |> Maybe.withDefault (Err <| Error.unknownType (Con name))
-                )
+                    Nothing ->
+                        ResultM.fail (Error.unknownType type_) context
 
             _ ->
-                ( context
-                , Ok ()
-                )
+                ResultM.fail (Error.unknownType type_) context
 
 
 {-| -}
