@@ -178,6 +178,7 @@ typeTooGeneral t1 t2 =
     TypeTooGeneral t1 t2
 
 
+{-| -}
 arityMismatch : String -> Int -> Int -> TypeError
 arityMismatch name expected got =
     ArityMismatch name expected got
