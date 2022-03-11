@@ -8,7 +8,7 @@ module Ren.Compiler.Error exposing
 {-|
 
 @docs Error
-@docs ParseError, ParseContext, expectingKeyword, expectingSymbol, expectingOperator, expectingTypePattern, expectingChar, expectingNumber, expectingEOF, expectingWhitespace, expectingCamelCase, expectingCapitalCase, expectingExpr, expectingType, unexpectedChar, internalParseError
+@docs ParseError, ParseContext, expectingKeyword, expectingSymbol, expectingOperator, expectingChar, expectingNumber, expectingEOF, expectingWhitespace, expectingCamelCase, expectingCapitalCase, expectingExpr, expectingType, unexpectedChar, internalParseError
 @docs TypeError, infiniteType, incompatibleTypes, missingField, typeTooGeneral, arityMismatch, unknownType, internalTypeError
 @docs toString
 
