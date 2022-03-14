@@ -500,7 +500,7 @@ infix_ op lhs rhs =
 
 {-| -}
 lambda : List Expr.Pattern -> Builder t -> Builder t
-lambda args ({ wrap, expr } as body) =
+lambda args body =
     case args of
         (Expr.Name name) :: rest ->
             { wrap = Pretty.parens
@@ -538,16 +538,6 @@ lambda args ({ wrap, expr } as body) =
 
         [] ->
             body
-
-
-
--- { wrap = Pretty.parens
--- , expr =
---     List.map (lambdaPattern >> Pretty.parens) args
---         |> Pretty.join (Pretty.string " => ")
---         |> Pretty.a (Pretty.string " => ")
---         |> Pretty.a (wrap expr)
--- }
 
 
 {-| -}
