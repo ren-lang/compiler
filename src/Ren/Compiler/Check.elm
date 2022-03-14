@@ -153,7 +153,7 @@ declaration context declr =
                         if tAnn == Type.Hole then
                             ResultM.succeed <| Module.Let pub name (Typing.type_ t) expr meta
 
-                        else if Typing.free (Typing.simplify t) /= Typing.free (Typing.simplify (Typing.poly type_)) then
+                        else if Set.size (Typing.free t) < Set.size (Typing.free <| Typing.simplify <| Typing.poly type_) then
                             ResultM.fail <| Error.typeTooGeneral type_ (Typing.type_ t)
 
                         else
