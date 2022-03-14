@@ -98,6 +98,18 @@ declaration declr =
                 |> declaration
 
         Module.Let pub name type_ expr _ ->
+            let
+                isNameOrWildcard pattern =
+                    case pattern of
+                        Expr.Name _ ->
+                            True
+
+                        Expr.Wildcard _ ->
+                            True
+
+                        _ ->
+                            False
+            in
             Pretty.string "// "
                 |> Pretty.a (Pretty.string name)
                 |> Pretty.a (Pretty.string " :: ")
@@ -109,17 +121,36 @@ declaration declr =
                             Pretty.string "function "
                                 |> Pretty.a (Pretty.string name)
                                 |> Pretty.a Pretty.space
-                                |> Pretty.a (Pretty.parens <| lambdaPattern arg)
-                                |> Pretty.a Pretty.space
-                                |> Pretty.a (Pretty.char '{')
-                                |> Pretty.a Pretty.line
                                 |> Pretty.a
-                                    (Pretty.string "return "
-                                        |> Pretty.a (wrapBuilder <| Expr.cata (always expression) body)
-                                        |> Pretty.indent 4
+                                    (if isNameOrWildcard arg then
+                                        (Pretty.parens <| lambdaPattern arg)
+                                            |> Pretty.a Pretty.space
+                                            |> Pretty.a (Pretty.char '{')
+                                            |> Pretty.a Pretty.line
+                                            |> Pretty.a
+                                                (Pretty.string "return"
+                                                    |> Pretty.a Pretty.space
+                                                    |> Pretty.a (wrapBuilder <| Expr.cata (always expression) body)
+                                                    |> Pretty.indent 4
+                                                )
+                                            |> Pretty.a Pretty.line
+                                            |> Pretty.a (Pretty.char '}')
+
+                                     else
+                                        (Pretty.parens <| Pretty.string "$0")
+                                            |> Pretty.a Pretty.space
+                                            |> Pretty.a (Pretty.char '{')
+                                            |> Pretty.a Pretty.line
+                                            |> Pretty.a
+                                                (matchCase "$0" ( arg, Nothing, Expr.cata (always expression) body )
+                                                    |> Pretty.a Pretty.line
+                                                    |> Pretty.a Pretty.line
+                                                    |> Pretty.a (Pretty.string "throw new Error(\"Incomplete pattern match.\")")
+                                                    |> Pretty.indent 4
+                                                )
+                                            |> Pretty.a Pretty.line
+                                            |> Pretty.a (Pretty.char '}')
                                     )
-                                |> Pretty.a Pretty.line
-                                |> Pretty.a (Pretty.char '}')
                                 |> Pretty.append
                                     (if pub then
                                         Pretty.string "export "
@@ -132,17 +163,36 @@ declaration declr =
                             Pretty.string "function "
                                 |> Pretty.a (Pretty.string name)
                                 |> Pretty.a Pretty.space
-                                |> Pretty.a (Pretty.parens <| lambdaPattern arg)
-                                |> Pretty.a Pretty.space
-                                |> Pretty.a (Pretty.char '{')
-                                |> Pretty.a Pretty.line
                                 |> Pretty.a
-                                    (Pretty.string "return "
-                                        |> Pretty.a (wrapBuilder <| Expr.cata (always expression) <| Expr meta (Lambda args body))
-                                        |> Pretty.indent 4
+                                    (if isNameOrWildcard arg then
+                                        (Pretty.parens <| lambdaPattern arg)
+                                            |> Pretty.a Pretty.space
+                                            |> Pretty.a (Pretty.char '{')
+                                            |> Pretty.a Pretty.line
+                                            |> Pretty.a
+                                                (Pretty.string "return"
+                                                    |> Pretty.a Pretty.space
+                                                    |> Pretty.a (wrapBuilder <| Expr.cata (always expression) <| Expr meta (Lambda args body))
+                                                    |> Pretty.indent 4
+                                                )
+                                            |> Pretty.a Pretty.line
+                                            |> Pretty.a (Pretty.char '}')
+
+                                     else
+                                        (Pretty.parens <| Pretty.string "$0")
+                                            |> Pretty.a Pretty.space
+                                            |> Pretty.a (Pretty.char '{')
+                                            |> Pretty.a Pretty.line
+                                            |> Pretty.a
+                                                (matchCase "$0" ( arg, Nothing, Expr.cata (always expression) <| Expr meta (Lambda args body) )
+                                                    |> Pretty.a Pretty.line
+                                                    |> Pretty.a Pretty.line
+                                                    |> Pretty.a (Pretty.string "throw new Error(\"Incomplete pattern match.\")")
+                                                    |> Pretty.indent 4
+                                                )
+                                            |> Pretty.a Pretty.line
+                                            |> Pretty.a (Pretty.char '}')
                                     )
-                                |> Pretty.a Pretty.line
-                                |> Pretty.a (Pretty.char '}')
                                 |> Pretty.append
                                     (if pub then
                                         Pretty.string "export "
@@ -450,14 +500,54 @@ infix_ op lhs rhs =
 
 {-| -}
 lambda : List Expr.Pattern -> Builder t -> Builder t
-lambda args { wrap, expr } =
-    { wrap = Pretty.parens
-    , expr =
-        List.map (lambdaPattern >> Pretty.parens) args
-            |> Pretty.join (Pretty.string " => ")
-            |> Pretty.a (Pretty.string " => ")
-            |> Pretty.a (wrap expr)
-    }
+lambda args ({ wrap, expr } as body) =
+    case args of
+        (Expr.Name name) :: rest ->
+            { wrap = Pretty.parens
+            , expr =
+                Pretty.parens (Pretty.string name)
+                    |> Pretty.a (Pretty.string " => ")
+                    |> Pretty.a (wrapBuilder <| lambda rest body)
+            }
+
+        (Expr.Wildcard _) :: rest ->
+            { wrap = Pretty.parens
+            , expr =
+                Pretty.parens (Pretty.string "_")
+                    |> Pretty.a (Pretty.string " => ")
+                    |> Pretty.a (wrapBuilder <| lambda rest body)
+            }
+
+        arg :: rest ->
+            { wrap = Pretty.parens
+            , expr =
+                Pretty.parens (Pretty.string "$0")
+                    |> Pretty.a (Pretty.string " => ")
+                    |> Pretty.a (Pretty.char '{')
+                    |> Pretty.a Pretty.line
+                    |> Pretty.a
+                        (matchCase "$0" ( arg, Nothing, lambda rest body )
+                            |> Pretty.a Pretty.line
+                            |> Pretty.a Pretty.line
+                            |> Pretty.a (Pretty.string "throw new Error(\"Incomplete pattern match.\")")
+                            |> Pretty.indent 4
+                        )
+                    |> Pretty.a Pretty.line
+                    |> Pretty.a (Pretty.char '}')
+            }
+
+        [] ->
+            body
+
+
+
+-- { wrap = Pretty.parens
+-- , expr =
+--     List.map (lambdaPattern >> Pretty.parens) args
+--         |> Pretty.join (Pretty.string " => ")
+--         |> Pretty.a (Pretty.string " => ")
+--         |> Pretty.a (wrap expr)
+-- }
 
 
 {-| -}
@@ -676,9 +766,10 @@ matchPattern name pat =
                     |> Pretty.a (Pretty.string ".length >= ")
                     |> Pretty.a (Pretty.string <| String.fromInt <| List.length elements)
                 , Pretty.join (Pretty.string " && ")
-                    (List.indexedMap
-                        (\i el -> matchPattern (name ++ "[" ++ String.fromInt i ++ "]") el)
-                        elements
+                    (List.filter ((/=) (Pretty.string "true")) <|
+                        List.indexedMap
+                            (\i el -> matchPattern (name ++ "[" ++ String.fromInt i ++ "]") el)
+                            elements
                     )
                 ]
 
@@ -740,7 +831,7 @@ matchPattern name pat =
         -- `Name` patterns introduce bindings but don't involve any checking, so
         -- we don't need to emit anything here.
         Expr.Name _ ->
-            Pretty.empty
+            Pretty.string "true"
 
         Expr.RecordDestructure entries ->
             Pretty.join (Pretty.string " && ")
@@ -748,13 +839,14 @@ matchPattern name pat =
                     (\( key, val ) ->
                         case val of
                             Just p ->
-                                Pretty.join (Pretty.string " && ")
-                                    [ Pretty.string key
-                                        |> Pretty.surround (Pretty.char '"') (Pretty.char '"')
-                                        |> Pretty.a (Pretty.string " in ")
-                                        |> Pretty.a (Pretty.string name)
-                                    , matchPattern (name ++ "." ++ key) p
-                                    ]
+                                Pretty.join (Pretty.string " && ") <|
+                                    List.filter ((/=) (Pretty.string "true"))
+                                        [ Pretty.string key
+                                            |> Pretty.surround (Pretty.char '"') (Pretty.char '"')
+                                            |> Pretty.a (Pretty.string " in ")
+                                            |> Pretty.a (Pretty.string name)
+                                        , matchPattern (name ++ "." ++ key) p
+                                        ]
 
                             Nothing ->
                                 Pretty.string key
@@ -838,7 +930,7 @@ matchPattern name pat =
         -- ```
         --
         Expr.Wildcard _ ->
-            Pretty.empty
+            Pretty.string "true"
 
 
 {-| -}
