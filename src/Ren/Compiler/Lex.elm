@@ -100,7 +100,7 @@ comment =
 
 operator : Parser Token
 operator =
-    Parser.chompUntil (Parser.Token " " ())
+    Parser.chompUntilEndOr " "
         |> Parser.getChompedString
         |> Parser.andThen
             (\s ->
