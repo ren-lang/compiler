@@ -26,7 +26,8 @@ import Ren.Data.Type exposing (Type)
 
 {-| -}
 type Error
-    = ParseError (List (Parser.Advanced.DeadEnd ParseContext ParseError))
+    = LexError
+    | ParseError (List (Parser.Advanced.DeadEnd ParseContext ParseError))
     | TypeError TypeError
 
 
@@ -204,6 +205,9 @@ internalTypeError message =
 toString : Error -> String
 toString error =
     case error of
+        LexError ->
+            "[TODO] Lexing error"
+
         ParseError es ->
             List.map parseErrorToString es
                 |> String.join "\n"
