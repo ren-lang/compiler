@@ -5,7 +5,7 @@ module Ren.Compiler.Lex exposing (..)
 -- IMPORTS ---------------------------------------------------------------------
 
 import Parser.Advanced as Parser exposing ((|.), (|=))
-import Ren.AST.Token as Token exposing (Token, Token_(..))
+import Ren.AST.Token as Token exposing (Token(..))
 import Ren.Compiler.Error as Error exposing (Error)
 import Ren.Compiler.Parse.Util as Util
 import Ren.Data.Span as Span exposing (Span)
@@ -22,7 +22,7 @@ type alias Parser a =
 
 
 type alias Stream =
-    List Token
+    List ( Span, Token )
 
 
 
@@ -43,23 +43,23 @@ run input =
 --
 
 
-token : Parser Token
+token : Parser ( Span, Token )
 token =
-    Span.parser Token <|
+    Span.parser Tuple.pair <|
         Parser.oneOf
-            [ keyword |> Parser.backtrackable
-            , symbol |> Parser.backtrackable
-            , comment |> Parser.backtrackable
-            , operator |> Parser.backtrackable
-            , literal |> Parser.backtrackable
-            , identifier |> Parser.backtrackable
+            [ Parser.backtrackable keyword
+            , Parser.backtrackable symbol
+            , Parser.backtrackable comment
+            , Parser.backtrackable operator
+            , Parser.backtrackable literal
+            , Parser.backtrackable identifier
             , Parser.chompIf (Basics.always True) ()
                 |> Parser.getChompedString
                 |> Parser.map Token.Unknown
             ]
 
 
-keyword : Parser Token_
+keyword : Parser Token
 keyword =
     let
         keyword_ s =
@@ -73,7 +73,7 @@ keyword =
         |> Parser.oneOf
 
 
-symbol : Parser Token_
+symbol : Parser Token
 symbol =
     let
         symbol_ s =
@@ -87,7 +87,7 @@ symbol =
         |> Parser.oneOf
 
 
-comment : Parser Token_
+comment : Parser Token
 comment =
     let
         tok =
@@ -98,7 +98,7 @@ comment =
         |> Parser.map Token.Comment
 
 
-operator : Parser Token_
+operator : Parser Token
 operator =
     Parser.chompUntil (Parser.Token " " ())
         |> Parser.getChompedString
@@ -113,7 +113,7 @@ operator =
             )
 
 
-literal : Parser Token_
+literal : Parser Token
 literal =
     Parser.oneOf
         [ Parser.succeed (Token.Boolean True)
@@ -130,7 +130,7 @@ literal =
         ]
 
 
-identifier : Parser Token_
+identifier : Parser Token
 identifier =
     Parser.succeed Token.Identifier
         |= Parser.oneOf

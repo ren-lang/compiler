@@ -13,14 +13,7 @@ import Set exposing (Set)
 
 
 {-| -}
-type alias Token =
-    { span : Span
-    , token : Token_
-    }
-
-
-{-| -}
-type Token_
+type Token
     = Identifier String --  id | Hello | ...
     | Keyword Keyword --     let | import | where | ...
     | Symbol Symbol --      ( | } | [ | ...
@@ -113,7 +106,7 @@ symbols =
 -- CONSTRUCTORS ----------------------------------------------------------------
 
 
-keyword : String -> Maybe Token_
+keyword : String -> Maybe Token
 keyword s =
     case s of
         "as" ->
@@ -162,7 +155,7 @@ keyword s =
             Nothing
 
 
-symbol : String -> Maybe Token_
+symbol : String -> Maybe Token
 symbol s =
     case s of
         ":" ->
@@ -196,7 +189,7 @@ symbol s =
             Nothing
 
 
-operator : String -> Maybe Token_
+operator : String -> Maybe Token
 operator s =
     case s of
         "|>" ->
