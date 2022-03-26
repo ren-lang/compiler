@@ -1,7 +1,8 @@
 module Ren.Compiler exposing
-    ( Compiler, Toolchain, Error
+    ( Toolchain, Error
     , run
     , untyped, typed, typecheck, custom
+    , parse, desugar, check, optimise, emit
     )
 
 {-|
@@ -9,12 +10,12 @@ module Ren.Compiler exposing
 @docs Compiler, Toolchain, Error
 @docs run
 @docs untyped, typed, typecheck, custom
+@docs parse, desugar, check, optimise, emit
 
 -}
 
 -- IMPORTS ---------------------------------------------------------------------
 
-import Parser.Advanced as Parser
 import Ren.AST.Module as Module exposing (Import, Module)
 import Ren.Compiler.Check as Check
 import Ren.Compiler.Desugar as Desugar
@@ -30,18 +31,13 @@ import Ren.Data.Span exposing (Span)
 
 
 {-| -}
-type alias Compiler error =
-    String -> Result error String
-
-
-{-| -}
-type alias Toolchain error meta =
-    { parse : String -> String -> Result error (Module meta)
+type alias Toolchain meta output =
+    { parse : String -> Result Error (Module meta)
     , desugar : Module meta -> Module meta
-    , validate : Module meta -> Result error (Module meta)
-    , check : Module meta -> Result error (Module meta)
+    , validate : Module meta -> Result Error (Module meta)
+    , check : Module meta -> Result Error (Module meta)
     , optimise : Module meta -> Module meta
-    , emit : Module meta -> String
+    , emit : Module meta -> output
     }
 
 
@@ -54,16 +50,29 @@ type alias Error =
 -- TOOLCHAINS ------------------------------------------------------------------
 
 
-{-| -}
-untyped : Toolchain Error Span
-untyped =
-    custom False Desugar.defaults [ Optimise.operators ] Emit.ESModule
+{-| Chains together the various steps of a given toolchain to be run against
+some Ren code input.
+-}
+run : Toolchain meta output -> String -> Result Error output
+run toolchain input =
+    toolchain.parse input
+        |> Result.map toolchain.desugar
+        |> Result.andThen toolchain.validate
+        |> Result.andThen toolchain.check
+        |> Result.map toolchain.optimise
+        |> Result.map toolchain.emit
 
 
 {-| -}
-typed : Toolchain Error Span
-typed =
-    custom True Desugar.defaults [ Optimise.operators ] Emit.ESModule
+untyped : String -> Toolchain Span String
+untyped moduleName =
+    custom False Desugar.defaults [ Optimise.operators ] moduleName Emit.ESModule
+
+
+{-| -}
+typed : String -> Toolchain Span String
+typed moduleName =
+    custom True Desugar.defaults [ Optimise.operators ] moduleName Emit.ESModule
 
 
 {-| This toolchain doesn't emit code at the end; it type checks a module and then
@@ -73,15 +82,15 @@ doesn't provide you with any information you didn't already know, but it is hand
 to have around to test the type checker is working without flooding the console
 with emitted pretty-printed code.
 -}
-typecheck : Toolchain Error Span
+typecheck : Toolchain Span String
 typecheck =
-    custom True Desugar.defaults [] Emit.DEBUG_Types
+    custom True Desugar.defaults [] "" Emit.DEBUG_Types
 
 
 {-| -}
-custom : Bool -> List (Desugar.Transformation Span) -> List (Optimise.Optimisation Span) -> Emit.Target -> Toolchain Error Span
-custom shouldTypecheck transformations optimisations target =
-    { parse = \name input -> Parse.run name input
+custom : Bool -> List (Desugar.Transformation Span) -> List (Optimise.Optimisation Span) -> String -> Emit.Target -> Toolchain Span String
+custom shouldTypecheck transformations optimisations name target =
+    { parse = Parse.run name
     , desugar =
         \m ->
             if List.isEmpty <| Module.externs m then
@@ -103,17 +112,39 @@ custom shouldTypecheck transformations optimisations target =
 
 
 
---
+-- INDIVIDUAL STEPS ------------------------------------------------------------
 
 
-{-| Chains together the various steps of a given toolchain to be run against
-some Ren code input.
--}
-run : String -> Toolchain error meta -> Compiler error
-run name { parse, desugar, validate, check, optimise, emit } =
-    parse name
-        >> Result.map desugar
-        >> Result.andThen validate
-        >> Result.andThen check
-        >> Result.map optimise
-        >> Result.map emit
+{-| -}
+parse : String -> String -> Result Error (Module Span)
+parse =
+    Parse.run
+
+
+{-| -}
+desugar : List (Desugar.Transformation Span) -> Module Span -> Module Span
+desugar transformations m =
+    if List.isEmpty <| Module.externs m then
+        Module.map (Desugar.run transformations) m
+
+    else
+        { m | imports = Import Module.FfiImport [ "$FFI" ] [] :: m.imports }
+            |> Module.map (Desugar.run transformations)
+
+
+{-| -}
+check : Module Span -> Result Error (Module Span)
+check =
+    Check.run
+
+
+{-| -}
+optimise : List (Optimise.Optimisation Span) -> Module Span -> Module Span
+optimise optimisations m =
+    Module.map (Optimise.run optimisations) m
+
+
+{-| -}
+emit : Emit.Target -> Module Span -> String
+emit =
+    Emit.run
