@@ -100,8 +100,25 @@ comment =
 
 operator : Parser Token
 operator =
-    Parser.chompUntilEndOr " "
-        |> Parser.getChompedString
+    Parser.loop ""
+        (\s ->
+            Parser.oneOf
+                [ Parser.chompIf (\_ -> True) ()
+                    |> Parser.getChompedString
+                    |> Parser.andThen
+                        (\c ->
+                            if Set.member (s ++ c) Token.operators then
+                                Parser.succeed <| (s ++ c)
+
+                            else
+                                Parser.problem ()
+                        )
+                    |> Parser.backtrackable
+                    |> Parser.map Parser.Loop
+                , Parser.succeed s
+                    |> Parser.map Parser.Done
+                ]
+        )
         |> Parser.andThen
             (\s ->
                 case Token.operator s of

@@ -22,6 +22,7 @@ type Token
     | Boolean Bool --       true | false
     | Number Float --       1 | 0.4 | 2e6 | ...
     | String String --      "I am a string"
+    | EOF
     | Unknown String
 
 
@@ -99,6 +100,27 @@ symbols =
 
             --
             , [ "=" ]
+            ]
+
+
+operators : Set String
+operators =
+    Set.fromList <|
+        List.concat
+            --
+            [ [ "|>", ">>" ]
+
+            --
+            , [ "+", "-", "*", "/", "%", "^" ]
+
+            --
+            , [ "==", "!=", ">", ">=", "<", "<=" ]
+
+            --
+            , [ "&&", "||" ]
+
+            --
+            , [ "::", "++" ]
             ]
 
 
