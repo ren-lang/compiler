@@ -1,4 +1,4 @@
-module Example exposing (..)
+module Lex exposing (..)
 
 -- import Fuzz exposing (Fuzzer, int, list, string)
 
@@ -86,11 +86,3 @@ lexSuite =
                             ]
                         )
         ]
-
-
-
--- testvar : Stream
--- testvar =
---     [ ( Span.fromTuples (0, 0) (0, 2), Token.Number 123)
---     , ( Span.fromTuples (0, 4) (0, 4), Token.Operator Expr.Add)
---     , ( Span.fromTuples (0, 6) (0, 9), Token.Number 234) ]
