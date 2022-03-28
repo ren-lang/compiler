@@ -51,38 +51,88 @@ positionSuite =
 
 lexSuite : Test
 lexSuite =
-    describe "tokens of maths operations"
-        [ test "addition with spaces" <|
-            \_ ->
-                run "123 + 234"
-                    |> Result.map (List.map Tuple.second)
-                    |> Expect.equal
-                        (Ok
-                            [ Token.Number 123
-                            , Token.Operator Expr.Add
-                            , Token.Number 234
-                            ]
-                        )
-        , test "addition without spaces" <|
-            \_ ->
-                run "23+3939"
-                    |> Result.map (List.map Tuple.second)
-                    |> Expect.equal
-                        (Ok
-                            [ Token.Number 23
-                            , Token.Operator Expr.Add
-                            , Token.Number 3939
-                            ]
-                        )
-        , test "invalid addition" <|
-            \_ ->
-                run "+ 12 +"
-                    |> Result.map (List.map Tuple.second)
-                    |> Expect.equal
-                        (Ok
-                            [ Token.Operator Expr.Add
-                            , Token.Number 12
-                            , Token.Operator Expr.Add
-                            ]
-                        )
+    describe "literals and operators"
+        [ describe "tokens of maths operations"
+            [ test "addition with spaces" <|
+                \_ ->
+                    run "123 + 234"
+                        |> Result.map (List.map Tuple.second)
+                        |> Expect.equal
+                            (Ok
+                                [ Token.Number 123
+                                , Token.Operator Expr.Add
+                                , Token.Number 234
+                                ]
+                            )
+            , test "addition without spaces" <|
+                \_ ->
+                    run "23+3939"
+                        |> Result.map (List.map Tuple.second)
+                        |> Expect.equal
+                            (Ok
+                                [ Token.Number 23
+                                , Token.Operator Expr.Add
+                                , Token.Number 3939
+                                ]
+                            )
+            , test "invalid addition" <|
+                \_ ->
+                    run "+ 12 +"
+                        |> Result.map (List.map Tuple.second)
+                        |> Expect.equal
+                            (Ok
+                                [ Token.Operator Expr.Add
+                                , Token.Number 12
+                                , Token.Operator Expr.Add
+                                ]
+                            )
+            ]
+        , describe "negative numbers and subtraction"
+            [ test "subtracting positives" <|
+                \_ ->
+                    run "523 - 234"
+                        |> Result.map (List.map Tuple.second)
+                        |> Expect.equal
+                            (Ok
+                                [ Token.Number 523
+                                , Token.Operator Expr.Sub
+                                , Token.Number 234
+                                ]
+                            )
+            , test "subtracting negatives" <|
+                \_ ->
+                    run "-523 - -234"
+                        |> Result.map (List.map Tuple.second)
+                        |> Expect.equal
+                            (Ok
+                                [ Token.Number -523
+                                , Token.Operator Expr.Sub
+                                , Token.Number -234
+                                ]
+                            )
+            , test "adding negatives" <|
+                \_ ->
+                    run "-523 + -234"
+                        |> Result.map (List.map Tuple.second)
+                        |> Expect.equal
+                            (Ok
+                                [ Token.Number -523
+                                , Token.Operator Expr.Add
+                                , Token.Number -234
+                                ]
+                            )
+            , test "invalid positive number notation" <|
+                \_ ->
+                    run "+523 - +234"
+                        |> Result.map (List.map Tuple.second)
+                        |> Expect.equal
+                            (Ok
+                                [ Token.Operator Expr.Add
+                                , Token.Number 523
+                                , Token.Operator Expr.Sub
+                                , Token.Operator Expr.Add
+                                , Token.Number 234
+                                ]
+                            )
+            ]
         ]

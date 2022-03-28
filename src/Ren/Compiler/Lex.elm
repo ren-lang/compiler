@@ -50,8 +50,8 @@ token =
             [ Parser.backtrackable keyword
             , Parser.backtrackable symbol
             , Parser.backtrackable comment
-            , Parser.backtrackable operator
             , Parser.backtrackable literal
+            , Parser.backtrackable operator
             , Parser.backtrackable identifier
             , Parser.chompIf (Basics.always True) ()
                 |> Parser.getChompedString
