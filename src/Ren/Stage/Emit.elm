@@ -139,6 +139,13 @@ fromStatement stmt =
                 |> Pretty.a Pretty.space
                 |> Pretty.a (fromExpression expr)
 
+        JavaScript.Throw error ->
+            Pretty.empty
+                |> Pretty.a (Pretty.string "throw")
+                |> Pretty.a Pretty.space
+                |> Pretty.a (Pretty.string "new Error")
+                |> Pretty.a (Pretty.parens <| Pretty.string error)
+
 
 fromExpression : JavaScript.Expression -> Doc
 fromExpression expr =
@@ -153,31 +160,18 @@ fromExpression expr =
                 |> Pretty.a (Pretty.join (Pretty.char '.') (List.map Pretty.string keys))
 
         JavaScript.Add x y ->
-            Pretty.empty
-                |> Pretty.a (fromExpression x)
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.string "+")
-                |> Pretty.a Pretty.space
-                |> Pretty.a (fromExpression y)
+            binop x "+" y
 
         JavaScript.And x y ->
-            Pretty.empty
-                |> Pretty.a (fromExpression x)
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.string "&&")
-                |> Pretty.a Pretty.space
-                |> Pretty.a (fromExpression y)
+            binop x "&&" y
 
         JavaScript.Array elements ->
             Pretty.empty
                 |> Pretty.a (Pretty.char '[')
-                |> Pretty.a Pretty.line
                 |> Pretty.a
                     (List.map fromExpression elements
-                        |> Pretty.lines
-                        |> Pretty.indent 4
+                        |> Pretty.join (Pretty.string ", ")
                     )
-                |> Pretty.a Pretty.line
                 |> Pretty.a (Pretty.char ']')
 
         JavaScript.Arrow arg body ->
@@ -208,29 +202,17 @@ fromExpression expr =
                 |> Pretty.a (fromExpression fun)
                 |> Pretty.a (Pretty.join Pretty.empty <| List.map (Pretty.parens << fromExpression) args)
 
+        JavaScript.Div x y ->
+            binop x "/" y
+
         JavaScript.Eq x y ->
-            Pretty.empty
-                |> Pretty.a (fromExpression x)
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.string "==")
-                |> Pretty.a Pretty.space
-                |> Pretty.a (fromExpression y)
+            binop x "==" y
 
         JavaScript.Gt x y ->
-            Pretty.empty
-                |> Pretty.a (fromExpression x)
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.string ">")
-                |> Pretty.a Pretty.space
-                |> Pretty.a (fromExpression y)
+            binop x ">" y
 
         JavaScript.Gte x y ->
-            Pretty.empty
-                |> Pretty.a (fromExpression x)
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.string ">=")
-                |> Pretty.a Pretty.space
-                |> Pretty.a (fromExpression y)
+            binop x ">=" y
 
         JavaScript.IIFE stmt ->
             Pretty.empty
@@ -251,20 +233,19 @@ fromExpression expr =
                 |> Pretty.a (Pretty.char ']')
 
         JavaScript.Lt x y ->
-            Pretty.empty
-                |> Pretty.a (fromExpression x)
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.string "<")
-                |> Pretty.a Pretty.space
-                |> Pretty.a (fromExpression y)
+            binop x "<" y
 
         JavaScript.Lte x y ->
-            Pretty.empty
-                |> Pretty.a (fromExpression x)
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.string "<=")
-                |> Pretty.a Pretty.space
-                |> Pretty.a (fromExpression y)
+            binop x "<=" y
+
+        JavaScript.Mod x y ->
+            binop x "%" y
+
+        JavaScript.Mul x y ->
+            binop x "*" y
+
+        JavaScript.Neq x y ->
+            binop x "!=" y
 
         JavaScript.Number n ->
             Pretty.string <| String.fromFloat n
@@ -277,11 +258,19 @@ fromExpression expr =
                 |> Pretty.a Pretty.space
                 |> Pretty.a (fromExpression y)
 
+        JavaScript.Spread expr_ ->
+            Pretty.empty
+                |> Pretty.a (Pretty.string "...")
+                |> Pretty.a (fromExpression expr_)
+
         JavaScript.String s ->
             Pretty.empty
                 |> Pretty.a (Pretty.string "`")
                 |> Pretty.a (Pretty.string s)
                 |> Pretty.a (Pretty.string "`")
+
+        JavaScript.Sub x y ->
+            binop x "-" y
 
         JavaScript.Typeof expr_ ->
             Pretty.empty
@@ -339,3 +328,13 @@ doubleline : Doc
 doubleline =
     Pretty.line
         |> Pretty.a Pretty.line
+
+
+binop : JavaScript.Expression -> String -> JavaScript.Expression -> Doc
+binop lhs op rhs =
+    Pretty.empty
+        |> Pretty.a (fromExpression lhs)
+        |> Pretty.a Pretty.space
+        |> Pretty.a (Pretty.string op)
+        |> Pretty.a Pretty.space
+        |> Pretty.a (fromExpression rhs)

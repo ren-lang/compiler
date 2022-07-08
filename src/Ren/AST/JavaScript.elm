@@ -20,6 +20,7 @@ type Statement
     | Expr Expression
     | If Expression Statement (Maybe Statement)
     | Return Expression
+    | Throw String
 
 
 type Expression
@@ -30,6 +31,7 @@ type Expression
     | Arrow String Statement
     | Bool Bool
     | Call Expression (List Expression)
+    | Div Expression Expression
     | Eq Expression Expression
     | Gt Expression Expression
     | Gte Expression Expression
@@ -37,9 +39,14 @@ type Expression
     | Index Expression Expression
     | Lt Expression Expression
     | Lte Expression Expression
+    | Mod Expression Expression
+    | Mul Expression Expression
+    | Neq Expression Expression
     | Number Float
     | Or Expression Expression
+    | Spread Expression
     | String String
+    | Sub Expression Expression
     | Typeof Expression
     | Undefined
     | Var String
@@ -61,42 +68,21 @@ fromExpr =
                 Core.EAbs arg body ->
                     Expr <| Arrow arg (return body)
 
-                Core.EApp (Expr (Call (Var "<access>") [ String key ])) arg ->
-                    case expression arg of
+                Core.EApp (Expr (Call (Var "<access>") [ String key ])) stmt ->
+                    case expression stmt of
                         Just expr ->
                             Expr <| Access expr [ key ]
 
                         Nothing ->
-                            Comment "TODO: handle access with non-expr arg"
+                            Throw "[I"
 
-                Core.EApp (Expr (Call (Var "<binop>") [ String op, lhs ])) rhs ->
-                    case ( op, expression rhs ) of
-                        ( "add", Just y ) ->
-                            Expr <| Add lhs y
-
-                        ( "and", Just y ) ->
-                            Expr <| And lhs y
-
-                        ( "eq", Just y ) ->
-                            Expr <| Eq lhs y
-
-                        ( "gt", Just y ) ->
-                            Expr <| Gt lhs y
-
-                        ( "gte", Just y ) ->
-                            Expr <| Gte lhs y
-
-                        ( "lt", Just y ) ->
-                            Expr <| Lt lhs y
-
-                        ( "lte", Just y ) ->
-                            Expr <| Lte lhs y
-
-                        ( "or", Just y ) ->
-                            Expr <| Or lhs y
+                Core.EApp (Expr (Call (Var "<binop>") [ String op, lhs ])) stmt ->
+                    case ( Expr.operatorFromName op, expression stmt ) of
+                        ( Just operator, Just rhs ) ->
+                            Expr <| fromOperator operator lhs rhs
 
                         _ ->
-                            Comment "TODO: handle add with non-expr arguments"
+                            Comment "TODO: handle binop with non-expr arg"
 
                 Core.EApp (Expr (Call fun args)) (Expr arg) ->
                     Expr <| Call fun (args ++ [ arg ])
@@ -181,6 +167,55 @@ fromExpr =
                     Debug.todo ""
     in
     Expr.lower >> Core.fold go
+
+
+fromOperator : Expr.Operator -> Expression -> Expression -> Expression
+fromOperator op lhs rhs =
+    case op of
+        Expr.Add ->
+            Add lhs rhs
+
+        Expr.And ->
+            And lhs rhs
+
+        Expr.Concat ->
+            Array [ Spread lhs, Spread rhs ]
+
+        Expr.Cons ->
+            Array [ lhs, Spread rhs ]
+
+        Expr.Div ->
+            Div lhs rhs
+
+        Expr.Eq ->
+            Eq lhs rhs
+
+        Expr.Gte ->
+            Gte lhs rhs
+
+        Expr.Gt ->
+            Gt lhs rhs
+
+        Expr.Lte ->
+            Lte lhs rhs
+
+        Expr.Lt ->
+            Lt lhs rhs
+
+        Expr.Mod ->
+            Mod lhs rhs
+
+        Expr.Mul ->
+            Mul lhs rhs
+
+        Expr.Neq ->
+            Neq lhs rhs
+
+        Expr.Or ->
+            Or lhs rhs
+
+        Expr.Sub ->
+            Sub lhs rhs
 
 
 checksFromPattern : Expression -> Core.Pattern -> Expression
@@ -311,6 +346,9 @@ return stmt =
 
         Return expr ->
             Return expr
+
+        Throw error ->
+            Throw error
 
 
 returnLast : List Statement -> List Statement
