@@ -35,7 +35,7 @@ type Expression
     | Eq Expression Expression
     | Gt Expression Expression
     | Gte Expression Expression
-    | IIFE Statement
+    | IIFE (Maybe ( String, Expression )) Statement
     | Index Expression Expression
     | Lt Expression Expression
     | Lte Expression Expression
@@ -62,7 +62,13 @@ fromExpr =
     let
         go exprF =
             case exprF of
-                Core.EAbs arg (Expr (IIFE body)) ->
+                Core.EAbs arg (Expr (IIFE (Just ( name, expr )) (Block body))) ->
+                    Expr <| Arrow arg (return <| Block <| Const name expr :: body)
+
+                Core.EAbs arg (Expr (IIFE (Just ( name, expr )) body)) ->
+                    Expr <| Arrow arg (return <| Block [ Const name expr, body ])
+
+                Core.EAbs arg (Expr (IIFE Nothing body)) ->
                     Expr <| Arrow arg (return body)
 
                 Core.EAbs arg body ->
@@ -142,12 +148,12 @@ fromExpr =
                 Core.EPat (Expr expr) cases ->
                     let
                         branchFromCase ( pattern, guard, body ) =
-                            If (checksFromPattern expr pattern)
+                            If (checksFromPattern (Var "$pat") pattern)
                                 (case guard of
                                     Just (Expr g) ->
                                         Block <|
                                             List.concat
-                                                [ assignmentsFromPattern expr pattern
+                                                [ assignmentsFromPattern (Var "$pat") pattern
                                                 , [ If g (return body) Nothing ]
                                                 ]
 
@@ -155,13 +161,17 @@ fromExpr =
                                         return <|
                                             Block <|
                                                 List.concat
-                                                    [ assignmentsFromPattern expr pattern
+                                                    [ assignmentsFromPattern (Var "$pat") pattern
                                                     , [ body ]
                                                     ]
                                 )
                                 Nothing
                     in
-                    Expr <| IIFE <| Block <| List.map (return << branchFromCase) cases
+                    [ Throw "Non-exhaustive pattern match" ]
+                        |> (++) (List.map (return << branchFromCase) cases)
+                        |> Block
+                        |> IIFE (Just ( "$pat", expr ))
+                        |> Expr
 
                 Core.EPat _ _ ->
                     Debug.todo ""

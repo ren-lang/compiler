@@ -5,7 +5,6 @@ module Ren.Stage.Emit exposing (..)
 -- IMPORTS ---------------------------------------------------------------------
 
 import Pretty
-import Ren.Ast.Expr exposing (Expr)
 import Ren.Ast.JavaScript as JavaScript
 import Ren.Data.Declaration as Declaration exposing (Declaration)
 import Ren.Data.Import exposing (Import)
@@ -66,7 +65,7 @@ fromDeclaration dec =
                         |> Pretty.a Pretty.space
                         |> Pretty.a (block body)
 
-                stmt ->
+                _ ->
                     Pretty.empty
                         |> Pretty.a
                             (if pub then
@@ -144,7 +143,7 @@ fromStatement stmt =
                 |> Pretty.a (Pretty.string "throw")
                 |> Pretty.a Pretty.space
                 |> Pretty.a (Pretty.string "new Error")
-                |> Pretty.a (Pretty.parens <| Pretty.string error)
+                |> Pretty.a (Pretty.parens <| Pretty.surround (Pretty.char '`') (Pretty.char '`') <| Pretty.string error)
 
 
 fromExpression : JavaScript.Expression -> Doc
@@ -214,7 +213,7 @@ fromExpression expr =
         JavaScript.Gte x y ->
             binop x ">=" y
 
-        JavaScript.IIFE stmt ->
+        JavaScript.IIFE Nothing stmt ->
             Pretty.empty
                 |> Pretty.a (Pretty.char '(')
                 |> Pretty.a (Pretty.string "()")
@@ -224,6 +223,17 @@ fromExpression expr =
                 |> Pretty.a (fromStatement stmt)
                 |> Pretty.a (Pretty.char ')')
                 |> Pretty.a (Pretty.string "()")
+
+        JavaScript.IIFE (Just ( name, expr_ )) stmt ->
+            Pretty.empty
+                |> Pretty.a (Pretty.char '(')
+                |> Pretty.a (Pretty.parens <| Pretty.string name)
+                |> Pretty.a Pretty.space
+                |> Pretty.a (Pretty.string "=>")
+                |> Pretty.a Pretty.space
+                |> Pretty.a (fromStatement stmt)
+                |> Pretty.a (Pretty.char ')')
+                |> Pretty.a (Pretty.parens <| fromExpression expr_)
 
         JavaScript.Index expr_ idx ->
             Pretty.empty
