@@ -1,649 +1,279 @@
-module Ren.AST.Expr exposing
-    ( Expr(..), ExprF(..)
-    , Error(..), Identifier(..), Literal(..), Operator(..), Pattern(..)
-    , annotation, references, shadows, bound, binds
-    , map, mapAnnotation, erase
-    , wrap, unwrap, cata, para
-    , coerceToNumber, coerceToBoolean, internalOperatorName
-    )
+module Ren.Ast.Expr exposing (..)
 
-{-|
-
-@docs Expr, ExprF
-@docs Error, Identifier, Literal, Operator, Pattern
-@docs annotation, references, shadows, bound, binds
-@docs map, mapAnnotation, erase
-@docs wrap, unwrap, cata, para
-@docs coerceToNumber, coerceToBoolean, internalOperatorName
-
--}
+{-| -}
 
 -- IMPORTS ---------------------------------------------------------------------
 
-import Data.Either exposing (Either)
-import Data.Tuple2
-import Data.Tuple3
-import Ren.Data.Type exposing (Type)
+import Ren.Ast.Core
+import Util.List as List
 
 
 
 -- TYPES -----------------------------------------------------------------------
 
 
-{-| Represents an expression node in an AST with some accompanying metadata. We
-might have `Expr Type` to represent a typed expression, or `Expr Span` to know
-where an expression exists in the source code.
--}
-type Expr meta
-    = Expr meta (ExprF (Expr meta))
+type Expr
+    = Access Expr String
+    | Binop Expr Operator Expr
+    | Call Expr (List Expr)
+    | If Expr Expr Expr
+    | Lambda (List String) Expr
+    | Let String Expr Expr
+    | Literal (Ren.Ast.Core.Literal Expr)
+    | Placeholder
+    | Scoped (List String) String
+    | Switch Expr (List ( Ren.Ast.Core.Pattern, Maybe Expr, Expr ))
+    | Var String
 
 
-{-| -}
-type ExprF expr
-    = Access expr (List String)
-    | Application expr (List expr)
-    | Annotation expr Type
-    | Block (List ( String, expr )) expr
-    | Conditional expr expr expr
-    | Error (Maybe Error)
-    | Identifier Identifier
-    | Infix Operator expr expr
-    | Lambda (List Pattern) expr
-    | Literal (Literal expr)
-    | Match expr (List ( Pattern, Maybe expr, expr ))
-
-
-{-| -}
-type Error
-    = MissingElement
-    | MissingSymbol String
-    | UnexpectedSymbol String
-
-
-{-| -}
-type Identifier
-    = Local String
-    | Scoped String Identifier
-    | Placeholder (Maybe String)
-
-
-{-| -}
-type Literal expr
-    = Array (List expr)
-    | Boolean Bool
-    | Number Float
-      --
-      -- Why isn't this a Dict? While its true that object keys should be unique,
-      -- that isn't the ASTs job! We have a separate verification step to determine
-      -- this.
-    | Record (List ( String, expr ))
-    | String String
-    | Template (List (Either String expr))
-    | Undefined
-    | Variant String (List expr)
-
-
-{-| -}
 type Operator
-    = Pipe
-    | Compose
-      -- MATHS
-    | Add
-    | Sub
-    | Mul
-    | Div
-    | Pow
-    | Mod
-      -- COMPARISON
-    | Eq
-    | NotEq
-    | Lt
-    | Lte
-    | Gt
-    | Gte
-      -- LOGIC
-    | And
-    | Or
-      -- ARRAYS
-    | Cons
-    | Join
+    = Add --    +
+    | And --    and
+    | Concat -- ++
+    | Cons --   ::
+    | Div --    /
+    | Eq --     ==
+    | Gte --    >=
+    | Gt --     >
+    | Lte --    <=
+    | Lt --     <
+    | Mod --    %
+    | Mul --    *
+    | Neq --    !=
+    | Or --     or
+    | Sub --    -
 
 
-{-| -}
-type Pattern
-    = ArrayDestructure (List Pattern)
-    | LiteralPattern (Literal Never)
-    | Name String
-    | RecordDestructure (List ( String, Maybe Pattern ))
-    | Spread String
-    | TemplateDestructure (List (Either String Pattern))
-    | Typeof String Pattern
-    | VariantDestructure String (List Pattern)
-    | Wildcard (Maybe String)
+
+-- CONSTANTS -------------------------------------------------------------------
+
+
+operators : List Operator
+operators =
+    [ Add, And, Concat, Cons, Div, Eq, Gte, Gt, Lte, Lt, Mod, Mul, Neq, Or, Sub ]
+
+
+operatorNames : List String
+operatorNames =
+    [ "add", "and", "concat", "cons", "div", "eq", "gte", "gt", "lte", "lt", "mod", "mul", "neq", "or", "sub" ]
+
+
+operatorSymbols : List String
+operatorSymbols =
+    [ "+", "and", "++", "::", "/", "==", ">=", ">", "<=", "<", "%", "*", "!=", "or", "-" ]
+
+
+
+-- CONSTRUCTORS ----------------------------------------------------------------
+
+
+{-| Take an expression from our core 𝝺-calculus representation and raise it up
+to the higher-level `Expr` type. This will take some of the magical variables
+used and expand them into more useful forms. For example, binary operators are
+represented in the core as:
+
+    Expr
+        (EApp
+            (Expr
+                (EApp
+                    (Expr
+                        (EApp
+                            (Expr (EVar "<binop>"))
+                            (Expr (ELit (LStr "add")))
+                        )
+                    )
+                    (Expr (EVar "x"))
+                )
+            )
+            (Expr (EVar "y"))
+        )
+
+-}
+raise : Ren.Ast.Core.Expr -> Expr
+raise =
+    let
+        go exprF =
+            case exprF of
+                Ren.Ast.Core.EAbs arg (Lambda args body) ->
+                    Lambda (arg :: args) body
+
+                Ren.Ast.Core.EAbs arg body ->
+                    Lambda [ arg ] body
+
+                Ren.Ast.Core.EApp (Call (Var "<access>") [ Literal (Ren.Ast.Core.LStr key) ]) expr ->
+                    Access expr key
+
+                Ren.Ast.Core.EApp (Call (Var "<binop>") [ (Literal (Ren.Ast.Core.LStr s)) as expr, lhs ]) rhs ->
+                    case operatorFromName s of
+                        Just op ->
+                            Binop expr op lhs
+
+                        Nothing ->
+                            Call expr [ lhs, rhs ]
+
+                Ren.Ast.Core.EApp (Call (Var "<if>") [ cond, then_ ]) else_ ->
+                    If cond then_ else_
+
+                Ren.Ast.Core.EApp (Call fun args) arg ->
+                    Call fun (args ++ [ arg ])
+
+                Ren.Ast.Core.EApp fun arg ->
+                    Call fun [ arg ]
+
+                Ren.Ast.Core.ELet pattern expr body ->
+                    Let pattern expr body
+
+                Ren.Ast.Core.ELit lit ->
+                    Literal lit
+
+                Ren.Ast.Core.EVar "<placeholder>" ->
+                    Placeholder
+
+                Ren.Ast.Core.EVar var ->
+                    case List.reverse <| String.split "$" var of
+                        [] ->
+                            Placeholder
+
+                        name :: [] ->
+                            Var name
+
+                        name :: scope ->
+                            Scoped (List.reverse scope) name
+
+                Ren.Ast.Core.EPat expr cases ->
+                    Switch expr cases
+    in
+    Ren.Ast.Core.fold go
+
+
+operatorFromName : String -> Maybe Operator
+operatorFromName name =
+    List.indexOf name operatorNames
+        |> Maybe.andThen (\i -> List.at i operators)
 
 
 
 -- QUERIES ---------------------------------------------------------------------
 
 
-{-| -}
-annotation : Expr meta -> meta
-annotation (Expr meta _) =
-    meta
-
-
-{-| -}
-references : Identifier -> Expr meta -> Bool
-references identifier expr =
-    let
-        localNameString =
-            case identifier of
-                Local name ->
-                    Just name
-
-                _ ->
-                    Nothing
-    in
-    cata
-        (\_ exprF ->
-            case exprF of
-                Access referencedInExpr _ ->
-                    referencedInExpr
-
-                Application referencedInExpr referencedInArgs ->
-                    referencedInExpr || List.any Basics.identity referencedInArgs
-
-                Annotation referencedInExpr _ ->
-                    referencedInExpr
-
-                Block bindings referencedInBody ->
-                    let
-                        shadowed ( binding, _ ) =
-                            Just binding == localNameString
-                    in
-                    List.all (Basics.not << shadowed) bindings
-                        && (referencedInBody || List.any Tuple.second bindings)
-
-                Conditional referencedInCond referencedInTrue referencedInFalse ->
-                    referencedInCond || referencedInTrue || referencedInFalse
-
-                Error _ ->
-                    False
-
-                Identifier id ->
-                    identifier == id
-
-                Infix _ referencedInLHS referencedInRHS ->
-                    referencedInLHS || referencedInRHS
-
-                Lambda args referencedInBody ->
-                    let
-                        shadowed pattern =
-                            Maybe.map2 binds localNameString (Just pattern)
-                                |> Maybe.withDefault False
-                    in
-                    List.all (Basics.not << shadowed) args && referencedInBody
-
-                Literal (Array referencedInElements) ->
-                    List.any Basics.identity referencedInElements
-
-                Literal (Boolean _) ->
-                    False
-
-                Literal (Number _) ->
-                    False
-
-                Literal (Record referencedInEntries) ->
-                    List.any Tuple.second referencedInEntries
-
-                Literal (String _) ->
-                    False
-
-                Literal (Template referencedInSegments) ->
-                    List.any (Data.Either.extract (always False) Basics.identity) referencedInSegments
-
-                Literal Undefined ->
-                    False
-
-                Literal (Variant _ referencedInArgs) ->
-                    List.any Basics.identity referencedInArgs
-
-                Match referencedInExpr referencedInCases ->
-                    let
-                        referencedInCase ( pattern, guard, referencedInBody ) =
-                            Basics.not (shadowed pattern) && (referencedInBody || referencedInGuard guard)
-
-                        shadowed pattern =
-                            Maybe.map2 binds localNameString (Just pattern)
-                                |> Maybe.withDefault False
-
-                        referencedInGuard guard =
-                            Maybe.withDefault False guard
-                    in
-                    referencedInExpr || List.any referencedInCase referencedInCases
-        )
-        expr
-
-
-{-| -}
-shadows : Identifier -> Expr meta -> Bool
-shadows identifier expr =
-    case identifier of
-        Local name ->
-            cata
-                (\_ exprF ->
-                    case exprF of
-                        Access shadowedInExpr _ ->
-                            shadowedInExpr
-
-                        Application shadowedInExpr shadowedInArgs ->
-                            shadowedInExpr || List.any Basics.identity shadowedInArgs
-
-                        Annotation shadowedInExpr _ ->
-                            shadowedInExpr
-
-                        Block shadowedInBindings shadowedInBody ->
-                            List.any (Tuple.first >> (==) name) shadowedInBindings
-                                || List.any Tuple.second shadowedInBindings
-                                || shadowedInBody
-
-                        Conditional shadowedInCond shadowedInTrue shadowedInFalse ->
-                            shadowedInCond || shadowedInTrue || shadowedInFalse
-
-                        Error _ ->
-                            False
-
-                        Identifier _ ->
-                            False
-
-                        Infix _ shadowedInLHS shadowedInRHS ->
-                            shadowedInLHS || shadowedInRHS
-
-                        Lambda args shadowedInBody ->
-                            List.any (binds name) args || shadowedInBody
-
-                        Literal (Array shadowedInElements) ->
-                            List.any Basics.identity shadowedInElements
-
-                        Literal (Boolean _) ->
-                            False
-
-                        Literal (Number _) ->
-                            False
-
-                        Literal (Record shadowedInEntries) ->
-                            List.any Tuple.second shadowedInEntries
-
-                        Literal (String _) ->
-                            False
-
-                        Literal (Template shadowedInSegments) ->
-                            List.any (Data.Either.extract (always False) Basics.identity) shadowedInSegments
-
-                        Literal Undefined ->
-                            False
-
-                        Literal (Variant _ shadowedInArgs) ->
-                            List.any Basics.identity shadowedInArgs
-
-                        Match shadowedInExpr shadowedInCases ->
-                            shadowedInExpr
-                                || List.any
-                                    (\( pattern, shadowedInGuard, shadowedInBody ) ->
-                                        binds name pattern
-                                            || Maybe.withDefault False shadowedInGuard
-                                            || shadowedInBody
-                                    )
-                                    shadowedInCases
-                )
-                expr
-
-        -- It's impossible to shadow a scoped or placeholder identifier. This
-        -- function accepts `Identifier`s rather than `String`s so maintain a
-        -- consistent API with `references`.
-        _ ->
-            False
-
-
-{-| -}
-bound : Pattern -> List String
-bound pattern =
-    case pattern of
-        ArrayDestructure patterns ->
-            List.concatMap bound patterns
-
-        LiteralPattern _ ->
-            []
-
-        Name n ->
-            [ n ]
-
-        RecordDestructure entries ->
-            List.concatMap (\( k, p ) -> Maybe.map bound p |> Maybe.withDefault [ k ]) entries
-
-        Spread n ->
-            [ n ]
-
-        TemplateDestructure segments ->
-            List.concatMap (Data.Either.extract (always []) bound) segments
-
-        Typeof _ pat ->
-            bound pat
-
-        VariantDestructure _ patterns ->
-            List.concatMap bound patterns
-
-        Wildcard _ ->
-            []
-
-
-{-| Checks to see if a Pattern introduces a new binding with a name that matches
-the argument. This is necessary in, for example, the `references` check because
-a binding may shadow the name we're checking is referenced and we don't want a
-false positive.
--}
-binds : String -> Pattern -> Bool
-binds name pattern =
-    case pattern of
-        ArrayDestructure patterns ->
-            List.any (binds name) patterns
-
-        LiteralPattern _ ->
-            False
-
-        Name n ->
-            name == n
-
-        RecordDestructure entries ->
-            List.any (\( k, p ) -> Maybe.map (binds name) p |> Maybe.withDefault (k == name)) entries
-
-        Spread n ->
-            name == n
-
-        TemplateDestructure segments ->
-            List.any (Data.Either.extract (always False) (binds name)) segments
-
-        Typeof _ pat ->
-            binds name pat
-
-        VariantDestructure _ patterns ->
-            List.any (binds name) patterns
-
-        Wildcard _ ->
-            False
+operatorName : Operator -> String
+operatorName op =
+    List.indexOf op operators
+        |> Maybe.andThen (\i -> List.at i operatorNames)
+        -- This default should never be hit, we hardcode the list of operators
+        -- and operatorNames.
+        |> Maybe.withDefault ""
 
 
 
 -- MANIPULATIONS ---------------------------------------------------------------
-
-
-{-| -}
-map : (a -> b) -> ExprF a -> ExprF b
-map f expression =
-    case expression of
-        Access expr accessors ->
-            Access (f expr) accessors
-
-        Application expr args ->
-            Application (f expr) (List.map f args)
-
-        Annotation expr t ->
-            Annotation (f expr) t
-
-        Block bindings body ->
-            Block (List.map (Tuple.mapSecond f) bindings) (f body)
-
-        Conditional cond true false ->
-            Conditional (f cond) (f true) (f false)
-
-        Error e ->
-            Error e
-
-        Identifier id ->
-            Identifier id
-
-        Infix op lhs rhs ->
-            Infix op (f lhs) (f rhs)
-
-        Lambda args body ->
-            Lambda args (f body)
-
-        Literal (Array entries) ->
-            Literal (Array (List.map f entries))
-
-        Literal (Boolean b) ->
-            Literal (Boolean b)
-
-        Literal (Number n) ->
-            Literal (Number n)
-
-        Literal (Record entries) ->
-            Literal (Record (List.map (Tuple.mapSecond f) entries))
-
-        Literal (String s) ->
-            Literal (String s)
-
-        Literal (Template segments) ->
-            Literal (Template (List.map (Data.Either.mapBoth identity f) segments))
-
-        Literal Undefined ->
-            Literal Undefined
-
-        Literal (Variant tag args) ->
-            Literal (Variant tag (List.map f args))
-
-        Match expr cases ->
-            Match (f expr) (List.map (Data.Tuple3.mapAll identity (Maybe.map f) f) cases)
-
-
-{-| -}
-mapAnnotation : (a -> b) -> Expr a -> Expr b
-mapAnnotation f (Expr a expression) =
-    Expr (f a) <|
-        case expression of
-            Access expr accessors ->
-                Access (mapAnnotation f expr) accessors
-
-            Application expr args ->
-                Application (mapAnnotation f expr) (List.map (mapAnnotation f) args)
-
-            Annotation expr t ->
-                Annotation (mapAnnotation f expr) t
-
-            Block bindings body ->
-                Block (List.map (Tuple.mapSecond (mapAnnotation f)) bindings) (mapAnnotation f body)
-
-            Conditional cond true false ->
-                Conditional (mapAnnotation f cond) (mapAnnotation f true) (mapAnnotation f false)
-
-            Error e ->
-                Error e
-
-            Identifier id ->
-                Identifier id
-
-            Infix op lhs rhs ->
-                Infix op (mapAnnotation f lhs) (mapAnnotation f rhs)
-
-            Lambda args body ->
-                Lambda args (mapAnnotation f body)
-
-            Literal (Array entries) ->
-                Literal (Array (List.map (mapAnnotation f) entries))
-
-            Literal (Boolean b) ->
-                Literal (Boolean b)
-
-            Literal (Number n) ->
-                Literal (Number n)
-
-            Literal (Record entries) ->
-                Literal (Record (List.map (Tuple.mapSecond (mapAnnotation f)) entries))
-
-            Literal (String s) ->
-                Literal (String s)
-
-            Literal (Template segments) ->
-                Literal (Template (List.map (Data.Either.mapBoth identity (mapAnnotation f)) segments))
-
-            Literal Undefined ->
-                Literal Undefined
-
-            Literal (Variant tag args) ->
-                Literal (Variant tag (List.map (mapAnnotation f) args))
-
-            Match expr cases ->
-                Match (mapAnnotation f expr) (List.map (Data.Tuple3.mapAll identity (Maybe.map (mapAnnotation f)) (mapAnnotation f)) cases)
-
-
-{-| -}
-erase : Expr a -> Expr ()
-erase =
-    mapAnnotation (always ())
-
-
-
--- RECURSION SCHEMES -----------------------------------------------------------
-
-
-{-| -}
-unwrap : Expr meta -> ExprF (Expr meta)
-unwrap (Expr _ expression) =
-    expression
-
-
-{-| -}
-wrap : meta -> ExprF (Expr meta) -> Expr meta
-wrap meta expression =
-    Expr meta expression
-
-
-{-| -}
-cata : (meta -> ExprF a -> a) -> Expr meta -> a
-cata f (Expr meta expression) =
-    expression |> map (cata f) |> f meta
-
-
-{-| -}
-para : (ExprF ( Expr meta, a ) -> a) -> Expr meta -> a
-para f a =
-    unwrap a |> map (Data.Tuple2.fromBy Basics.identity (para f)) |> f
-
-
-
 -- CONVERSIONS -----------------------------------------------------------------
 
 
-{-| -}
-coerceToNumber : ExprF a -> Maybe Float
-coerceToNumber expr =
-    case expr of
-        Literal (Boolean True) ->
-            Just 1
+{-| Lower a Ren expression to a core representation based on the 𝝺-calculus. Some
+constructs are represented using special internal variables, for example:
 
-        Literal (Boolean False) ->
-            Just 0
+    Access (Var "foo") "bar"
 
-        Literal (Number n) ->
-            Just n
+is represented as:
 
-        Literal (String s) ->
-            String.toFloat s
+    Expr
+        (EApp
+            (Expr
+                (EApp
+                    (Expr (EVar "<access>"))
+                    (Expr (ELit (LStr "bar")))
+                )
+            )
+            (Expr (EVar "foo"))
+        )
 
-        Literal Undefined ->
-            Just 0
+This is the reverse of `raise`. In fact, you if you call `raise (lower expr)` you
+should get back exactly the same expression.
 
-        _ ->
-            Nothing
+-}
+lower : Expr -> Ren.Ast.Core.Expr
+lower expr_ =
+    case expr_ of
+        Access expr key ->
+            Ren.Ast.Core.app (Ren.Ast.Core.var "<access>")
+                [ Ren.Ast.Core.str key
+                , lower expr
+                ]
+
+        Binop lhs op rhs ->
+            Ren.Ast.Core.app (Ren.Ast.Core.var "<binop>")
+                [ Ren.Ast.Core.str <| operatorName op
+                , lower lhs
+                , lower rhs
+                ]
+
+        Call fun args ->
+            Ren.Ast.Core.app (lower fun) <|
+                List.map lower args
+
+        If cond then_ else_ ->
+            Ren.Ast.Core.app (Ren.Ast.Core.var "<if>")
+                [ lower cond
+                , lower then_
+                , lower else_
+                ]
+
+        Lambda args body ->
+            Ren.Ast.Core.abs args <|
+                lower body
+
+        Let pattern expr body ->
+            Ren.Ast.Core.let_ [ ( pattern, lower expr ) ] <|
+                lower body
+
+        Literal (Ren.Ast.Core.LArr elements) ->
+            Ren.Ast.Core.arr <|
+                List.map lower elements
+
+        Literal (Ren.Ast.Core.LBool b) ->
+            Ren.Ast.Core.bool b
+
+        Literal (Ren.Ast.Core.LCon tag args) ->
+            Ren.Ast.Core.con tag <|
+                List.map lower args
+
+        Literal (Ren.Ast.Core.LNum n) ->
+            Ren.Ast.Core.num n
+
+        Literal (Ren.Ast.Core.LRec fields) ->
+            Ren.Ast.Core.rec <|
+                List.map (Tuple.mapSecond lower) fields
+
+        Literal (Ren.Ast.Core.LStr s) ->
+            Ren.Ast.Core.str s
+
+        Literal Ren.Ast.Core.LUnit ->
+            Ren.Ast.Core.unit
+
+        Placeholder ->
+            Ren.Ast.Core.var "<placeholder>"
+
+        Scoped scope name ->
+            Ren.Ast.Core.var <|
+                String.join "$" scope
+                    ++ "$"
+                    ++ name
+
+        Switch expr cases ->
+            Ren.Ast.Core.pat (lower expr) <|
+                List.map
+                    (\( pattern, guard, body ) ->
+                        ( pattern
+                        , Maybe.map lower guard
+                        , lower body
+                        )
+                    )
+                    cases
+
+        Var name ->
+            Ren.Ast.Core.var name
 
 
-{-| -}
-coerceToBoolean : ExprF a -> Maybe Bool
-coerceToBoolean expr =
-    case expr of
-        Literal (Boolean b) ->
-            Just b
 
-        Literal (Number n) ->
-            if n == 0 then
-                Just False
-
-            else
-                Just True
-
-        Literal (String s) ->
-            if String.toLower s == "true" then
-                Just True
-
-            else if String.toLower s == "false" then
-                Just False
-
-            else
-                String.toFloat s
-                    |> Maybe.map (Number >> Literal)
-                    |> Maybe.andThen coerceToBoolean
-
-        Literal Undefined ->
-            Just False
-
-        _ ->
-            Nothing
-
-
-{-| -}
-internalOperatorName : Operator -> String
-internalOperatorName op =
-    case op of
-        Pipe ->
-            "$op_pipe"
-
-        Compose ->
-            "$op_compose"
-
-        Add ->
-            "$op_add"
-
-        Sub ->
-            "$op_sub"
-
-        Mul ->
-            "$op_mul"
-
-        Div ->
-            "$op_div"
-
-        Pow ->
-            "$op_pow"
-
-        Mod ->
-            "$op_mod"
-
-        Eq ->
-            "$op_eq"
-
-        NotEq ->
-            "$op_notEq"
-
-        Lt ->
-            "$op_lt"
-
-        Lte ->
-            "$op_lte"
-
-        Gt ->
-            "$op_gt"
-
-        Gte ->
-            "$op_gte"
-
-        And ->
-            "$op_and"
-
-        Or ->
-            "$op_or"
-
-        Cons ->
-            "$op_cons"
-
-        Join ->
-            "$op_join"
+-- UTILS -----------------------------------------------------------------------
