@@ -333,6 +333,71 @@ assignmentsFromPattern expr pattern =
 
 
 -- QUERIES ---------------------------------------------------------------------
+
+
+{-| Used for determining when to wrap subexpressions in parentheses.
+As a result, only expressions which emit as multiple terms need to return a value.
+Uses precedence numbers from
+<https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Operator_Precedence>
+
+-}
+precedence : Expression -> Maybe Int
+precedence expr =
+    case expr of
+        Access _ _ ->
+            Just 18
+
+        Call _ _ ->
+            Just 18
+
+        Typeof _ ->
+            Just 15
+
+        Div _ _ ->
+            Just 13
+
+        Mul _ _ ->
+            Just 13
+
+        Mod _ _ ->
+            Just 13
+
+        Add _ _ ->
+            Just 12
+
+        Sub _ _ ->
+            Just 12
+
+        Gt _ _ ->
+            Just 10
+
+        Gte _ _ ->
+            Just 10
+
+        Lt _ _ ->
+            Just 10
+
+        Lte _ _ ->
+            Just 10
+
+        Eq _ _ ->
+            Just 9
+
+        Neq _ _ ->
+            Just 9
+
+        And _ _ ->
+            Just 5
+
+        Or _ _ ->
+            Just 4
+
+        _ ->
+            Nothing
+
+
+
+-- Literals do not have a precedence value
 -- MANIPULATIONS ---------------------------------------------------------------
 
 

@@ -5,7 +5,7 @@ module Ren.Stage.Emit exposing (..)
 -- IMPORTS ---------------------------------------------------------------------
 
 import Pretty
-import Ren.Ast.JavaScript as JavaScript
+import Ren.Ast.JavaScript as JavaScript exposing (precedence)
 import Ren.Data.Declaration as Declaration exposing (Declaration)
 import Ren.Data.Import exposing (Import)
 import Ren.Data.Module exposing (Module)
@@ -148,21 +148,25 @@ fromStatement stmt =
 
 fromExpression : JavaScript.Expression -> Doc
 fromExpression expr =
+    let
+        precedence = JavaScript.precedence expr
+
+    in
     case expr of
         JavaScript.Access expr_ [] ->
             fromExpression expr_
 
         JavaScript.Access expr_ keys ->
             Pretty.empty
-                |> Pretty.a (fromExpression expr_)
+                |> Pretty.a (fromExpressionWithOptionalParens precedence expr_)
                 |> Pretty.a (Pretty.char '.')
                 |> Pretty.a (Pretty.join (Pretty.char '.') (List.map Pretty.string keys))
 
         JavaScript.Add x y ->
-            binop x "+" y
+            binop precedence x "+" y
 
         JavaScript.And x y ->
-            binop x "&&" y
+            binop precedence x "&&" y
 
         JavaScript.Array elements ->
             Pretty.empty
@@ -202,16 +206,16 @@ fromExpression expr =
                 |> Pretty.a (Pretty.join Pretty.empty <| List.map (Pretty.parens << fromExpression) args)
 
         JavaScript.Div x y ->
-            binop x "/" y
+            binop precedence x "/" y
 
         JavaScript.Eq x y ->
-            binop x "==" y
+            binop precedence x "==" y
 
         JavaScript.Gt x y ->
-            binop x ">" y
+            binop precedence x ">" y
 
         JavaScript.Gte x y ->
-            binop x ">=" y
+            binop precedence x ">=" y
 
         JavaScript.IIFE Nothing stmt ->
             Pretty.empty
@@ -237,41 +241,40 @@ fromExpression expr =
 
         JavaScript.Index expr_ idx ->
             Pretty.empty
-                |> Pretty.a (fromExpression expr_)
+                |> Pretty.a (fromExpressionWithOptionalParens precedence expr_)
                 |> Pretty.a (Pretty.char '[')
                 |> Pretty.a (fromExpression idx)
                 |> Pretty.a (Pretty.char ']')
 
         JavaScript.Lt x y ->
-            binop x "<" y
+            binop precedence x "<" y
 
         JavaScript.Lte x y ->
-            binop x "<=" y
+            binop precedence x "<=" y
 
         JavaScript.Mod x y ->
-            binop x "%" y
+            binop precedence x "%" y
 
         JavaScript.Mul x y ->
-            binop x "*" y
+            binop precedence x "*" y
 
         JavaScript.Neq x y ->
-            binop x "!=" y
+            binop precedence x "!=" y
 
         JavaScript.Number n ->
             Pretty.string <| String.fromFloat n
 
         JavaScript.Or x y ->
-            Pretty.empty
-                |> Pretty.a (fromExpression x)
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.string "||")
-                |> Pretty.a Pretty.space
-                |> Pretty.a (fromExpression y)
+            binop precedence x "||" y
 
         JavaScript.Spread expr_ ->
             Pretty.empty
                 |> Pretty.a (Pretty.string "...")
-                |> Pretty.a (fromExpression expr_)
+                |> Pretty.a (fromExpression expr_
+                    |> case JavaScript.precedence expr_ of
+                        Just _ -> Pretty.parens
+                        Nothing -> identity
+                )
 
         JavaScript.String s ->
             Pretty.empty
@@ -280,13 +283,13 @@ fromExpression expr =
                 |> Pretty.a (Pretty.string "`")
 
         JavaScript.Sub x y ->
-            binop x "-" y
+            binop precedence x "-" y
 
         JavaScript.Typeof expr_ ->
             Pretty.empty
                 |> Pretty.a (Pretty.string "typeof")
                 |> Pretty.a Pretty.space
-                |> Pretty.a (fromExpression expr_)
+                |> Pretty.a (fromExpressionWithOptionalParens precedence expr_)
 
         JavaScript.Undefined ->
             Pretty.string "undefined"
@@ -340,11 +343,26 @@ doubleline =
         |> Pretty.a Pretty.line
 
 
-binop : JavaScript.Expression -> String -> JavaScript.Expression -> Doc
-binop lhs op rhs =
+binop : Maybe Int -> JavaScript.Expression -> String -> JavaScript.Expression -> Doc
+binop precedence lhs op rhs =
     Pretty.empty
-        |> Pretty.a (fromExpression lhs)
+        |> Pretty.a (fromExpressionWithOptionalParens precedence lhs)
         |> Pretty.a Pretty.space
         |> Pretty.a (Pretty.string op)
         |> Pretty.a Pretty.space
-        |> Pretty.a (fromExpression rhs)
+        |> Pretty.a (fromExpressionWithOptionalParens precedence rhs)
+
+
+fromExpressionWithOptionalParens : Maybe Int -> JavaScript.Expression -> Doc
+fromExpressionWithOptionalParens precedence expr =
+    fromExpression expr
+        |> (if
+                JavaScript.precedence expr
+                    |> Maybe.map2 (>) precedence
+                    |> Maybe.withDefault False
+            then
+                Pretty.parens
+
+            else
+                identity
+           )
