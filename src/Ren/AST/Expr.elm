@@ -6,19 +6,21 @@ module Ren.Ast.Expr exposing (..)
 
 import Ren.Ast.Core
 import Util.List as List
+import Util.Triple as Triple
 
 
 
 -- TYPES -----------------------------------------------------------------------
 
 
+{-| -}
 type Expr
     = Access Expr String
     | Binop Expr Operator Expr
     | Call Expr (List Expr)
     | If Expr Expr Expr
     | Lambda (List String) Expr
-    | Let String Expr Expr
+    | Let Ren.Ast.Core.Pattern Expr Expr
     | Literal (Ren.Ast.Core.Literal Expr)
     | Placeholder
     | Scoped (List String) String
@@ -26,6 +28,7 @@ type Expr
     | Var String
 
 
+{-| -}
 type Operator
     = Add --    +
     | And --    and
@@ -48,19 +51,49 @@ type Operator
 -- CONSTANTS -------------------------------------------------------------------
 
 
+{-| Elm (frustratingly) only allows `Set`s of `comparable` values, which does not
+include custom types. This is a list of every operator Ren has as the next-best
+thing.
+
+This is guaranteed to be in the same order as `operatorNames` and `operatorSymbols`
+
+-}
 operators : List Operator
 operators =
-    [ Add, And, Concat, Cons, Div, Eq, Gte, Gt, Lte, Lt, Mod, Mul, Neq, Or, Sub ]
+    List.map Triple.first operatorsNamesAndSymbols
 
 
+{-| -}
 operatorNames : List String
 operatorNames =
-    [ "add", "and", "concat", "cons", "div", "eq", "gte", "gt", "lte", "lt", "mod", "mul", "neq", "or", "sub" ]
+    List.map Triple.second operatorsNamesAndSymbols
 
 
+{-| -}
 operatorSymbols : List String
 operatorSymbols =
-    [ "+", "and", "++", "::", "/", "==", ">=", ">", "<=", "<", "%", "*", "!=", "or", "-" ]
+    List.map Triple.third operatorsNamesAndSymbols
+
+
+{-| -}
+operatorsNamesAndSymbols : List ( Operator, String, String )
+operatorsNamesAndSymbols =
+    [ ( Add, "add", "+" )
+    , ( And, "and", "and" )
+    , ( Concat, "concat", "++" )
+    , ( Cons, "cons", "::" )
+    , ( Div, "div", "/" )
+    , ( Eq, "eq", "==" )
+    , ( Gte, "gte", ">=" )
+    , ( Gt, "gt", ">" )
+    , ( Lte, "lte", "<=" )
+    , ( Lt, "lt", "<" )
+    , ( Mod, "mod", "%" )
+    , ( Mul, "mul", "*" )
+    , ( Neq, "neq", "!=" )
+    , ( Or, "or", "or" )
+    , ( Sub, "sub", "-" )
+    ]
 
 
 
@@ -120,8 +153,8 @@ raise =
                 Ren.Ast.Core.EApp fun arg ->
                     Call fun [ arg ]
 
-                Ren.Ast.Core.ELet pattern expr body ->
-                    Let pattern expr body
+                Ren.Ast.Core.ELet name expr body ->
+                    Let (Ren.Ast.Core.PVar name) expr body
 
                 Ren.Ast.Core.ELit lit ->
                     Literal lit
@@ -146,9 +179,17 @@ raise =
     Ren.Ast.Core.fold go
 
 
+{-| -}
 operatorFromName : String -> Maybe Operator
 operatorFromName name =
     List.indexOf name operatorNames
+        |> Maybe.andThen (\i -> List.at i operators)
+
+
+{-| -}
+operatorFromSymbol : String -> Maybe Operator
+operatorFromSymbol symbol =
+    List.indexOf symbol operatorSymbols
         |> Maybe.andThen (\i -> List.at i operators)
 
 
@@ -156,12 +197,23 @@ operatorFromName name =
 -- QUERIES ---------------------------------------------------------------------
 
 
+{-| -}
 operatorName : Operator -> String
 operatorName op =
-    List.indexOf op operators
-        |> Maybe.andThen (\i -> List.at i operatorNames)
+    List.find (Triple.first >> (==) op) operatorsNamesAndSymbols
+        |> Maybe.map Triple.second
         -- This default should never be hit, we hardcode the list of operators
-        -- and operatorNames.
+        -- and their names/symbols.
+        |> Maybe.withDefault ""
+
+
+{-| -}
+operatorSymbol : Operator -> String
+operatorSymbol op =
+    List.find (Triple.first >> (==) op) operatorsNamesAndSymbols
+        |> Maybe.map Triple.third
+        -- This default should never be hit, we hardcode the list of operators
+        -- and their names/symbols.
         |> Maybe.withDefault ""
 
 
@@ -223,9 +275,17 @@ lower expr_ =
             Ren.Ast.Core.abs args <|
                 lower body
 
-        Let pattern expr body ->
-            Ren.Ast.Core.let_ [ ( pattern, lower expr ) ] <|
+        Let (Ren.Ast.Core.PVar name) expr body ->
+            Ren.Ast.Core.let_ [ ( name, lower expr ) ] <|
                 lower body
+
+        Let pattern expr body ->
+            Ren.Ast.Core.pat (lower expr)
+                [ ( pattern
+                  , Nothing
+                  , lower body
+                  )
+                ]
 
         Literal (Ren.Ast.Core.LArr elements) ->
             Ren.Ast.Core.arr <|
