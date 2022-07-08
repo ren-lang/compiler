@@ -3,6 +3,11 @@ module Util.List exposing (..)
 {-| -}
 
 -- IMPORTS ---------------------------------------------------------------------
+
+import Set
+
+
+
 -- TYPES -----------------------------------------------------------------------
 -- CONSTANTS -------------------------------------------------------------------
 -- CONSTRUCTORS ----------------------------------------------------------------
@@ -45,7 +50,47 @@ indexOf a items =
     go 0 items
 
 
+find : (a -> Bool) -> List a -> Maybe a
+find f items =
+    List.filter f items
+        |> List.head
+
+
 
 -- MANIPULATIONS ---------------------------------------------------------------
+
+
+uniques : List comparable -> List comparable
+uniques =
+    Set.fromList >> Set.toList
+
+
+updateBy : (a -> Bool) -> (a -> a) -> List a -> List a
+updateBy p f items =
+    List.map
+        (\x ->
+            if p x then
+                f x
+
+            else
+                x
+        )
+        items
+
+
+
 -- CONVERSIONS -----------------------------------------------------------------
+
+
+uncons : List a -> Maybe ( a, List a )
+uncons items =
+    case items of
+        [] ->
+            Nothing
+
+        x :: rest ->
+            Just ( x, rest )
+
+
+
 -- UTILS -----------------------------------------------------------------------
