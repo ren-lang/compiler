@@ -4,7 +4,7 @@ module Ren.Data.Declaration exposing (..)
 
 -- IMPORTS ---------------------------------------------------------------------
 
-import Ren.Ast.Expr as Expr exposing (Expr)
+import Ren.Ast.Expr exposing (Expr)
 
 
 

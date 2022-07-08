@@ -8,8 +8,8 @@ import Pretty
 import Ren.Ast.Expr exposing (Expr)
 import Ren.Ast.JavaScript as JavaScript
 import Ren.Data.Declaration as Declaration exposing (Declaration)
-import Ren.Data.Import as Import exposing (Import)
-import Ren.Data.Module as Module exposing (Module)
+import Ren.Data.Import exposing (Import)
+import Ren.Data.Module exposing (Module)
 
 
 
