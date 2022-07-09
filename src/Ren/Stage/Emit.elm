@@ -7,7 +7,7 @@ module Ren.Stage.Emit exposing (..)
 import Pretty
 import Ren.Ast.JavaScript as JavaScript exposing (precedence)
 import Ren.Data.Declaration as Declaration exposing (Declaration)
-import Ren.Data.Import exposing (Import)
+import Ren.Data.Import as Import exposing (Import)
 import Ren.Data.Module exposing (Module)
 import Util.Math
 
@@ -25,66 +25,160 @@ type alias Doc =
     Pretty.Doc ()
 
 
+type alias Metadata =
+    { name : String
+    , root : String
+    , includeFFI : Bool
+    }
+
+
 
 -- CONSTANTS -------------------------------------------------------------------
 -- CONSTRUCTORS ----------------------------------------------------------------
 
 
-fromModule : Module -> Doc
-fromModule mod =
-    mod.declarations
-        |> List.map fromDeclaration
-        |> Pretty.join doubleline
+fromModule : Metadata -> Module -> Doc
+fromModule meta mod =
+    let
+        ffiImport =
+            concat
+                [ Pretty.string "import"
+                , Pretty.space
+                , Pretty.char '*'
+                , Pretty.space
+                , Pretty.string "as"
+                , Pretty.space
+                , Pretty.string "$FFI"
+                , Pretty.space
+                , Pretty.string "from"
+                , Pretty.space
+                , Pretty.char '\''
+                , Pretty.string <| "./" ++ meta.name ++ ".ffi.mjs"
+                , Pretty.char '\''
+                ]
+    in
+    Pretty.join doubleline <|
+        [ mod.imports
+            |> List.map (fromImport meta)
+            |> (::) (when meta.includeFFI ffiImport)
+            |> Pretty.join Pretty.line
+        , mod.declarations
+            |> List.map fromDeclaration
+            |> Pretty.join doubleline
+        ]
 
 
-fromImport : Import -> Doc
-fromImport imp =
-    Debug.todo ""
+fromImport : Metadata -> Import -> Doc
+fromImport meta imp =
+    let
+        path =
+            if Import.isPackage imp then
+                meta.root ++ "/.ren/pkg/" ++ imp.path
+
+            else
+                imp.path
+    in
+    case ( imp.name, imp.unqualified ) of
+        ( [], [] ) ->
+            concat
+                [ Pretty.string "import"
+                , Pretty.space
+                , Pretty.char '\''
+                , Pretty.string path
+                , Pretty.char '\''
+                ]
+
+        ( name, [] ) ->
+            concat
+                [ Pretty.string "import"
+                , Pretty.space
+                , Pretty.char '*'
+                , Pretty.space
+                , Pretty.string "as"
+                , Pretty.space
+                , Pretty.string <| String.join "$" name
+                , Pretty.space
+                , Pretty.string "from"
+                , Pretty.space
+                , Pretty.char '\''
+                , Pretty.string path
+                , Pretty.char '\''
+                ]
+
+        ( [], unqualified ) ->
+            concat
+                [ Pretty.string "import"
+                , Pretty.space
+                , Pretty.char '{'
+                , Pretty.join (Pretty.char ',') <| List.map Pretty.string unqualified
+                , Pretty.char '}'
+                , Pretty.space
+                , Pretty.string "from"
+                , Pretty.space
+                , Pretty.char '\''
+                , Pretty.string path
+                , Pretty.char '\''
+                ]
+
+        -- Because of the way JavaScript imports work, we'll need two separate
+        -- import statements if we want to qualify an entire module under a specific
+        -- name *and* introduce some unqualified bindings.
+        --
+        -- To save on duplication, we'll just call the `fromImport` again but
+        -- clear out the `unqualified` and `name` fields respectively to emit
+        -- just one import statement on each line.
+        ( _, _ ) ->
+            Pretty.join Pretty.line
+                [ fromImport meta { imp | unqualified = [] }
+                , fromImport meta { imp | name = [] }
+                ]
 
 
 fromDeclaration : Declaration -> Doc
 fromDeclaration dec =
     case dec of
         Declaration.Let pub name expr ->
-            Pretty.empty
-                |> Pretty.a (when pub <| Pretty.string "export ")
-                |> Pretty.a
-                    (case JavaScript.fromExpr expr of
-                        JavaScript.Expr (JavaScript.Arrow arg body) ->
-                            Pretty.empty
-                                |> Pretty.a (Pretty.string "function")
-                                |> Pretty.a Pretty.space
-                                |> Pretty.a (Pretty.string name)
-                                |> Pretty.a Pretty.space
-                                |> Pretty.a (Pretty.char '(')
-                                |> Pretty.a (Pretty.string arg)
-                                |> Pretty.a (Pretty.char ')')
-                                |> Pretty.a Pretty.space
-                                |> Pretty.a (block body)
+            concat
+                [ when pub <| Pretty.string "export "
+                , case JavaScript.fromExpr expr of
+                    JavaScript.Expr (JavaScript.Arrow arg body) ->
+                        concat
+                            [ Pretty.string "function"
+                            , Pretty.space
+                            , Pretty.string name
+                            , Pretty.space
+                            , Pretty.char '('
+                            , Pretty.string arg
+                            , Pretty.char ')'
+                            , Pretty.space
+                            , block body
+                            ]
 
-                        _ ->
-                            Pretty.empty
-                                |> Pretty.a (Pretty.string "const")
-                                |> Pretty.a Pretty.space
-                                |> Pretty.a (Pretty.string name)
-                                |> Pretty.a Pretty.space
-                                |> Pretty.a (Pretty.string "=")
-                                |> Pretty.a Pretty.space
-                                |> Pretty.a (fromStatement <| JavaScript.fromExpr expr)
-                    )
+                    _ ->
+                        concat
+                            [ Pretty.string "const"
+                            , Pretty.space
+                            , Pretty.string name
+                            , Pretty.space
+                            , Pretty.string "="
+                            , Pretty.space
+                            , fromStatement <| JavaScript.fromExpr expr
+                            ]
+                ]
 
         Declaration.Ext pub name str ->
-            Pretty.empty
-                |> Pretty.a (when pub <| Pretty.string "export ")
-                |> Pretty.a (Pretty.string "const")
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.string name)
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.char '=')
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.string "$FFI")
-                |> Pretty.a (Pretty.char '.')
-                |> Pretty.a (Pretty.string str)
+            concat
+                [ when pub <| Pretty.string "export "
+                , Pretty.string "const"
+                , Pretty.space
+                , Pretty.string name
+                , Pretty.space
+                , Pretty.char '='
+                , Pretty.space
+                , Pretty.string "$FFI"
+                , Pretty.char '.'
+                , Pretty.string str
+                ]
 
 
 fromStatement : JavaScript.Statement -> Doc
@@ -94,57 +188,61 @@ fromStatement stmt =
             block stmt
 
         JavaScript.Comment cmt ->
-            Pretty.empty
-                |> Pretty.a (Pretty.string "//")
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.string cmt)
+            concat
+                [ Pretty.string "//"
+                , Pretty.space
+                , Pretty.string cmt
+                ]
 
         JavaScript.Const name expr ->
-            Pretty.empty
-                |> Pretty.a (Pretty.string "const")
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.string name)
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.char '=')
-                |> Pretty.a Pretty.space
-                |> Pretty.a (fromExpression expr)
+            concat
+                [ Pretty.string "const"
+                , Pretty.space
+                , Pretty.string name
+                , Pretty.space
+                , Pretty.char '='
+                , Pretty.space
+                , fromExpression expr
+                ]
 
         JavaScript.Expr expr ->
             fromExpression expr
 
         JavaScript.If cond then_ else_ ->
-            Pretty.empty
-                |> Pretty.a (Pretty.string "if")
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.parens <| fromExpression cond)
-                |> Pretty.a Pretty.space
-                |> Pretty.a (block then_)
-                |> Pretty.a
-                    (case else_ of
-                        Just stmt_ ->
-                            Pretty.empty
-                                |> Pretty.a Pretty.space
-                                |> Pretty.a (Pretty.string "else")
-                                |> Pretty.a Pretty.space
-                                |> Pretty.a (block stmt_)
+            concat
+                [ Pretty.string "if"
+                , Pretty.space
+                , Pretty.parens <| fromExpression cond
+                , Pretty.space
+                , block then_
+                , case else_ of
+                    Just stmt_ ->
+                        concat
+                            [ Pretty.space
+                            , Pretty.string "else"
+                            , Pretty.space
+                            , block stmt_
+                            ]
 
-                        Nothing ->
-                            Pretty.empty
-                    )
+                    Nothing ->
+                        Pretty.empty
+                ]
 
         JavaScript.Return expr ->
-            Pretty.empty
-                |> Pretty.a Pretty.line
-                |> Pretty.a (Pretty.string "return")
-                |> Pretty.a Pretty.space
-                |> Pretty.a (fromExpression expr)
+            concat
+                [ Pretty.line
+                , Pretty.string "return"
+                , Pretty.space
+                , fromExpression expr
+                ]
 
         JavaScript.Throw error ->
-            Pretty.empty
-                |> Pretty.a (Pretty.string "throw")
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.string "new Error")
-                |> Pretty.a (Pretty.parens <| Pretty.surround (Pretty.char '`') (Pretty.char '`') <| Pretty.string error)
+            concat
+                [ Pretty.string "throw"
+                , Pretty.space
+                , Pretty.string "new Error"
+                , Pretty.parens <| Pretty.surround (Pretty.char '`') (Pretty.char '`') <| Pretty.string error
+                ]
 
 
 fromExpression : JavaScript.Expression -> Doc
@@ -158,10 +256,11 @@ fromExpression expr =
             fromExpression expr_
 
         JavaScript.Access expr_ keys ->
-            Pretty.empty
-                |> Pretty.a (parenthesise precedence expr_)
-                |> Pretty.a (Pretty.char '.')
-                |> Pretty.a (Pretty.join (Pretty.char '.') (List.map Pretty.string keys))
+            concat
+                [ parenthesise precedence expr_
+                , Pretty.char '.'
+                , Pretty.join (Pretty.char '.') (List.map Pretty.string keys)
+                ]
 
         JavaScript.Add x y ->
             binop precedence x "+" y
@@ -170,30 +269,28 @@ fromExpression expr =
             binop precedence x "&&" y
 
         JavaScript.Array elements ->
-            Pretty.empty
-                |> Pretty.a (Pretty.char '[')
-                |> Pretty.a
-                    (List.map fromExpression elements
-                        |> Pretty.join (Pretty.string ", ")
-                    )
-                |> Pretty.a (Pretty.char ']')
+            concat
+                [ Pretty.char '['
+                , List.map fromExpression elements
+                    |> Pretty.join (Pretty.string ", ")
+                , Pretty.char ']'
+                ]
 
         JavaScript.Arrow arg body ->
-            Pretty.empty
-                |> Pretty.a (Pretty.char '(')
-                |> Pretty.a (Pretty.string arg)
-                |> Pretty.a (Pretty.char ')')
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.string "=>")
-                |> Pretty.a Pretty.space
-                |> Pretty.a
-                    (case body of
-                        JavaScript.Return expr_ ->
-                            fromExpression expr_
+            concat
+                [ Pretty.char '('
+                , Pretty.string arg
+                , Pretty.char ')'
+                , Pretty.space
+                , Pretty.string "=>"
+                , Pretty.space
+                , case body of
+                    JavaScript.Return expr_ ->
+                        fromExpression expr_
 
-                        _ ->
-                            block body
-                    )
+                    _ ->
+                        block body
+                ]
 
         JavaScript.Bool True ->
             Pretty.string "true"
@@ -202,9 +299,10 @@ fromExpression expr =
             Pretty.string "false"
 
         JavaScript.Call fun args ->
-            Pretty.empty
-                |> Pretty.a (fromExpression fun)
-                |> Pretty.a (Pretty.join Pretty.empty <| List.map (Pretty.parens << fromExpression) args)
+            concat
+                [ fromExpression fun
+                , Pretty.join Pretty.empty <| List.map (Pretty.parens << fromExpression) args
+                ]
 
         JavaScript.Div x y ->
             binop precedence x "/" y
@@ -219,33 +317,36 @@ fromExpression expr =
             binop precedence x ">=" y
 
         JavaScript.IIFE Nothing stmt ->
-            Pretty.empty
-                |> Pretty.a (Pretty.char '(')
-                |> Pretty.a (Pretty.string "()")
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.string "=>")
-                |> Pretty.a Pretty.space
-                |> Pretty.a (fromStatement stmt)
-                |> Pretty.a (Pretty.char ')')
-                |> Pretty.a (Pretty.string "()")
+            concat
+                [ Pretty.char '('
+                , Pretty.string "()"
+                , Pretty.space
+                , Pretty.string "=>"
+                , Pretty.space
+                , fromStatement stmt
+                , Pretty.char ')'
+                , Pretty.string "()"
+                ]
 
         JavaScript.IIFE (Just ( name, expr_ )) stmt ->
-            Pretty.empty
-                |> Pretty.a (Pretty.char '(')
-                |> Pretty.a (Pretty.parens <| Pretty.string name)
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.string "=>")
-                |> Pretty.a Pretty.space
-                |> Pretty.a (fromStatement stmt)
-                |> Pretty.a (Pretty.char ')')
-                |> Pretty.a (Pretty.parens <| fromExpression expr_)
+            concat
+                [ Pretty.char '('
+                , Pretty.parens <| Pretty.string name
+                , Pretty.space
+                , Pretty.string "=>"
+                , Pretty.space
+                , fromStatement stmt
+                , Pretty.char ')'
+                , Pretty.parens <| fromExpression expr_
+                ]
 
         JavaScript.Index expr_ idx ->
-            Pretty.empty
-                |> Pretty.a (parenthesise precedence expr_)
-                |> Pretty.a (Pretty.char '[')
-                |> Pretty.a (fromExpression idx)
-                |> Pretty.a (Pretty.char ']')
+            concat
+                [ parenthesise precedence expr_
+                , Pretty.char '['
+                , fromExpression idx
+                , Pretty.char ']'
+                ]
 
         JavaScript.Lt x y ->
             binop precedence x "<" y
@@ -266,55 +367,55 @@ fromExpression expr =
             Pretty.string <| String.fromFloat n
 
         JavaScript.Object fields ->
-            Pretty.empty
-                |> Pretty.a (Pretty.char '{')
-                |> Pretty.a
-                    (fields
-                        |> List.map
-                            (\( k, v ) ->
-                                if JavaScript.Var k == v then
-                                    fromExpression v
+            concat
+                [ Pretty.char '{'
+                , fields
+                    |> List.map
+                        (\( k, v ) ->
+                            if JavaScript.Var k == v then
+                                fromExpression v
 
-                                else
-                                    Pretty.empty
-                                        |> Pretty.a (Pretty.string k)
-                                        |> Pretty.a Pretty.space
-                                        |> Pretty.a (Pretty.char ':')
-                                        |> Pretty.a Pretty.space
-                                        |> Pretty.a (fromExpression v)
-                            )
-                        |> Pretty.join (Pretty.string ", ")
-                    )
-                |> Pretty.a (Pretty.char '}')
+                            else
+                                concat
+                                    [ Pretty.string k
+                                    , Pretty.char ':'
+                                    , Pretty.space
+                                    , fromExpression v
+                                    ]
+                        )
+                    |> Pretty.join (Pretty.string ", ")
+                , Pretty.char '}'
+                ]
 
         JavaScript.Or x y ->
             binop precedence x "||" y
 
         JavaScript.Spread expr_ ->
-            Pretty.empty
-                |> Pretty.a (Pretty.string "...")
-                |> Pretty.a
-                    (if JavaScript.precedence expr_ == Util.Math.infinite then
-                        fromExpression expr_
+            concat
+                [ Pretty.string "..."
+                , if JavaScript.precedence expr_ == Util.Math.infinite then
+                    fromExpression expr_
 
-                     else
-                        Pretty.parens <| fromExpression expr_
-                    )
+                  else
+                    Pretty.parens <| fromExpression expr_
+                ]
 
         JavaScript.String s ->
-            Pretty.empty
-                |> Pretty.a (Pretty.string "`")
-                |> Pretty.a (Pretty.string s)
-                |> Pretty.a (Pretty.string "`")
+            concat
+                [ Pretty.string "`"
+                , Pretty.string s
+                , Pretty.string "`"
+                ]
 
         JavaScript.Sub x y ->
             binop precedence x "-" y
 
         JavaScript.Typeof expr_ ->
-            Pretty.empty
-                |> Pretty.a (Pretty.string "typeof")
-                |> Pretty.a Pretty.space
-                |> Pretty.a (parenthesise precedence expr_)
+            concat
+                [ Pretty.string "typeof"
+                , Pretty.space
+                , parenthesise precedence expr_
+                ]
 
         JavaScript.Undefined ->
             Pretty.string "undefined"
@@ -342,9 +443,9 @@ statements stmt =
 -- CONVERSIONS -----------------------------------------------------------------
 
 
-emit : Int -> Module -> String
-emit width mod =
-    Pretty.pretty width <| fromModule mod
+emit : Int -> Metadata -> Module -> String
+emit width meta mod =
+    Pretty.pretty width <| fromModule meta mod
 
 
 
@@ -353,29 +454,30 @@ emit width mod =
 
 block : JavaScript.Statement -> Doc
 block stmt =
-    Pretty.empty
-        |> Pretty.a (Pretty.char '{')
-        |> Pretty.a Pretty.line
-        |> Pretty.a (Pretty.join Pretty.line <| List.map fromStatement <| statements stmt)
-        |> Pretty.nest 4
-        |> Pretty.a Pretty.line
-        |> Pretty.a (Pretty.char '}')
+    concat
+        [ Pretty.char '{'
+        , Pretty.line
+        , (Pretty.join Pretty.line <| List.map fromStatement <| statements stmt)
+            |> Pretty.nest 4
+        , Pretty.line
+        , Pretty.char '}'
+        ]
 
 
 doubleline : Doc
 doubleline =
-    Pretty.line
-        |> Pretty.a Pretty.line
+    Pretty.line |> Pretty.a Pretty.line
 
 
 binop : Int -> JavaScript.Expression -> String -> JavaScript.Expression -> Doc
 binop precedence lhs op rhs =
-    Pretty.empty
-        |> Pretty.a (parenthesise precedence lhs)
-        |> Pretty.a Pretty.space
-        |> Pretty.a (Pretty.string op)
-        |> Pretty.a Pretty.space
-        |> Pretty.a (parenthesise precedence rhs)
+    concat
+        [ parenthesise precedence lhs
+        , Pretty.space
+        , Pretty.string op
+        , Pretty.space
+        , parenthesise precedence rhs
+        ]
 
 
 parenthesise : Int -> JavaScript.Expression -> Doc
@@ -394,3 +496,8 @@ when true doc =
 
     else
         Pretty.empty
+
+
+concat : List Doc -> Doc
+concat =
+    List.foldl Pretty.a Pretty.empty
