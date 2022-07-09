@@ -278,10 +278,10 @@ replacePlaceholders expr =
         -- the initial expression unchanged.
         replaceWhen args body =
             if List.isEmpty args then
-                Lambda args body
+                expr
 
             else
-                expr
+                Lambda args body
     in
     case expr of
         Access rec key ->
@@ -294,8 +294,7 @@ replacePlaceholders expr =
 
         Call fun args ->
             replaceWhen (names (fun :: args)) <|
-                Lambda (names (fun :: args)) <|
-                    Call (replace 0 fun) (replaceMany 1 args)
+                Call (replace 0 fun) (replaceMany 1 args)
 
         If cond then_ else_ ->
             replaceWhen (names [ cond, then_, else_ ]) <|
