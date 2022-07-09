@@ -219,6 +219,114 @@ operatorSymbol op =
 
 
 -- MANIPULATIONS ---------------------------------------------------------------
+
+
+replacePlaceholders : Expr -> Expr
+replacePlaceholders expr =
+    let
+        -- Creates a valid JavaScript variable name from a placholder.
+        name i =
+            "$temp" ++ String.fromInt i
+
+        -- Given a list of expressions, creates a list of valid JavaScript variable
+        -- names for each placeholder. Rather than incrementing sequentially,
+        -- the variable's name is based on the index of the placeholder:
+        --
+        --     [ Placeholder, Var "x", Placeholder ]
+        --
+        -- becomes:
+        --
+        --     [ "$temp0", "$temp2" ]
+        --
+        names exprs =
+            exprs
+                |> List.indexedMap
+                    (\i e ->
+                        if e == Placeholder then
+                            Just <| name i
+
+                        else
+                            Nothing
+                    )
+                |> List.filterMap Basics.identity
+
+        -- Replace a placeholder a variable. If the given expression is not an
+        -- expression this is a no-op.
+        replace i e =
+            if e == Placeholder then
+                Var <| name i
+
+            else
+                e
+
+        -- Replace all placeholders in an expression. An offset is used when
+        -- generating the variable names:
+        --
+        --     replaceWhen (fun :: args) <|
+        --         Lambda (names (fun :: args)) <|
+        --             -- Note that the names generated for `args` is offset by
+        --             -- 1 because we may have already replaced a placeholder in
+        --             -- `fun`.
+        --             Call (replace 0 fun) (replaceMany 1 args)
+        --
+        replaceMany offset exprs =
+            exprs
+                |> List.indexedMap (\i e -> replace (i + offset) e)
+
+        -- If the list of replacement names is not empty, create a lambda using
+        -- those names as the arguments and the supplied body, otherwise return
+        -- the initial expression unchanged.
+        replaceWhen args body =
+            if List.isEmpty args then
+                Lambda args body
+
+            else
+                expr
+    in
+    case expr of
+        Access rec key ->
+            replaceWhen (names [ rec ]) <|
+                Access (replace 0 rec) key
+
+        Binop lhs op rhs ->
+            replaceWhen (names [ lhs, rhs ]) <|
+                Binop (replace 0 lhs) op (replace 1 rhs)
+
+        Call fun args ->
+            replaceWhen (names (fun :: args)) <|
+                Lambda (names (fun :: args)) <|
+                    Call (replace 0 fun) (replaceMany 1 args)
+
+        If cond then_ else_ ->
+            replaceWhen (names [ cond, then_, else_ ]) <|
+                If (replace 0 cond)
+                    (replace 1 then_)
+                    (replace 2 else_)
+
+        Lambda _ _ ->
+            expr
+
+        Let _ _ _ ->
+            expr
+
+        Literal _ ->
+            expr
+
+        Placeholder ->
+            expr
+
+        Scoped _ _ ->
+            expr
+
+        Switch expr_ cases ->
+            replaceWhen (names [ expr_ ]) <|
+                Switch (replace 0 expr_) cases
+
+        Var _ ->
+            expr
+
+
+
 -- CONVERSIONS -----------------------------------------------------------------
 
 
@@ -246,7 +354,7 @@ should get back exactly the same expression.
 -}
 lower : Expr -> Ren.Ast.Core.Expr
 lower expr_ =
-    case expr_ of
+    case replacePlaceholders expr_ of
         Access expr key ->
             Ren.Ast.Core.app (Ren.Ast.Core.var "<access>")
                 [ Ren.Ast.Core.str key
@@ -312,7 +420,7 @@ lower expr_ =
             Ren.Ast.Core.unit
 
         Placeholder ->
-            Ren.Ast.Core.var "<placeholder>"
+            Ren.Ast.Core.unit
 
         Scoped scope name ->
             Ren.Ast.Core.var <|
