@@ -44,6 +44,7 @@ type Expression
     | Mul Expression Expression
     | Neq Expression Expression
     | Number Float
+    | Object (List ( String, Expression ))
     | Or Expression Expression
     | Spread Expression
     | String String
@@ -135,7 +136,7 @@ fromExpr =
                     Expr <| Number n
 
                 Core.ELit (Core.LRec fields) ->
-                    Debug.todo ""
+                    Expr <| Object <| List.filterMap (\( k, v ) -> Maybe.map (Tuple.pair k) (expression v)) fields
 
                 Core.ELit (Core.LStr s) ->
                     Expr <| String s

@@ -265,6 +265,28 @@ fromExpression expr =
         JavaScript.Number n ->
             Pretty.string <| String.fromFloat n
 
+        JavaScript.Object fields ->
+            Pretty.empty
+                |> Pretty.a (Pretty.char '{')
+                |> Pretty.a
+                    (fields
+                        |> List.map
+                            (\( k, v ) ->
+                                if JavaScript.Var k == v then
+                                    fromExpression v
+
+                                else
+                                    Pretty.empty
+                                        |> Pretty.a (Pretty.string k)
+                                        |> Pretty.a Pretty.space
+                                        |> Pretty.a (Pretty.char ':')
+                                        |> Pretty.a Pretty.space
+                                        |> Pretty.a (fromExpression v)
+                            )
+                        |> Pretty.join (Pretty.string ", ")
+                    )
+                |> Pretty.a (Pretty.char '}')
+
         JavaScript.Or x y ->
             binop precedence x "||" y
 
