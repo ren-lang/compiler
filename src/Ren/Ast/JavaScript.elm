@@ -307,27 +307,27 @@ assignmentsFromPattern expr pattern =
                 |> List.indexedMap (\i el -> assignmentsFromPattern (Index expr <| Number <| Basics.toFloat i) el)
                 |> List.concat
 
-        Core.PLit (Core.LBool b) ->
+        Core.PLit (Core.LBool _) ->
             []
 
         Core.PLit (Core.LCon _ args) ->
             assignmentsFromPattern expr <| Core.PLit <| Core.LArr <| Core.PAny :: args
 
-        Core.PLit (Core.LNum n) ->
+        Core.PLit (Core.LNum _) ->
             []
 
         Core.PLit (Core.LRec fields) ->
             fields
                 |> List.concatMap (\( k, v ) -> assignmentsFromPattern (Access expr [ k ]) v)
 
-        Core.PLit (Core.LStr s) ->
+        Core.PLit (Core.LStr _) ->
             []
 
         Core.PLit Core.LUnit ->
             []
 
-        Core.PTyp tag pat ->
-            Debug.todo ""
+        Core.PTyp _ pat ->
+            assignmentsFromPattern expr pat
 
         Core.PVar name ->
             [ Const name expr ]
