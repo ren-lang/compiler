@@ -9,6 +9,7 @@ import Ren.Ast.JavaScript as JavaScript exposing (precedence)
 import Ren.Data.Declaration as Declaration exposing (Declaration)
 import Ren.Data.Import exposing (Import)
 import Ren.Data.Module exposing (Module)
+import Util.Math
 
 
 
@@ -45,45 +46,45 @@ fromDeclaration : Declaration -> Doc
 fromDeclaration dec =
     case dec of
         Declaration.Let pub name expr ->
-            case JavaScript.fromExpr expr of
-                JavaScript.Expr (JavaScript.Arrow arg body) ->
-                    Pretty.empty
-                        |> Pretty.a
-                            (if pub then
-                                Pretty.string "export" |> Pretty.a Pretty.space
+            Pretty.empty
+                |> Pretty.a (when pub <| Pretty.string "export ")
+                |> Pretty.a
+                    (case JavaScript.fromExpr expr of
+                        JavaScript.Expr (JavaScript.Arrow arg body) ->
+                            Pretty.empty
+                                |> Pretty.a (Pretty.string "function")
+                                |> Pretty.a Pretty.space
+                                |> Pretty.a (Pretty.string name)
+                                |> Pretty.a Pretty.space
+                                |> Pretty.a (Pretty.char '(')
+                                |> Pretty.a (Pretty.string arg)
+                                |> Pretty.a (Pretty.char ')')
+                                |> Pretty.a Pretty.space
+                                |> Pretty.a (block body)
 
-                             else
-                                Pretty.empty
-                            )
-                        |> Pretty.a (Pretty.string "function")
-                        |> Pretty.a Pretty.space
-                        |> Pretty.a (Pretty.string name)
-                        |> Pretty.a Pretty.space
-                        |> Pretty.a (Pretty.char '(')
-                        |> Pretty.a (Pretty.string arg)
-                        |> Pretty.a (Pretty.char ')')
-                        |> Pretty.a Pretty.space
-                        |> Pretty.a (block body)
+                        _ ->
+                            Pretty.empty
+                                |> Pretty.a (Pretty.string "const")
+                                |> Pretty.a Pretty.space
+                                |> Pretty.a (Pretty.string name)
+                                |> Pretty.a Pretty.space
+                                |> Pretty.a (Pretty.string "=")
+                                |> Pretty.a Pretty.space
+                                |> Pretty.a (fromStatement <| JavaScript.fromExpr expr)
+                    )
 
-                _ ->
-                    Pretty.empty
-                        |> Pretty.a
-                            (if pub then
-                                Pretty.string "export" |> Pretty.a Pretty.space
-
-                             else
-                                Pretty.empty
-                            )
-                        |> Pretty.a (Pretty.string "const")
-                        |> Pretty.a Pretty.space
-                        |> Pretty.a (Pretty.string name)
-                        |> Pretty.a Pretty.space
-                        |> Pretty.a (Pretty.string "=")
-                        |> Pretty.a Pretty.space
-                        |> Pretty.a (fromStatement <| JavaScript.fromExpr expr)
-
-        Declaration.Ext pub name expr ->
-            Debug.todo ""
+        Declaration.Ext pub name str ->
+            Pretty.empty
+                |> Pretty.a (when pub <| Pretty.string "export ")
+                |> Pretty.a (Pretty.string "const")
+                |> Pretty.a Pretty.space
+                |> Pretty.a (Pretty.string name)
+                |> Pretty.a Pretty.space
+                |> Pretty.a (Pretty.char '=')
+                |> Pretty.a Pretty.space
+                |> Pretty.a (Pretty.string "$FFI")
+                |> Pretty.a (Pretty.char '.')
+                |> Pretty.a (Pretty.string str)
 
 
 fromStatement : JavaScript.Statement -> Doc
@@ -149,8 +150,8 @@ fromStatement stmt =
 fromExpression : JavaScript.Expression -> Doc
 fromExpression expr =
     let
-        precedence = JavaScript.precedence expr
-
+        precedence =
+            JavaScript.precedence expr
     in
     case expr of
         JavaScript.Access expr_ [] ->
@@ -158,7 +159,7 @@ fromExpression expr =
 
         JavaScript.Access expr_ keys ->
             Pretty.empty
-                |> Pretty.a (fromExpressionWithOptionalParens precedence expr_)
+                |> Pretty.a (parenthesise precedence expr_)
                 |> Pretty.a (Pretty.char '.')
                 |> Pretty.a (Pretty.join (Pretty.char '.') (List.map Pretty.string keys))
 
@@ -241,7 +242,7 @@ fromExpression expr =
 
         JavaScript.Index expr_ idx ->
             Pretty.empty
-                |> Pretty.a (fromExpressionWithOptionalParens precedence expr_)
+                |> Pretty.a (parenthesise precedence expr_)
                 |> Pretty.a (Pretty.char '[')
                 |> Pretty.a (fromExpression idx)
                 |> Pretty.a (Pretty.char ']')
@@ -270,11 +271,13 @@ fromExpression expr =
         JavaScript.Spread expr_ ->
             Pretty.empty
                 |> Pretty.a (Pretty.string "...")
-                |> Pretty.a (fromExpression expr_
-                    |> case JavaScript.precedence expr_ of
-                        Just _ -> Pretty.parens
-                        Nothing -> identity
-                )
+                |> Pretty.a
+                    (if JavaScript.precedence expr_ == Util.Math.infinite then
+                        fromExpression expr_
+
+                     else
+                        Pretty.parens <| fromExpression expr_
+                    )
 
         JavaScript.String s ->
             Pretty.empty
@@ -289,7 +292,7 @@ fromExpression expr =
             Pretty.empty
                 |> Pretty.a (Pretty.string "typeof")
                 |> Pretty.a Pretty.space
-                |> Pretty.a (fromExpressionWithOptionalParens precedence expr_)
+                |> Pretty.a (parenthesise precedence expr_)
 
         JavaScript.Undefined ->
             Pretty.string "undefined"
@@ -343,26 +346,29 @@ doubleline =
         |> Pretty.a Pretty.line
 
 
-binop : Maybe Int -> JavaScript.Expression -> String -> JavaScript.Expression -> Doc
+binop : Int -> JavaScript.Expression -> String -> JavaScript.Expression -> Doc
 binop precedence lhs op rhs =
     Pretty.empty
-        |> Pretty.a (fromExpressionWithOptionalParens precedence lhs)
+        |> Pretty.a (parenthesise precedence lhs)
         |> Pretty.a Pretty.space
         |> Pretty.a (Pretty.string op)
         |> Pretty.a Pretty.space
-        |> Pretty.a (fromExpressionWithOptionalParens precedence rhs)
+        |> Pretty.a (parenthesise precedence rhs)
 
 
-fromExpressionWithOptionalParens : Maybe Int -> JavaScript.Expression -> Doc
-fromExpressionWithOptionalParens precedence expr =
-    fromExpression expr
-        |> (if
-                JavaScript.precedence expr
-                    |> Maybe.map2 (>) precedence
-                    |> Maybe.withDefault False
-            then
-                Pretty.parens
+parenthesise : Int -> JavaScript.Expression -> Doc
+parenthesise precedence expr =
+    if precedence > JavaScript.precedence expr then
+        Pretty.parens <| fromExpression expr
 
-            else
-                identity
-           )
+    else
+        fromExpression expr
+
+
+when : Bool -> Doc -> Doc
+when true doc =
+    if true then
+        doc
+
+    else
+        Pretty.empty

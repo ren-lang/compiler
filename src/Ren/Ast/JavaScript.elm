@@ -7,6 +7,7 @@ module Ren.Ast.JavaScript exposing (..)
 import Ren.Ast.Core as Core
 import Ren.Ast.Expr as Expr exposing (Expr)
 import Util.List as List
+import Util.Math
 
 
 
@@ -339,65 +340,69 @@ assignmentsFromPattern expr pattern =
 As a result, only expressions which emit as multiple terms need to return a value.
 Uses precedence numbers from
 <https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Operator_Precedence>
-
 -}
-precedence : Expression -> Maybe Int
+precedence : Expression -> Int
 precedence expr =
     case expr of
         Access _ _ ->
-            Just 18
+            18
 
         Call _ _ ->
-            Just 18
+            18
 
         Typeof _ ->
-            Just 15
+            15
 
         Div _ _ ->
-            Just 13
+            13
 
         Mul _ _ ->
-            Just 13
+            13
 
         Mod _ _ ->
-            Just 13
+            13
 
         Add _ _ ->
-            Just 12
+            12
 
         Sub _ _ ->
-            Just 12
+            12
 
         Gt _ _ ->
-            Just 10
+            10
 
         Gte _ _ ->
-            Just 10
+            10
 
         Lt _ _ ->
-            Just 10
+            10
 
         Lte _ _ ->
-            Just 10
+            10
 
         Eq _ _ ->
-            Just 9
+            9
 
         Neq _ _ ->
-            Just 9
+            9
 
         And _ _ ->
-            Just 5
+            5
 
         Or _ _ ->
-            Just 4
+            4
 
+        -- The way we check if a current expression should be wrapped in parentheses,
+        -- we look at the expression's precedence and compare it to the current
+        -- precedence level. If it is lower, it get's wrapped.
+        --
+        -- Besides operators, other kinds of expression don't really need to deal
+        -- with this so we say they have infinite precedence and never wrap.
         _ ->
-            Nothing
+            Util.Math.infinite
 
 
 
--- Literals do not have a precedence value
 -- MANIPULATIONS ---------------------------------------------------------------
 
 
