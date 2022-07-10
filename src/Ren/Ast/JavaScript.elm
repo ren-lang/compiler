@@ -77,17 +77,12 @@ fromExpr =
                     Expr <| Arrow arg (return body)
 
                 Core.EApp (Expr (Call (Var "<access>") [ String key ])) stmt ->
-                    case expression stmt of
-                        Just expr ->
-                            Expr <| Access expr [ key ]
-
-                        Nothing ->
-                            Throw "[I"
+                    Expr <| Access (asExpression stmt) [ key ]
 
                 Core.EApp (Expr (Call (Var "<binop>") [ String op, lhs ])) stmt ->
-                    case ( Expr.operatorFromName op, expression stmt ) of
-                        ( Just operator, Just rhs ) ->
-                            Expr <| fromOperator operator lhs rhs
+                    case Expr.operatorFromName op of
+                        Just operator ->
+                            Expr <| fromOperator operator lhs (asExpression stmt)
 
                         _ ->
                             Comment "TODO: handle binop with non-expr arg"
@@ -108,35 +103,25 @@ fromExpr =
                     Block [ expr, body ]
 
                 Core.ELet name stmt (Block body) ->
-                    case expression stmt of
-                        Just expr ->
-                            Block <| Const name expr :: body
-
-                        Nothing ->
-                            Block body
+                    Block <| Const name (asExpression stmt) :: body
 
                 Core.ELet name stmt body ->
-                    case expression stmt of
-                        Just expr ->
-                            Block [ Const name expr, body ]
-
-                        Nothing ->
-                            body
+                    Block [ Const name (asExpression stmt), body ]
 
                 Core.ELit (Core.LArr elements) ->
-                    Expr <| Array <| List.filterMap expression elements
+                    Expr <| Array <| List.map asExpression elements
 
                 Core.ELit (Core.LBool b) ->
                     Expr <| Bool b
 
                 Core.ELit (Core.LCon tag args) ->
-                    Expr <| Array <| String tag :: List.filterMap expression args
+                    Expr <| Array <| String tag :: List.map asExpression args
 
                 Core.ELit (Core.LNum n) ->
                     Expr <| Number n
 
                 Core.ELit (Core.LRec fields) ->
-                    Expr <| Object <| List.filterMap (\( k, v ) -> Maybe.map (Tuple.pair k) (expression v)) fields
+                    Expr <| Object <| List.map (Tuple.mapSecond asExpression) fields
 
                 Core.ELit (Core.LStr s) ->
                     Expr <| String s
@@ -459,14 +444,14 @@ returnLast stmts =
 -- CONVERSIONS -----------------------------------------------------------------
 
 
-expression : Statement -> Maybe Expression
-expression stmt =
+asExpression : Statement -> Expression
+asExpression stmt =
     case stmt of
         Expr expr ->
-            Just expr
+            expr
 
         _ ->
-            Nothing
+            IIFE Nothing stmt
 
 
 
