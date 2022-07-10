@@ -226,6 +226,9 @@ fromOperator op lhs rhs =
         Expr.Or ->
             Or lhs rhs
 
+        Expr.Pipe ->
+            Call rhs [ lhs ]
+
         Expr.Sub ->
             Sub lhs rhs
 

@@ -20,20 +20,20 @@ type ExprF r
 
 
 type Pattern
-    = PAny --                           _
-    | PLit (Literal Pattern) --         [ x, _, @String s ]
-    | PTyp String Pattern --            @Number n
-    | PVar String --                    foo
+    = PAny
+    | PLit (Literal Pattern)
+    | PTyp String Pattern
+    | PVar String
 
 
 type Literal expr
-    = LArr (List expr) --               [ x, y, z ]
-    | LBool Bool --                     true false
-    | LCon String (List expr) --        #foo x y z
-    | LNum Float --                     1.23 456
-    | LRec (List ( String, expr )) --   { foo: bar }
-    | LStr String --                    "hello world"
-    | LUnit --                          ()
+    = LArr (List expr)
+    | LBool Bool
+    | LCon String (List expr)
+    | LNum Float
+    | LRec (List ( String, expr ))
+    | LStr String
+    | LUnit
 
 
 

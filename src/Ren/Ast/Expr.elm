@@ -44,6 +44,7 @@ type Operator
     | Mul --    *
     | Neq --    !=
     | Or --     or
+    | Pipe --   |>
     | Sub --    -
 
 
@@ -92,6 +93,7 @@ operatorsNamesAndSymbols =
     , ( Mul, "mul", "*" )
     , ( Neq, "neq", "!=" )
     , ( Or, "or", "or" )
+    , ( Pipe, "pipe", "|>" )
     , ( Sub, "sub", "-" )
     ]
 
