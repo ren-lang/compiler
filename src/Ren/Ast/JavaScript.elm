@@ -406,6 +406,16 @@ precedence expr =
             Util.Math.infinite
 
 
+statements : Statement -> List Statement
+statements stmt =
+    case stmt of
+        Block stmts ->
+            stmts
+
+        _ ->
+            [ stmt ]
+
+
 
 -- MANIPULATIONS ---------------------------------------------------------------
 

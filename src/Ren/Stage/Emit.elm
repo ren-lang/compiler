@@ -426,19 +426,6 @@ fromExpression expr =
 
 
 -- QUERIES ---------------------------------------------------------------------
-
-
-statements : JavaScript.Statement -> List JavaScript.Statement
-statements stmt =
-    case stmt of
-        JavaScript.Block stmts ->
-            stmts
-
-        _ ->
-            [ stmt ]
-
-
-
 -- MANIPULATIONS ---------------------------------------------------------------
 -- CONVERSIONS -----------------------------------------------------------------
 
@@ -457,7 +444,7 @@ block stmt =
     concat
         [ Pretty.char '{'
         , Pretty.line
-        , (Pretty.join Pretty.line <| List.map fromStatement <| statements stmt)
+        , (Pretty.join Pretty.line <| List.map fromStatement <| JavaScript.statements stmt)
             |> Pretty.nest 4
         , Pretty.line
         , Pretty.char '}'
