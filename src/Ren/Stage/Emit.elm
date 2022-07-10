@@ -230,8 +230,7 @@ fromStatement stmt =
 
         JavaScript.Return expr ->
             concat
-                [ Pretty.line
-                , Pretty.string "return"
+                [ Pretty.string "return"
                 , Pretty.space
                 , fromExpression expr
                 ]
@@ -441,11 +440,44 @@ emit width meta mod =
 
 block : JavaScript.Statement -> Doc
 block stmt =
+    let
+        withSpacing s =
+            case s of
+                JavaScript.Block _ ->
+                    concat [ Pretty.line, fromStatement s ]
+
+                JavaScript.Comment _ ->
+                    fromStatement s
+
+                JavaScript.Const _ _ ->
+                    fromStatement s
+
+                JavaScript.Expr _ ->
+                    concat [ Pretty.line, fromStatement s ]
+
+                JavaScript.If _ _ _ ->
+                    concat [ Pretty.line, fromStatement s ]
+
+                JavaScript.Return _ ->
+                    concat [ Pretty.line, fromStatement s ]
+
+                JavaScript.Throw _ ->
+                    concat [ Pretty.line, fromStatement s ]
+
+        statements =
+            case JavaScript.statements stmt of
+                s :: rest ->
+                    Pretty.indent 4 <|
+                        Pretty.join Pretty.line <|
+                            (fromStatement s :: List.map withSpacing rest)
+
+                [] ->
+                    Pretty.empty
+    in
     concat
         [ Pretty.char '{'
         , Pretty.line
-        , (Pretty.join Pretty.line <| List.map fromStatement <| JavaScript.statements stmt)
-            |> Pretty.nest 4
+        , statements
         , Pretty.line
         , Pretty.char '}'
         ]
