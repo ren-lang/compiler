@@ -20,8 +20,7 @@ type alias Stream =
 
 {-| -}
 type Token
-    = Boolean Bool
-    | Comment String
+    = Comment String
     | EOF
     | Identifier Case String
     | Keyword Keyword

@@ -34,8 +34,7 @@ stream =
 token : Parser Token
 token =
     Parser.oneOf
-        [ boolean
-        , number
+        [ number
         , string
         , keyword
         , symbol
@@ -45,15 +44,6 @@ token =
             |> Parser.getChompedString
             |> Parser.map Token.Unknown
         ]
-
-
-boolean : Parser Token
-boolean =
-    Parser.oneOf
-        [ Parser.keyword "true" |> Parser.map (\_ -> Token.Boolean True)
-        , Parser.keyword "false" |> Parser.map (\_ -> Token.Boolean False)
-        ]
-        |> Parser.backtrackable
 
 
 number : Parser Token

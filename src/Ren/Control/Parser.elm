@@ -3,7 +3,8 @@ module Ren.Control.Parser exposing
     , Parser(..), DeadEnd, Loop(..)
     , succeed, commit, problem
     , token, keyword, symbol, operator, end
-    , boolean, number, string
+    , identifier
+    , number, string
     , map, map2, andThen
     , keep, drop
     , lazy, backtrackable
@@ -25,7 +26,8 @@ module Ren.Control.Parser exposing
 
 @docs succeed, commit, problem
 @docs any, token, keyword, symbol, operator, end
-@docs boolean, number, string
+@docs identifier
+@docs number, string
 
 
 ## Manipulations
@@ -192,49 +194,56 @@ token error tok =
 
 {-| -}
 keyword : e -> Token.Keyword -> Parser ctx e ()
-keyword expecting kwd =
-    token expecting <| Token.Keyword kwd
+keyword error kwd =
+    token error <| Token.Keyword kwd
 
 
 {-| -}
 symbol : e -> Token.Symbol -> Parser ctx e ()
-symbol err sym =
-    token err <| Token.Symbol sym
+symbol error sym =
+    token error <| Token.Symbol sym
 
 
 {-| -}
 operator : e -> Expr.Operator -> Parser ctx e ()
-operator expecting op =
-    token expecting <| Token.Operator op
+operator error op =
+    token error <| Token.Operator op
 
 
 {-| -}
 end : e -> Parser ctx e ()
-end e =
+end error =
     Parser <|
         \state ->
             if Array.length state.stream <= state.offset then
                 Good False () state
 
             else
-                Bad False (bagFromState state e)
+                Bad False (bagFromState state error)
 
 
 
 --
 
 
-{-| -}
-boolean : e -> Parser ctx e Bool
-boolean expecting =
+identifier : e -> Token.Case -> Parser ctx e String
+identifier error casing =
     Parser <|
         \state ->
             case nextToken state of
-                Token.Boolean b ->
-                    Good True b { state | offset = state.offset + 1 }
+                Token.Identifier c s ->
+                    if c == casing then
+                        Good True s { state | offset = state.offset + 1 }
+
+                    else
+                        Bad False <| bagFromState state error
 
                 _ ->
-                    Bad False <| bagFromState state expecting
+                    Bad False <| bagFromState state error
+
+
+
+--
 
 
 {-| -}

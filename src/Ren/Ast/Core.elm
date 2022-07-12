@@ -2,7 +2,7 @@ module Ren.Ast.Core exposing
     ( Expr(..)
     , ExprF(..), Pattern(..), Literal(..)
     , app, lam, let_, var, pat
-    , arr, bool, con, num, rec, str, unit
+    , arr, con, num, rec, str
     , map, fold, foldWith, unfold
     )
 
@@ -26,7 +26,7 @@ will not change the result.
 ## Constructors
 
 @docs app, lam, let_, var, pat
-@docs arr, bool, con, num, rec, str, unit
+@docs arr, con, num, rec, str
 
 
 ## Queries
@@ -89,12 +89,10 @@ type Pattern
 {-| -}
 type Literal expr
     = LArr (List expr)
-    | LBool Bool
     | LCon String (List expr)
     | LNum Float
     | LRec (List ( String, expr ))
     | LStr String
-    | LUnit
 
 
 
@@ -142,12 +140,6 @@ arr elements =
 
 
 {-| -}
-bool : Bool -> Expr
-bool b =
-    Expr <| ELit <| LBool b
-
-
-{-| -}
 con : String -> List Expr -> Expr
 con tag args =
     Expr <| ELit <| LCon tag args
@@ -169,12 +161,6 @@ rec fields =
 str : String -> Expr
 str s =
     Expr <| ELit <| LStr s
-
-
-{-| -}
-unit : Expr
-unit =
-    Expr <| ELit <| LUnit
 
 
 {-| -}
@@ -215,9 +201,6 @@ map f exprF =
         ELit (LArr elements) ->
             ELit <| LArr <| List.map f elements
 
-        ELit (LBool b) ->
-            ELit <| LBool b
-
         ELit (LCon tag args) ->
             ELit <| LCon tag <| List.map f args
 
@@ -229,9 +212,6 @@ map f exprF =
 
         ELit (LStr s) ->
             ELit <| LStr s
-
-        ELit LUnit ->
-            ELit <| LUnit
 
         EVar name ->
             EVar name

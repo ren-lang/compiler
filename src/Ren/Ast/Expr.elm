@@ -250,22 +250,12 @@ operatorName op =
         |> Maybe.withDefault ""
 
 
-{-| -}
-operatorSymbol : Operator -> String
-operatorSymbol op =
-    List.find (Triple.first >> (==) op) operatorsNamesAndSymbols
-        |> Maybe.map Triple.third
-        -- This default should never be hit, we hardcode the list of operators
-        -- and their names/symbols.
-        |> Maybe.withDefault ""
-
-
 
 -- MANIPULATIONS ---------------------------------------------------------------
 
 
 replacePlaceholders : Expr -> Expr
-replacePlaceholders expr =
+replacePlaceholders =
     let
         -- Creates a valid JavaScript variable name from a placholder.
         name i =
@@ -319,53 +309,55 @@ replacePlaceholders expr =
         -- If the list of replacement names is not empty, create a lambda using
         -- those names as the arguments and the supplied body, otherwise return
         -- the initial expression unchanged.
-        replaceWhen args body =
+        replaceWhen expr args body =
             if List.isEmpty args then
                 expr
 
             else
                 Lambda args body
     in
-    case expr of
-        Access rec key ->
-            replaceWhen (names [ rec ]) <|
-                Access (replace 0 rec) key
+    transform <|
+        \expr ->
+            case expr of
+                Access rec key ->
+                    replaceWhen expr (names [ rec ]) <|
+                        Access (replace 0 rec) key
 
-        Binop op lhs rhs ->
-            replaceWhen (names [ lhs, rhs ]) <|
-                Binop op (replace 0 lhs) (replace 1 rhs)
+                Binop op lhs rhs ->
+                    replaceWhen expr (names [ lhs, rhs ]) <|
+                        Binop op (replace 0 lhs) (replace 1 rhs)
 
-        Call fun args ->
-            replaceWhen (names (fun :: args)) <|
-                Call (replace 0 fun) (replaceMany 1 args)
+                Call fun args ->
+                    replaceWhen expr (names (fun :: args)) <|
+                        Call (replace 0 fun) (replaceMany 1 args)
 
-        If cond then_ else_ ->
-            replaceWhen (names [ cond, then_, else_ ]) <|
-                If (replace 0 cond)
-                    (replace 1 then_)
-                    (replace 2 else_)
+                If cond then_ else_ ->
+                    replaceWhen expr (names [ cond, then_, else_ ]) <|
+                        If (replace 0 cond)
+                            (replace 1 then_)
+                            (replace 2 else_)
 
-        Lambda _ _ ->
-            expr
+                Lambda _ _ ->
+                    expr
 
-        Let _ _ _ ->
-            expr
+                Let _ _ _ ->
+                    expr
 
-        Literal _ ->
-            expr
+                Literal _ ->
+                    expr
 
-        Placeholder ->
-            expr
+                Placeholder ->
+                    expr
 
-        Scoped _ _ ->
-            expr
+                Scoped _ _ ->
+                    expr
 
-        Switch expr_ cases ->
-            replaceWhen (names [ expr_ ]) <|
-                Switch (replace 0 expr_) cases
+                Switch expr_ cases ->
+                    replaceWhen expr (names [ expr_ ]) <|
+                        Switch (replace 0 expr_) cases
 
-        Var _ ->
-            expr
+                Var _ ->
+                    expr
 
 
 transform : (Expr -> Expr) -> Expr -> Expr
@@ -450,9 +442,6 @@ lower expr_ =
             Ren.Ast.Core.arr <|
                 List.map lower elements
 
-        Literal (Ren.Ast.Core.LBool b) ->
-            Ren.Ast.Core.bool b
-
         Literal (Ren.Ast.Core.LCon tag args) ->
             Ren.Ast.Core.con tag <|
                 List.map lower args
@@ -467,11 +456,8 @@ lower expr_ =
         Literal (Ren.Ast.Core.LStr s) ->
             Ren.Ast.Core.str s
 
-        Literal Ren.Ast.Core.LUnit ->
-            Ren.Ast.Core.unit
-
         Placeholder ->
-            Ren.Ast.Core.unit
+            Ren.Ast.Core.con "undefined" []
 
         Scoped scope name ->
             Ren.Ast.Core.var <|

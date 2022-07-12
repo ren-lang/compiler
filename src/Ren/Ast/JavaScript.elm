@@ -111,8 +111,14 @@ fromExpr =
                 Core.ELit (Core.LArr elements) ->
                     Expr <| Array <| List.map asExpression elements
 
-                Core.ELit (Core.LBool b) ->
-                    Expr <| Bool b
+                Core.ELit (Core.LCon "true" []) ->
+                    Expr <| Bool True
+
+                Core.ELit (Core.LCon "false" []) ->
+                    Expr <| Bool False
+
+                Core.ELit (Core.LCon "undefined" []) ->
+                    Expr Undefined
 
                 Core.ELit (Core.LCon tag args) ->
                     Expr <| Array <| String tag :: List.map asExpression args
@@ -125,9 +131,6 @@ fromExpr =
 
                 Core.ELit (Core.LStr s) ->
                     Expr <| String s
-
-                Core.ELit Core.LUnit ->
-                    Expr Undefined
 
                 Core.EVar name ->
                     Expr <| Var name
@@ -242,8 +245,14 @@ checksFromPattern expr pattern =
                 -- need to call a method on the global `Array` object instead.
                 |> List.foldl (\y x -> And x y) (Call (Access (Var "globalThis") [ "Array", "isArray" ]) [ expr ])
 
-        Core.PLit (Core.LBool b) ->
-            Eq expr <| Bool b
+        Core.PLit (Core.LCon "true" []) ->
+            Eq expr <| Bool True
+
+        Core.PLit (Core.LCon "false" []) ->
+            Eq expr <| Bool False
+
+        Core.PLit (Core.LCon "undefined" []) ->
+            Eq expr Undefined
 
         Core.PLit (Core.LCon tag args) ->
             -- Variants are represented as arrays at runtime, where the first
@@ -263,9 +272,6 @@ checksFromPattern expr pattern =
 
         Core.PLit (Core.LStr s) ->
             Eq expr <| String s
-
-        Core.PLit Core.LUnit ->
-            Eq expr Undefined
 
         Core.PTyp "Array" pat ->
             And
@@ -295,9 +301,6 @@ assignmentsFromPattern expr pattern =
                 |> List.indexedMap (\i el -> assignmentsFromPattern (Index expr <| Number <| Basics.toFloat i) el)
                 |> List.concat
 
-        Core.PLit (Core.LBool _) ->
-            []
-
         Core.PLit (Core.LCon _ args) ->
             assignmentsFromPattern expr <| Core.PLit <| Core.LArr <| Core.PAny :: args
 
@@ -309,9 +312,6 @@ assignmentsFromPattern expr pattern =
                 |> List.concatMap (\( k, v ) -> assignmentsFromPattern (Access expr [ k ]) v)
 
         Core.PLit (Core.LStr _) ->
-            []
-
-        Core.PLit Core.LUnit ->
             []
 
         Core.PTyp _ pat ->
