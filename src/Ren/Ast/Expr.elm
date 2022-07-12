@@ -60,7 +60,7 @@ type Expr
     | Binop Operator Expr Expr
     | Call Expr (List Expr)
     | If Expr Expr Expr
-    | Lambda (List String) Expr
+    | Lambda (List Ren.Ast.Core.Pattern) Expr
     | Let Ren.Ast.Core.Pattern Expr Expr
     | Literal (Ren.Ast.Core.Literal Expr)
     | Placeholder
@@ -191,10 +191,10 @@ raise =
                     Call fun [ arg ]
 
                 Ren.Ast.Core.ELam arg (Lambda args body) ->
-                    Lambda (arg :: args) body
+                    Lambda (Ren.Ast.Core.PVar arg :: args) body
 
                 Ren.Ast.Core.ELam arg body ->
-                    Lambda [ arg ] body
+                    Lambda [ Ren.Ast.Core.PVar arg ] body
 
                 Ren.Ast.Core.ELet name expr body ->
                     Let (Ren.Ast.Core.PVar name) expr body
@@ -255,7 +255,7 @@ operatorName op =
 
 
 replacePlaceholders : Expr -> Expr
-replacePlaceholders =
+replacePlaceholders expr =
     let
         -- Creates a valid JavaScript variable name from a placholder.
         name i =
@@ -309,55 +309,57 @@ replacePlaceholders =
         -- If the list of replacement names is not empty, create a lambda using
         -- those names as the arguments and the supplied body, otherwise return
         -- the initial expression unchanged.
-        replaceWhen expr args body =
+        replaceWhen args body =
             if List.isEmpty args then
                 expr
 
             else
-                Lambda args body
+                Lambda (List.map Ren.Ast.Core.PVar args) body
     in
-    transform <|
-        \expr ->
-            case expr of
-                Access rec key ->
-                    replaceWhen expr (names [ rec ]) <|
-                        Access (replace 0 rec) key
+    case expr of
+        Access rec key ->
+            replaceWhen (names [ rec ]) <|
+                Access (replace 0 rec) key
 
-                Binop op lhs rhs ->
-                    replaceWhen expr (names [ lhs, rhs ]) <|
-                        Binop op (replace 0 lhs) (replace 1 rhs)
+        Binop op lhs rhs ->
+            replaceWhen (names [ lhs, rhs ]) <|
+                Binop op (replace 0 lhs) (replace 1 rhs)
 
-                Call fun args ->
-                    replaceWhen expr (names (fun :: args)) <|
-                        Call (replace 0 fun) (replaceMany 1 args)
+        Call fun args ->
+            replaceWhen (names (fun :: args)) <|
+                Call (replace 0 fun) (replaceMany 1 args)
 
-                If cond then_ else_ ->
-                    replaceWhen expr (names [ cond, then_, else_ ]) <|
-                        If (replace 0 cond)
-                            (replace 1 then_)
-                            (replace 2 else_)
+        If cond then_ else_ ->
+            replaceWhen (names [ cond, then_, else_ ]) <|
+                If (replace 0 cond)
+                    (replace 1 then_)
+                    (replace 2 else_)
 
-                Lambda _ _ ->
-                    expr
+        Lambda _ _ ->
+            expr
 
-                Let _ _ _ ->
-                    expr
+        Let _ _ _ ->
+            expr
 
-                Literal _ ->
-                    expr
+        Literal (Ren.Ast.Core.LArr elements) ->
+            replaceWhen (names elements) <|
+                Literal (Ren.Ast.Core.LArr <| replaceMany 0 elements)
 
-                Placeholder ->
-                    expr
+        Literal _ ->
+            expr
 
-                Scoped _ _ ->
-                    expr
+        Placeholder ->
+            expr
 
-                Switch expr_ cases ->
-                    replaceWhen expr (names [ expr_ ]) <|
-                        Switch (replace 0 expr_) cases
+        Scoped _ _ ->
+            expr
 
-                Var _ ->
-                    expr
+        Switch expr_ cases ->
+            replaceWhen (names [ expr_ ]) <|
+                Switch (replace 0 expr_) cases
+
+        Var _ ->
+            expr
 
 
 transform : (Expr -> Expr) -> Expr -> Expr
@@ -423,8 +425,36 @@ lower expr_ =
                 ]
 
         Lambda args body ->
-            Ren.Ast.Core.lam args <|
-                lower body
+            let
+                name i =
+                    "$temp" ++ String.fromInt i
+
+                names patterns =
+                    List.map name <| List.range 0 <| List.length patterns - 1
+            in
+            case List.partitionWhile Ren.Ast.Core.isPVar args of
+                ( [], patterns ) ->
+                    Ren.Ast.Core.lam (names patterns) <|
+                        Ren.Ast.Core.pat (Ren.Ast.Core.arr <| List.map Ren.Ast.Core.var <| names patterns)
+                            [ ( Ren.Ast.Core.PLit (Ren.Ast.Core.LArr patterns)
+                              , Nothing
+                              , lower body
+                              )
+                            ]
+
+                ( pvars, [] ) ->
+                    Ren.Ast.Core.lam (List.concatMap Ren.Ast.Core.bindings pvars) <|
+                        lower body
+
+                ( pvars, patterns ) ->
+                    Ren.Ast.Core.lam (List.concatMap Ren.Ast.Core.bindings pvars) <|
+                        Ren.Ast.Core.lam (names patterns) <|
+                            Ren.Ast.Core.pat (Ren.Ast.Core.arr <| List.map Ren.Ast.Core.var <| names patterns)
+                                [ ( Ren.Ast.Core.PLit (Ren.Ast.Core.LArr patterns)
+                                  , Nothing
+                                  , lower body
+                                  )
+                                ]
 
         Let (Ren.Ast.Core.PVar name) expr body ->
             Ren.Ast.Core.let_ [ ( name, lower expr ) ] <|
