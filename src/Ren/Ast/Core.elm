@@ -3,6 +3,8 @@ module Ren.Ast.Core exposing
     , ExprF(..), Pattern(..), Literal(..)
     , app, lam, let_, var, pat
     , arr, con, num, rec, str
+    , isPAny, isPLit, isPTyp, isPVar
+    , bindings
     , map, fold, foldWith, unfold
     )
 
@@ -30,6 +32,9 @@ will not change the result.
 
 
 ## Queries
+
+@docs isPAny, isPLit, isPTyp, isPVar
+@docs bindings
 
 
 ## Manipulations
@@ -124,8 +129,8 @@ lam args body =
 
 {-| -}
 let_ : List ( String, Expr ) -> Expr -> Expr
-let_ bindings body =
-    case bindings of
+let_ bindings_ body =
+    case bindings_ of
         [] ->
             body
 
@@ -182,6 +187,74 @@ pat expr cases =
 
 
 -- QUERIES ---------------------------------------------------------------------
+
+
+isPAny : Pattern -> Bool
+isPAny p =
+    case p of
+        PAny ->
+            True
+
+        _ ->
+            False
+
+
+isPLit : Pattern -> Bool
+isPLit p =
+    case p of
+        PLit _ ->
+            True
+
+        _ ->
+            False
+
+
+isPTyp : Pattern -> Bool
+isPTyp p =
+    case p of
+        PTyp _ _ ->
+            True
+
+        _ ->
+            False
+
+
+isPVar : Pattern -> Bool
+isPVar p =
+    case p of
+        PVar _ ->
+            True
+
+        _ ->
+            False
+
+
+bindings : Pattern -> List String
+bindings p =
+    case p of
+        PAny ->
+            []
+
+        PLit (LArr ps) ->
+            List.concatMap bindings ps
+
+        PLit (LCon _ ps) ->
+            List.concatMap bindings ps
+
+        PLit (LRec ps) ->
+            List.concatMap (bindings << Tuple.second) ps
+
+        PLit _ ->
+            []
+
+        PTyp _ ps ->
+            bindings ps
+
+        PVar name ->
+            [ name ]
+
+
+
 -- MANIPULATIONS ---------------------------------------------------------------
 
 
