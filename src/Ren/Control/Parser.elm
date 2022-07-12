@@ -2,8 +2,8 @@ module Ren.Control.Parser exposing
     ( run
     , Parser(..), DeadEnd, Loop(..)
     , succeed, commit, problem
-    , token, keyword, symbol, operator, end
-    , identifier
+    , any, token
+    , keyword, symbol, operator, identifier, end
     , number, string
     , map, map2, andThen
     , keep, drop
@@ -25,8 +25,8 @@ module Ren.Control.Parser exposing
 ## Constructors
 
 @docs succeed, commit, problem
-@docs any, token, keyword, symbol, operator, end
-@docs identifier
+@docs any, token
+@docs keyword, symbol, operator, identifier, end
 @docs number, string
 
 

@@ -94,7 +94,7 @@ operation ((Parsers { andThenOneOf }) as config) currentPrecedence expr =
 {-| -}
 literal : Parser c x e -> Parsers c x e -> Parser c x e
 literal =
-    always
+    Basics.always
 
 
 {-| -}
