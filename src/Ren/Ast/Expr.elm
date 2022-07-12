@@ -1,6 +1,47 @@
-module Ren.Ast.Expr exposing (..)
+module Ren.Ast.Expr exposing
+    ( Expr(..), Operator(..)
+    , operators, operatorNames, operatorSymbols
+    , raise
+    , operatorFromName, operatorFromSymbol
+    , transform
+    , lower
+    )
 
-{-| -}
+{-|
+
+
+## Types
+
+@docs Expr, Operator
+
+
+## Constants
+
+@docs operators, operatorNames, operatorSymbols
+
+
+## Constructors
+
+@docs raise
+@docs operatorFromName, operatorFromSymbol
+
+
+## Queries
+
+
+## Manipulations
+
+@docs transform
+
+
+## Conversions
+
+@docs lower
+
+
+## Utils
+
+-}
 
 -- IMPORTS ---------------------------------------------------------------------
 
@@ -16,7 +57,7 @@ import Util.Triple as Triple
 {-| -}
 type Expr
     = Access Expr String
-    | Binop Expr Operator Expr
+    | Binop Operator Expr Expr
     | Call Expr (List Expr)
     | If Expr Expr Expr
     | Lambda (List String) Expr
@@ -129,19 +170,13 @@ raise =
     let
         go exprF =
             case exprF of
-                Ren.Ast.Core.EAbs arg (Lambda args body) ->
-                    Lambda (arg :: args) body
-
-                Ren.Ast.Core.EAbs arg body ->
-                    Lambda [ arg ] body
-
                 Ren.Ast.Core.EApp (Call (Var "<access>") [ Literal (Ren.Ast.Core.LStr key) ]) expr ->
                     Access expr key
 
                 Ren.Ast.Core.EApp (Call (Var "<binop>") [ (Literal (Ren.Ast.Core.LStr s)) as expr, lhs ]) rhs ->
                     case operatorFromName s of
                         Just op ->
-                            Binop expr op lhs
+                            Binop op expr lhs
 
                         Nothing ->
                             Call expr [ lhs, rhs ]
@@ -154,6 +189,12 @@ raise =
 
                 Ren.Ast.Core.EApp fun arg ->
                     Call fun [ arg ]
+
+                Ren.Ast.Core.ELam arg (Lambda args body) ->
+                    Lambda (arg :: args) body
+
+                Ren.Ast.Core.ELam arg body ->
+                    Lambda [ arg ] body
 
                 Ren.Ast.Core.ELet name expr body ->
                     Let (Ren.Ast.Core.PVar name) expr body
@@ -290,9 +331,9 @@ replacePlaceholders expr =
             replaceWhen (names [ rec ]) <|
                 Access (replace 0 rec) key
 
-        Binop lhs op rhs ->
+        Binop op lhs rhs ->
             replaceWhen (names [ lhs, rhs ]) <|
-                Binop (replace 0 lhs) op (replace 1 rhs)
+                Binop op (replace 0 lhs) (replace 1 rhs)
 
         Call fun args ->
             replaceWhen (names (fun :: args)) <|
@@ -327,6 +368,15 @@ replacePlaceholders expr =
             expr
 
 
+transform : (Expr -> Expr) -> Expr -> Expr
+transform f =
+    let
+        applyTransformation =
+            Ren.Ast.Core.map lower >> Ren.Ast.Core.Expr >> raise >> f
+    in
+    lower >> Ren.Ast.Core.fold applyTransformation
+
+
 
 -- CONVERSIONS -----------------------------------------------------------------
 
@@ -355,14 +405,14 @@ should get back exactly the same expression.
 -}
 lower : Expr -> Ren.Ast.Core.Expr
 lower expr_ =
-    case replacePlaceholders expr_ of
+    case expr_ of
         Access expr key ->
             Ren.Ast.Core.app (Ren.Ast.Core.var "<access>")
                 [ Ren.Ast.Core.str key
                 , lower expr
                 ]
 
-        Binop lhs op rhs ->
+        Binop op lhs rhs ->
             Ren.Ast.Core.app (Ren.Ast.Core.var "<binop>")
                 [ Ren.Ast.Core.str <| operatorName op
                 , lower lhs
@@ -381,7 +431,7 @@ lower expr_ =
                 ]
 
         Lambda args body ->
-            Ren.Ast.Core.abs args <|
+            Ren.Ast.Core.lam args <|
                 lower body
 
         Let (Ren.Ast.Core.PVar name) expr body ->

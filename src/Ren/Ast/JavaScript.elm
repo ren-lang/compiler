@@ -64,18 +64,6 @@ fromExpr =
     let
         go exprF =
             case exprF of
-                Core.EAbs arg (Expr (IIFE (Just ( name, expr )) (Block body))) ->
-                    Expr <| Arrow arg (return <| Block <| Const name expr :: body)
-
-                Core.EAbs arg (Expr (IIFE (Just ( name, expr )) body)) ->
-                    Expr <| Arrow arg (return <| Block [ Const name expr, body ])
-
-                Core.EAbs arg (Expr (IIFE Nothing body)) ->
-                    Expr <| Arrow arg (return body)
-
-                Core.EAbs arg body ->
-                    Expr <| Arrow arg (return body)
-
                 Core.EApp (Expr (Call (Var "<access>") [ String key ])) stmt ->
                     Expr <| Access (asExpression stmt) [ key ]
 
@@ -95,6 +83,18 @@ fromExpr =
 
                 Core.EApp fun arg ->
                     Block [ fun, arg ]
+
+                Core.ELam arg (Expr (IIFE (Just ( name, expr )) (Block body))) ->
+                    Expr <| Arrow arg (return <| Block <| Const name expr :: body)
+
+                Core.ELam arg (Expr (IIFE (Just ( name, expr )) body)) ->
+                    Expr <| Arrow arg (return <| Block [ Const name expr, body ])
+
+                Core.ELam arg (Expr (IIFE Nothing body)) ->
+                    Expr <| Arrow arg (return body)
+
+                Core.ELam arg body ->
+                    Expr <| Arrow arg (return body)
 
                 Core.ELet "" expr (Block body) ->
                     Block <| expr :: body
