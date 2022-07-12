@@ -55,10 +55,12 @@ type Keyword
 
 {-| -}
 type Symbol
-    = Colon
+    = At
+    | Colon
     | Comma
     | Equal
     | FatArrow
+    | Hash
     | Brace Direction
     | Bracket Direction
     | Paren Direction
@@ -120,7 +122,7 @@ symbols =
             , [ "=", "=>" ]
 
             --
-            , [ "_" ]
+            , [ "@", "#", "_" ]
             ]
 
 
@@ -230,6 +232,12 @@ symbol s =
 
         "=>" ->
             Just <| Symbol FatArrow
+
+        "@" ->
+            Just <| Symbol At
+
+        "#" ->
+            Just <| Symbol Hash
 
         "_" ->
             Just <| Symbol Underscore
