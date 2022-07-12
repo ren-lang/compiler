@@ -78,6 +78,24 @@ updateBy p f items =
         items
 
 
+partitionWhile : (a -> Bool) -> List a -> ( List a, List a )
+partitionWhile p items =
+    let
+        go xs =
+            case xs of
+                [] ->
+                    ( [], [] )
+
+                x :: rest ->
+                    if p x then
+                        Tuple.mapFirst ((::) x) (go rest)
+
+                    else
+                        ( [], x :: rest )
+    in
+    go items
+
+
 
 -- CONVERSIONS -----------------------------------------------------------------
 
