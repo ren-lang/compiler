@@ -1,5 +1,5 @@
 module Ren.Control.Parser.Pratt exposing
-    ( Parsers, Config
+    ( Parsers, Config, Operator
     , expression, subExpression
     , literal, constant, prefix
     , infixLeft, infixRight, postfix
@@ -10,7 +10,7 @@ module Ren.Control.Parser.Pratt exposing
 
 ## Types
 
-@docs Parsers, Config
+@docs Parsers, Config, Operator
 
 
 ## Constructors
