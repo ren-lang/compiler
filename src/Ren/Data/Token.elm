@@ -43,6 +43,7 @@ type Keyword
     | Else
     | Exposing
     | Ext
+    | Fun
     | If
     | Import
     | Is
@@ -89,6 +90,9 @@ keywords =
 
             -- Declarations
             , [ "pub", "type", "let", "ext", "do" ]
+
+            --
+            , [ "fun" ]
 
             -- Conditionals
             , [ "if", "then", "else" ]
@@ -164,6 +168,9 @@ keyword s =
 
         "ext" ->
             Just <| Keyword Ext
+
+        "fun" ->
+            Just <| Keyword Fun
 
         "if" ->
             Just <| Keyword If
