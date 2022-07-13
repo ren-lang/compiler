@@ -5,11 +5,31 @@ module Ren.Stage.Emit exposing (..)
 -- IMPORTS ---------------------------------------------------------------------
 
 import Pretty
+import Ren.Ast.Expr as Expr exposing (Expr)
 import Ren.Ast.JavaScript as JavaScript exposing (precedence)
 import Ren.Data.Declaration as Declaration exposing (Declaration)
 import Ren.Data.Import as Import exposing (Import)
 import Ren.Data.Module exposing (Module)
 import Util.Math
+
+
+
+--
+
+
+emit : Int -> Metadata -> Module -> String
+emit width meta mod =
+    Pretty.pretty width <| fromModule meta mod
+
+
+emitDeclaration : Int -> Declaration -> String
+emitDeclaration width decl =
+    Pretty.pretty width <| fromDeclaration decl
+
+
+emitExpr : Int -> Expr -> String
+emitExpr width expr =
+    Pretty.pretty width <| fromStatement <| JavaScript.fromExpr <| Expr.desugar expr
 
 
 
@@ -33,7 +53,6 @@ type alias Metadata =
 
 
 
--- CONSTANTS -------------------------------------------------------------------
 -- CONSTRUCTORS ----------------------------------------------------------------
 
 
@@ -426,15 +445,6 @@ fromExpression expr =
 
 -- QUERIES ---------------------------------------------------------------------
 -- MANIPULATIONS ---------------------------------------------------------------
--- CONVERSIONS -----------------------------------------------------------------
-
-
-emit : Int -> Metadata -> Module -> String
-emit width meta mod =
-    Pretty.pretty width <| fromModule meta mod
-
-
-
 -- UTILS -----------------------------------------------------------------------
 
 
