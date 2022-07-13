@@ -3,7 +3,7 @@ module Ren.Ast.Expr exposing
     , operators, operatorNames, operatorSymbols
     , raise
     , operatorFromName, operatorFromSymbol
-    , transform
+    , transform, desugar
     , lower
     )
 
@@ -31,7 +31,7 @@ module Ren.Ast.Expr exposing
 
 ## Manipulations
 
-@docs transform
+@docs transform, desugar
 
 
 ## Conversions
@@ -65,7 +65,7 @@ type Expr
     | Literal (Ren.Ast.Core.Literal Expr)
     | Placeholder
     | Scoped (List String) String
-    | Switch Expr (List ( Ren.Ast.Core.Pattern, Maybe Expr, Expr ))
+    | Where Expr (List ( Ren.Ast.Core.Pattern, Maybe Expr, Expr ))
     | Var String
 
 
@@ -176,7 +176,7 @@ raise =
                 Ren.Ast.Core.EApp (Call (Var "<binop>") [ (Literal (Ren.Ast.Core.LStr s)) as expr, lhs ]) rhs ->
                     case operatorFromName s of
                         Just op ->
-                            Binop op expr lhs
+                            Binop op lhs rhs
 
                         Nothing ->
                             Call expr [ lhs, rhs ]
@@ -217,7 +217,7 @@ raise =
                             Scoped (List.reverse scope) name
 
                 Ren.Ast.Core.EPat expr cases ->
-                    Switch expr cases
+                    Where expr cases
     in
     Ren.Ast.Core.fold go
 
@@ -354,12 +354,33 @@ replacePlaceholders expr =
         Scoped _ _ ->
             expr
 
-        Switch expr_ cases ->
+        Where expr_ cases ->
             replaceWhen (names [ expr_ ]) <|
-                Switch (replace 0 expr_) cases
+                Where (replace 0 expr_) cases
 
         Var _ ->
             expr
+
+
+desugar : Expr -> Expr
+desugar expr =
+    let
+        transformations =
+            [ replacePlaceholders
+            ]
+
+        applyN old =
+            let
+                new =
+                    List.foldl (<|) old transformations
+            in
+            if Debug.log "old" old == Debug.log "new" new then
+                old
+
+            else
+                applyN new
+    in
+    transform applyN expr
 
 
 transform : (Expr -> Expr) -> Expr -> Expr
@@ -487,7 +508,7 @@ lower expr_ =
             Ren.Ast.Core.str s
 
         Placeholder ->
-            Ren.Ast.Core.con "undefined" []
+            Ren.Ast.Core.var "<placeholder>"
 
         Scoped scope name ->
             Ren.Ast.Core.var <|
@@ -495,7 +516,7 @@ lower expr_ =
                     ++ "$"
                     ++ name
 
-        Switch expr cases ->
+        Where expr cases ->
             Ren.Ast.Core.pat (lower expr) <|
                 List.map
                     (\( pattern, guard, body ) ->
