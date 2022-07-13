@@ -34,12 +34,82 @@ parse stream =
 
 expr : Parser () () Expr
 expr =
+    pratt
+        [ parenthesised
+        , lambda
+        , Pratt.literal <| literal Expr.Literal Expr.Var <| Parser.lazy (\_ -> expr)
+        ]
+
+
+pratt : List (Pratt.Parsers () () Expr -> Parser () () Expr) -> Parser () () Expr
+pratt parsers =
     Pratt.expression
-        { oneOf =
-            [ literal Expr.Literal Expr.Var << Pratt.subExpression 0
-            ]
-        , andThenOneOf = []
+        { oneOf = parsers
+        , andThenOneOf = operators
         }
+
+
+operators : List (Pratt.Operator () () Expr)
+operators =
+    let
+        operator ( assoc, precedence, sym ) =
+            assoc precedence (Parser.operator () sym) (Expr.Binop sym)
+    in
+    List.map operator
+        [ ( Pratt.infixLeft, 1, Expr.Pipe )
+        , ( Pratt.infixLeft, 4, Expr.Eq )
+        , ( Pratt.infixLeft, 4, Expr.Gt )
+        , ( Pratt.infixLeft, 4, Expr.Gte )
+        , ( Pratt.infixLeft, 4, Expr.Lt )
+        , ( Pratt.infixLeft, 4, Expr.Lte )
+        , ( Pratt.infixLeft, 4, Expr.Neq )
+        , ( Pratt.infixLeft, 6, Expr.Add )
+        , ( Pratt.infixLeft, 6, Expr.Sub )
+        , ( Pratt.infixLeft, 7, Expr.Div )
+        , ( Pratt.infixLeft, 7, Expr.Mul )
+        , ( Pratt.infixRight, 2, Expr.Or )
+        , ( Pratt.infixRight, 3, Expr.And )
+        , ( Pratt.infixRight, 5, Expr.Concat )
+        , ( Pratt.infixRight, 5, Expr.Cons )
+        ]
+
+
+
+--
+
+
+parenthesised : Pratt.Parsers () () Expr -> Parser () () Expr
+parenthesised parsers =
+    Parser.succeed Basics.identity
+        |> Parser.drop (Parser.symbol () <| Token.Paren Token.Left)
+        |> Parser.keep (Pratt.subExpression 0 parsers)
+        |> Parser.drop (Parser.symbol () <| Token.Paren Token.Right)
+
+
+
+--
+
+
+lambda : Pratt.Parsers () () Expr -> Parser () () Expr
+lambda parsers =
+    Parser.succeed (\pat rest body -> Expr.Lambda (pat :: rest) body)
+        |> Parser.drop (Parser.keyword () Token.Fun)
+        |> Parser.keep (Parser.debug "pattern" pattern)
+        |> Parser.keep
+            (Parser.loop []
+                (\pats ->
+                    Parser.oneOf
+                        [ Parser.succeed (\pat -> pat :: pats)
+                            |> Parser.keep (Parser.debug "pattern" pattern)
+                            |> Parser.map Parser.Continue
+                        , Parser.succeed ()
+                            |> Parser.drop (Parser.symbol () Token.FatArrow)
+                            |> Parser.map (\_ -> List.reverse pats)
+                            |> Parser.map Parser.Break
+                        ]
+                )
+            )
+        |> Parser.keep (Pratt.subExpression 0 parsers)
 
 
 
