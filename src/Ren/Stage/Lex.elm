@@ -143,6 +143,7 @@ fromSet options parser f =
                 |> Parser.andThen (Maybe.map Parser.succeed >> Maybe.withDefault (Parser.problem ""))
     in
     Set.toList options
+        |> List.sortBy (String.length >> (*) -1)
         |> List.map parseOption
         |> Parser.oneOf
 
