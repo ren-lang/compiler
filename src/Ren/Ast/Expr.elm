@@ -374,7 +374,7 @@ desugar expr =
                 new =
                     List.foldl (<|) old transformations
             in
-            if Debug.log "old" old == Debug.log "new" new then
+            if old == new then
                 old
 
             else

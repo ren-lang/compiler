@@ -164,7 +164,7 @@ fromExpr =
                         |> Expr
 
                 Core.EPat _ _ ->
-                    Debug.todo ""
+                    Throw "TODO: Core.EPat _ _ ->"
     in
     Expr.lower >> Core.fold go
 
