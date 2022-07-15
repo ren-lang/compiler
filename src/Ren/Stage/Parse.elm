@@ -319,13 +319,13 @@ lambda : Pratt.Parsers () () Expr -> Parser () () Expr
 lambda parsers =
     Parser.succeed (\pat rest body -> Expr.Lambda (pat :: rest) body)
         |> Parser.drop (Parser.keyword () Token.Fun)
-        |> Parser.keep (Parser.debug "pattern" pattern)
+        |> Parser.keep pattern
         |> Parser.keep
             (Parser.loop []
                 (\pats ->
                     Parser.oneOf
                         [ Parser.succeed (\pat -> pat :: pats)
-                            |> Parser.keep (Parser.debug "pattern" pattern)
+                            |> Parser.keep pattern
                             |> Parser.map Parser.Continue
                         , Parser.succeed ()
                             |> Parser.drop (Parser.symbol () Token.FatArrow)

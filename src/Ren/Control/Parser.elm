@@ -10,7 +10,6 @@ module Ren.Control.Parser exposing
     , lazy, backtrackable
     , loop, oneOf
     , chompIf, chompWhile
-    , debug
     )
 
 {-|
@@ -455,12 +454,3 @@ nextToken : State ctx -> Token
 nextToken state =
     Array.get state.offset state.stream
         |> Maybe.withDefault Token.EOF
-
-
-
---
-
-
-debug : String -> Parser ctx e a -> Parser ctx e a
-debug msg parser =
-    map (Debug.log msg) parser
