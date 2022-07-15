@@ -9,6 +9,13 @@ import Node.Gitly exposing (Gitly)
 import Node.Path exposing (Path)
 import Node.Process exposing (Process)
 import Process
+import Ren.Ast.Core as Core
+import Ren.Ast.Expr as Expr
+import Ren.Data.Declaration as Declaration
+import Ren.Data.Module as Module
+import Ren.Stage.Emit exposing (emit)
+import Ren.Stage.Lex exposing (lex)
+import Ren.Stage.Parse exposing (parseExpr)
 import Task
 
 
@@ -28,7 +35,7 @@ type alias FFI =
 
 {-| -}
 run : FFI -> Cmd Int
-run ({ chalk, path, process } as ffi) =
+run ({ chalk, fs, path, process } as ffi) =
     -- The first two elements in `argv` are the path of the Node executable and
     -- the path of the JavaScript file being executed respectively. I think we can
     -- safely ignore those, so we'll just drop them instead of pattern matching
@@ -52,6 +59,27 @@ run ({ chalk, path, process } as ffi) =
         "repl" :: [] ->
             exit 0
 
+        "eval" :: "--src" :: src :: _ ->
+            path.resolve [ process.cwd (), src ]
+                |> (\path_ -> fs.readFile path_ "utf-8")
+                |> Result.fromMaybe ()
+                |> Result.andThen lex
+                |> Result.andThen parseExpr
+                |> Result.map (Expr.desugar >> Expr.Lambda [ Core.PAny ])
+                |> Result.map (\expr -> Module.addLocalDeclaration True "$eval" expr Module.empty)
+                |> Result.map (emit 80 { name = "$eval", root = process.cwd (), includeFFI = False })
+                |> Result.map eval
+                |> Result.withDefault (exit 0)
+
+        "eval" :: str :: _ ->
+            lex str
+                |> Result.andThen parseExpr
+                |> Result.map (Expr.desugar >> Expr.Lambda [ Core.PAny ])
+                |> Result.map (\expr -> Module.addLocalDeclaration True "$eval" expr Module.empty)
+                |> Result.map (emit 80 { name = "$eval", root = process.cwd (), includeFFI = False })
+                |> Result.map eval
+                |> Result.withDefault (exit 0)
+
         command :: _ ->
             exitWithError 1 <|
                 String.join "\n"
@@ -60,13 +88,23 @@ run ({ chalk, path, process } as ffi) =
                     , "  - ren " ++ chalk.green "new " ++ " <project_name>"
                     , "  - ren " ++ chalk.green "make"
                     , "  - ren " ++ chalk.green "run " ++ " <file_name>"
+                    , "  - ren " ++ chalk.green "add " ++ " <package_name>"
+                    , "  - ren " ++ chalk.green "eval" ++ " <expr>"
                     , ""
                     ]
 
         [] ->
             exitWithMessage 0 <|
                 String.join "\n"
-                    []
+                    [ chalk.red "[Unknown Command] Here's everything I can do:"
+                    , ""
+                    , "  - ren " ++ chalk.green "new " ++ " <project_name>"
+                    , "  - ren " ++ chalk.green "make"
+                    , "  - ren " ++ chalk.green "run " ++ " <file_name>"
+                    , "  - ren " ++ chalk.green "add " ++ " <package_name>"
+                    , "  - ren " ++ chalk.green "eval" ++ " <expr>"
+                    , ""
+                    ]
 
 
 
@@ -145,3 +183,6 @@ port stderr : String -> Cmd msg
 
 
 port exec : ( String, List String ) -> Cmd msg
+
+
+port eval : String -> Cmd msg

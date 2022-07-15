@@ -66,6 +66,12 @@ setImmediate(() => {
             }
         })
     })
+
+    compiler.ports?.eval?.subscribe((src) => {
+        const mod = 'data:text/javascript;base64,' + btoa(src)
+
+        import(mod).then(({ $eval }) => console.dir($eval()))
+    })
 })
 
 // UTILS -----------------------------------------------------------------------
