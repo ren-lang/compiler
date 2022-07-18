@@ -316,6 +316,12 @@ fromExpression expr =
         JavaScript.Bool False ->
             Pretty.string "false"
 
+        JavaScript.Call ((JavaScript.Arrow _ _) as fun) args ->
+            concat
+                [ Pretty.parens <| fromExpression fun
+                , Pretty.join Pretty.empty <| List.map (Pretty.parens << fromExpression) args
+                ]
+
         JavaScript.Call fun args ->
             concat
                 [ fromExpression fun
