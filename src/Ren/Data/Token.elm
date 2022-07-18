@@ -337,4 +337,128 @@ isOperator s =
 
 -- MANIPULATIONS ---------------------------------------------------------------
 -- CONVERSIONS -----------------------------------------------------------------
+
+
+debug : Stream -> String
+debug stream =
+    let
+        toString tok =
+            case tok of
+                Comment s ->
+                    "<comment>" ++ " " ++ s
+
+                EOF ->
+                    "<eof>"
+
+                Identifier _ s ->
+                    "<identifier>" ++ " " ++ s
+
+                Keyword As ->
+                    "<keyword>" ++ " as"
+
+                Keyword Else ->
+                    "<keyword>" ++ " else"
+
+                Keyword Exposing ->
+                    "<keyword> exposing"
+
+                Keyword Ext ->
+                    "<keyword> ext"
+
+                Keyword Fun ->
+                    "<keyword> fun"
+
+                Keyword If ->
+                    "<keyword> if"
+
+                Keyword Import ->
+                    "<keyword> import"
+
+                Keyword Is ->
+                    "<keyword> is"
+
+                Keyword Let ->
+                    "<keyword> let"
+
+                Keyword Pkg ->
+                    "<keyword> pkg"
+
+                Keyword Pub ->
+                    "<keyword> pub"
+
+                Keyword Then ->
+                    "<keyword> then"
+
+                Keyword Where ->
+                    "<keyword where>"
+
+                Number n ->
+                    "<number>" ++ " " ++ String.fromFloat n
+
+                Operator op ->
+                    "<operator>" ++ " '" ++ Expr.operatorName op ++ "'"
+
+                String s ->
+                    "<string>" ++ " '" ++ s ++ "'"
+
+                Symbol At ->
+                    "<symbol> '@'"
+
+                Symbol Colon ->
+                    "<symbol> ':'"
+
+                Symbol Comma ->
+                    "<symbol> ','"
+
+                Symbol Equal ->
+                    "<symbol> '='"
+
+                Symbol FatArrow ->
+                    "<symbol> '=>'"
+
+                Symbol Hash ->
+                    "<symbol> '#'"
+
+                Symbol (Brace Left) ->
+                    "<symbol> '{'"
+
+                Symbol (Brace Right) ->
+                    "<symbol> '}'"
+
+                Symbol (Bracket Left) ->
+                    "<symbol> '['"
+
+                Symbol (Bracket Right) ->
+                    "<symbol> ']'"
+
+                Symbol (Paren Left) ->
+                    "<symbol> '('"
+
+                Symbol (Paren Right) ->
+                    "<symbol> ')'"
+
+                Symbol Period ->
+                    "<symbol> '.'"
+
+                Symbol Semicolon ->
+                    "<symbol> ';'"
+
+                Symbol Underscore ->
+                    "<symbol> _"
+
+                Unknown s ->
+                    "<unknown>" ++ " " ++ s
+    in
+    case stream of
+        [] ->
+            "[]"
+
+        token :: [] ->
+            "[ " ++ toString token ++ " ]"
+
+        _ :: _ ->
+            "[ " ++ String.join "\n, " (List.map toString stream) ++ "\n]"
+
+
+
 -- UTILS -----------------------------------------------------------------------

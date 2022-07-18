@@ -3,8 +3,9 @@ module Ren.Ast.Expr exposing
     , operators, operatorNames, operatorSymbols
     , raise
     , operatorFromName, operatorFromSymbol
+    , operatorName
     , transform, desugar
-    , lower
+    , lower, debug
     )
 
 {-|
@@ -28,6 +29,8 @@ module Ren.Ast.Expr exposing
 
 ## Queries
 
+@docs operatorName
+
 
 ## Manipulations
 
@@ -36,7 +39,7 @@ module Ren.Ast.Expr exposing
 
 ## Conversions
 
-@docs lower
+@docs lower, debug
 
 
 ## Utils
@@ -529,6 +532,154 @@ lower expr_ =
 
         Var name ->
             Ren.Ast.Core.var name
+
+
+debug : Expr -> String
+debug expr =
+    let
+        indent n s =
+            String.split "\n" s
+                |> List.map ((++) (String.repeat n " "))
+                |> String.join "\n"
+
+        debugPattern pat =
+            case pat of
+                Ren.Ast.Core.PAny ->
+                    "<pattern any>"
+
+                Ren.Ast.Core.PLit (Ren.Ast.Core.LArr patterns) ->
+                    String.join "\n" <|
+                        List.concat
+                            [ [ "<pattern array>" ]
+                            , List.map (indent 4 << debugPattern) patterns
+                            ]
+
+                Ren.Ast.Core.PLit (Ren.Ast.Core.LCon tag args) ->
+                    String.join "\n" <|
+                        List.concat
+                            [ [ "<pattern constructor> " ++ tag ]
+                            , List.map (indent 4 << debugPattern) args
+                            ]
+
+                Ren.Ast.Core.PLit (Ren.Ast.Core.LNum n) ->
+                    "<pattern number> " ++ String.fromFloat n
+
+                Ren.Ast.Core.PLit (Ren.Ast.Core.LStr s) ->
+                    "<pattern string> '" ++ s ++ "'"
+
+                Ren.Ast.Core.PLit (Ren.Ast.Core.LRec fields) ->
+                    String.join "\n" <|
+                        List.concat
+                            [ [ "<pattern record>" ]
+                            , List.map (indent 4 << debugFieldPattern) fields
+                            ]
+
+                Ren.Ast.Core.PTyp typ pattern ->
+                    String.join "\n" <|
+                        [ "<pattern type> @" ++ typ
+                        , debugPattern pattern
+                        ]
+
+                Ren.Ast.Core.PVar name ->
+                    "<pattern var> " ++ name
+
+        debugField ( key, val ) =
+            key ++ " " ++ debug val
+
+        debugFieldPattern ( key, pat ) =
+            key ++ " " ++ debugPattern pat
+
+        debugCase ( pattern, guard, body ) =
+            String.join "\n" <|
+                List.concat
+                    [ [ "<case>"
+                      , indent 4 <| debugPattern pattern
+                      ]
+                    , Maybe.withDefault [] <| Maybe.map (List.singleton << indent 4 << (++) "<guard> " << debug) guard
+                    , [ indent 4 <| debug body ]
+                    ]
+    in
+    String.join "\n" <|
+        case expr of
+            Access expr_ key ->
+                [ "<access> " ++ key
+                , indent 4 <| debug expr_
+                ]
+
+            Binop op lhs rhs ->
+                [ "<binop> " ++ operatorName op
+                , indent 4 <| debug lhs
+                , indent 4 <| debug rhs
+                ]
+
+            Call fun args ->
+                List.concat
+                    [ [ "<call>"
+                      , indent 4 <| debug fun
+                      ]
+                    , "" :: (List.intersperse "" <| List.map (indent 4 << debug) args)
+                    ]
+
+            If cond then_ else_ ->
+                [ "<if>"
+                , indent 4 <| debug cond
+                , indent 4 <| debug then_
+                , indent 4 <| debug else_
+                ]
+
+            Lambda args body ->
+                List.concat
+                    [ [ "<lambda>" ]
+                    , List.map (indent 4 << debugPattern) args
+                    , [ indent 4 <| debug body ]
+                    ]
+
+            Let name expr_ body ->
+                [ "<let> " ++ debugPattern name
+                , indent 4 <| debug expr_
+                , indent 4 <| debug body
+                ]
+
+            Literal (Ren.Ast.Core.LArr elements) ->
+                List.concat
+                    [ [ "<literal array>" ]
+                    , List.map (indent 4 << debug) elements
+                    ]
+
+            Literal (Ren.Ast.Core.LCon tag args) ->
+                List.concat
+                    [ [ "<literal constructor> #" ++ tag ]
+                    , List.map (indent 4 << debug) args
+                    ]
+
+            Literal (Ren.Ast.Core.LNum n) ->
+                [ "<literal number> " ++ String.fromFloat n ]
+
+            Literal (Ren.Ast.Core.LRec fields) ->
+                List.concat
+                    [ [ "<literal record>" ]
+                    , List.map (indent 4 << debugField) fields
+                    ]
+
+            Literal (Ren.Ast.Core.LStr s) ->
+                [ "<literal string> '" ++ s ++ "'" ]
+
+            Placeholder ->
+                [ "<placeholder>" ]
+
+            Scoped namespace name ->
+                [ "<scoped> " ++ String.join "." namespace ++ "." ++ name ]
+
+            Where expr_ cases ->
+                List.concat
+                    [ [ "<where>"
+                      , indent 4 <| debug expr_
+                      ]
+                    , List.map (indent 4 << debugCase) cases
+                    ]
+
+            Var name ->
+                [ "<var> " ++ name ]
 
 
 

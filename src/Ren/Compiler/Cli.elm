@@ -11,8 +11,8 @@ import Node.Process exposing (Process)
 import Process
 import Ren.Ast.Core as Core
 import Ren.Ast.Expr as Expr
-import Ren.Data.Declaration as Declaration
 import Ren.Data.Module as Module
+import Ren.Data.Token as Token
 import Ren.Stage.Emit exposing (emit)
 import Ren.Stage.Lex exposing (lex)
 import Ren.Stage.Parse exposing (parseExpr)
@@ -59,26 +59,43 @@ run ({ chalk, fs, path, process } as ffi) =
         "repl" :: [] ->
             exit 0
 
-        "eval" :: "--src" :: src :: _ ->
-            path.resolve [ process.cwd (), src ]
-                |> (\path_ -> fs.readFile path_ "utf-8")
-                |> Result.fromMaybe ()
-                |> Result.andThen lex
-                |> Result.andThen parseExpr
-                |> Result.map (Expr.desugar >> Expr.Lambda [ Core.PAny ])
-                |> Result.map (\expr -> Module.addLocalDeclaration True "$eval" expr Module.empty)
-                |> Result.map (emit 80 { name = "$eval", root = process.cwd (), includeFFI = False })
-                |> Result.map eval
-                |> Result.withDefault (exit 0)
+        "eval" :: str :: args ->
+            let
+                stream =
+                    lex str
 
-        "eval" :: str :: _ ->
-            lex str
-                |> Result.andThen parseExpr
-                |> Result.map (Expr.desugar >> Expr.Lambda [ Core.PAny ])
-                |> Result.map (\expr -> Module.addLocalDeclaration True "$eval" expr Module.empty)
-                |> Result.map (emit 80 { name = "$eval", root = process.cwd (), includeFFI = False })
-                |> Result.map eval
-                |> Result.withDefault (exit 0)
+                ast =
+                    Result.andThen parseExpr stream
+
+                javascript =
+                    ast
+                        |> Result.map (Expr.desugar >> Expr.Lambda [ Core.PAny ])
+                        |> Result.map (\expr -> Module.addLocalDeclaration True "$eval" expr Module.empty)
+                        |> Result.map (emit 80 { name = "$eval", root = process.cwd (), includeFFI = False })
+            in
+            if List.member "--dump-tokens" args then
+                Cmd.batch
+                    [ stream
+                        |> Result.map (stdout << Token.debug)
+                        |> Result.withDefault (stderr "lexer error")
+                    , exit 0
+                    ]
+
+            else if List.member "--dump-ast" args then
+                Cmd.batch
+                    [ ast
+                        |> Result.map (stdout << Expr.debug)
+                        |> Result.withDefault (stderr "parser error")
+                    , exit 0
+                    ]
+
+            else
+                Cmd.batch
+                    [ javascript
+                        |> Result.map eval
+                        |> Result.withDefault Cmd.none
+                    , exit 0
+                    ]
 
         command :: _ ->
             exitWithError 1 <|
