@@ -58,19 +58,22 @@ setImmediate(() => {
     })
 
     compiler.ports?.exec?.subscribe(([path, args]) => {
-        import(path).then(({ main }) => {
-            let result = typeof main == 'function' ? main(args) : main
+        import(path)
+            .then(({ main }) => {
+                let result = typeof main == 'function' ? main(args) : main
 
-            if (result != undefined) {
-                console.log(result)
-            }
-        })
+                if (result != undefined) {
+                    console.log(result)
+                }
+            }).catch(console.error)
     })
 
     compiler.ports?.eval?.subscribe((src) => {
         const mod = 'data:text/javascript;base64,' + btoa(src)
 
-        import(mod).then(({ $eval }) => console.dir($eval()))
+        import(mod)
+            .then(({ $eval }) => console.dir($eval()))
+            .catch(console.error)
     })
 })
 
