@@ -72,7 +72,7 @@ fromModule meta mod =
                 , Pretty.string "from"
                 , Pretty.space
                 , Pretty.char '\''
-                , Pretty.string <| "./" ++ meta.name ++ ".ffi.mjs"
+                , Pretty.string <| "./" ++ meta.name ++ ".ffi.js"
                 , Pretty.char '\''
                 ]
     in
