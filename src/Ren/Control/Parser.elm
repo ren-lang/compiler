@@ -8,7 +8,7 @@ module Ren.Control.Parser exposing
     , map, map2, andThen
     , keep, drop
     , lazy, backtrackable
-    , loop, oneOf
+    , loop, many, oneOf
     , chompIf, chompWhile
     )
 
@@ -39,7 +39,7 @@ module Ren.Control.Parser exposing
 ## Utils
 
 @docs lazy, backtrackable
-@docs loop, oneOf
+@docs loop, many, oneOf
 @docs chompIf, chompWhile
 @docs debug
 
@@ -373,6 +373,12 @@ loop init f =
                     Bad (p || p1) error
     in
     Parser <| \state -> go False init state
+
+
+{-| -}
+many : (List a -> List (Parser ctx e (Loop (List a) (List a)))) -> Parser ctx e (List a)
+many parsers =
+    loop [] <| \xs -> oneOf <| parsers xs
 
 
 {-| Just like [`Parser.oneOf`](Parser#oneOf)
