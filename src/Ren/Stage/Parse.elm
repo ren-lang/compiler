@@ -37,7 +37,7 @@ parseDeclaration stream =
 parseExpr : Token.Stream -> Result () Expr
 parseExpr stream =
     stream
-        |> Parser.run (expr { withCalls = True })
+        |> Parser.run (expr { inArgPosition = False })
         |> Result.mapError (\_ -> ())
 
 
@@ -171,7 +171,7 @@ localDeclaration pub =
         |> Parser.drop (Parser.keyword () Token.Let)
         |> Parser.keep (Parser.identifier () Token.Lower)
         |> Parser.drop (Parser.symbol () Token.Equal)
-        |> Parser.keep (expr { withCalls = True })
+        |> Parser.keep (expr { inArgPosition = True })
 
 
 externalDeclaration : Bool -> Parser () () Declaration
@@ -187,76 +187,39 @@ externalDeclaration pub =
 -- PARSERS: EXPRESSIONS --------------------------------------------------------
 
 
-expr : { withCalls : Bool } -> Parser () () Expr
-expr { withCalls } =
-    let
-        chainAccess expr_ key keys =
-            List.foldl (\k e -> Expr.Access e k) (Expr.Access expr_ key) keys
+type alias Context =
+    { inArgPosition : Bool
+    }
 
-        access expr_ =
-            Parser.succeed (chainAccess expr_)
-                |> Parser.drop (Parser.symbol () Token.Period)
-                |> Parser.keep (Parser.identifier () Token.Lower)
-                |> Parser.keep
-                    (Parser.loop []
-                        (\ks ->
-                            Parser.oneOf
-                                [ Parser.succeed (\k -> k :: ks)
-                                    |> Parser.drop (Parser.symbol () Token.Period)
-                                    |> Parser.keep (Parser.identifier () Token.Lower)
-                                    |> Parser.map Parser.Continue
-                                , Parser.succeed ()
-                                    |> Parser.map (\_ -> List.reverse ks)
-                                    |> Parser.map Parser.Break
-                                ]
-                        )
-                    )
 
-        call expr_ =
-            Parser.succeed (\e es -> Expr.Call expr_ (e :: es))
-                |> Parser.keep (Parser.lazy <| \_ -> expr { withCalls = False })
-                |> Parser.keep
-                    (Parser.loop []
-                        (\es ->
-                            Parser.oneOf
-                                [ Parser.succeed (\e -> e :: es)
-                                    |> Parser.keep (Parser.lazy <| \_ -> expr { withCalls = False })
-                                    |> Parser.map Parser.Continue
-                                , Parser.succeed ()
-                                    |> Parser.map (\_ -> List.reverse es)
-                                    |> Parser.map Parser.Break
-                                ]
-                        )
-                    )
-    in
+expr : Context -> Parser () () Expr
+expr context =
     Pratt.expression
         { oneOf =
-            [ \parsers ->
-                Parser.oneOf
-                    [ literal Expr.Literal Expr.Var <| Pratt.subExpression 0 parsers
-                    , parenthesised
-                    , placeholder
-                    , scoped
-                    , var
+            List.concat
+                [ callables context
+
+                -- When we're parsing function application or constructor literals,
+                -- some expressions are never valid unless parenthesised. We keep
+                -- track of this in the context, and if we are in an argument
+                -- position then we don't want to include these parsers at all,
+                -- they're already covered in `callables` in `parenthesised`.
+                , if context.inArgPosition then
+                    []
+
+                  else
+                    [ if_
+                    , lambda
+                    , let_
+                    , where_
                     ]
-                    |> Parser.andThen
-                        (\expr_ ->
-                            Parser.oneOf <|
-                                --
-                                List.filterMap Basics.identity
-                                <|
-                                    [ Just <| access expr_
-                                    , Maybe.when withCalls <| call expr_
-                                    , Just <| Parser.succeed expr_
-                                    ]
-                        )
-            , if_
-            , lambda
-            , let_
-            , where_
-            , Pratt.literal <| literal Expr.Literal Expr.Var <| Parser.lazy (\_ -> expr { withCalls = True })
-            ]
-        , andThenOneOf = operators
+                ]
+        , andThenOneOf =
+            if context.inArgPosition then
+                []
+
+            else
+                operators
         }
 
 
@@ -288,6 +251,17 @@ operators =
         ]
 
 
+callables : Context -> List (Pratt.Parsers () () Expr -> Parser () () Expr)
+callables context =
+    List.map (Parser.andThen access >> Parser.andThen (call context) >> Pratt.literal)
+        [ parenthesised
+        , placeholder
+        , scoped
+        , var
+        , literal context Expr.Literal Expr.Var <| Parser.lazy <| \_ -> expr { inArgPosition = True }
+        ]
+
+
 
 --
 
@@ -296,12 +270,68 @@ parenthesised : Parser () () Expr
 parenthesised =
     Parser.succeed Basics.identity
         |> Parser.drop (Parser.symbol () <| Token.Paren Token.Left)
-        |> Parser.keep (Parser.lazy <| \_ -> expr { withCalls = True })
+        |> Parser.keep (Parser.lazy <| \_ -> expr { inArgPosition = False })
         |> Parser.drop (Parser.symbol () <| Token.Paren Token.Right)
 
 
 
 --
+
+
+access : Expr -> Parser () () Expr
+access expr_ =
+    let
+        chainAccessors key keys =
+            List.foldl (\k e -> Expr.Access e k) (Expr.Access expr_ key) keys
+    in
+    Parser.oneOf
+        [ Parser.succeed chainAccessors
+            |> Parser.drop (Parser.symbol () <| Token.Period)
+            |> Parser.keep (Parser.identifier () Token.Lower)
+            |> Parser.keep
+                (Parser.many
+                    (\ks ->
+                        [ Parser.succeed (\k -> k :: ks)
+                            |> Parser.drop (Parser.symbol () Token.Period)
+                            |> Parser.keep (Parser.identifier () Token.Lower)
+                            |> Parser.map Parser.Continue
+                        , Parser.succeed ()
+                            |> Parser.map (\_ -> List.reverse ks)
+                            |> Parser.map Parser.Break
+                        ]
+                    )
+                )
+        , Parser.succeed expr_
+        ]
+
+
+call : Context -> Expr -> Parser () () Expr
+call { inArgPosition } expr_ =
+    let
+        argParser =
+            Parser.lazy <| \_ -> expr { inArgPosition = True }
+    in
+    if inArgPosition then
+        Parser.succeed expr_
+
+    else
+        Parser.oneOf
+            [ Parser.succeed (\arg args -> Expr.Call expr_ (arg :: args))
+                |> Parser.keep argParser
+                |> Parser.keep
+                    (Parser.many
+                        (\args ->
+                            [ Parser.succeed (\arg -> arg :: args)
+                                |> Parser.keep argParser
+                                |> Parser.map Parser.Continue
+                            , Parser.succeed ()
+                                |> Parser.map (\_ -> List.reverse args)
+                                |> Parser.map Parser.Break
+                            ]
+                        )
+                    )
+            , Parser.succeed expr_
+            ]
 
 
 if_ : Pratt.Parsers () () Expr -> Parser () () Expr
@@ -319,13 +349,13 @@ lambda : Pratt.Parsers () () Expr -> Parser () () Expr
 lambda parsers =
     Parser.succeed (\pat rest body -> Expr.Lambda (pat :: rest) body)
         |> Parser.drop (Parser.keyword () Token.Fun)
-        |> Parser.keep pattern
+        |> Parser.keep (pattern { inArgPosition = True })
         |> Parser.keep
             (Parser.loop []
                 (\pats ->
                     Parser.oneOf
                         [ Parser.succeed (\pat -> pat :: pats)
-                            |> Parser.keep pattern
+                            |> Parser.keep (pattern { inArgPosition = True })
                             |> Parser.map Parser.Continue
                         , Parser.succeed ()
                             |> Parser.drop (Parser.symbol () Token.FatArrow)
@@ -341,7 +371,7 @@ let_ : Pratt.Parsers () () Expr -> Parser () () Expr
 let_ parsers =
     Parser.succeed Expr.Let
         |> Parser.drop (Parser.keyword () Token.Let)
-        |> Parser.keep pattern
+        |> Parser.keep (pattern { inArgPosition = True })
         |> Parser.drop (Parser.symbol () Token.Equal)
         |> Parser.keep (Pratt.subExpression 0 parsers)
         |> Parser.drop (Parser.symbol () Token.Semicolon)
@@ -390,7 +420,7 @@ where_ parsers =
         case_ =
             Parser.succeed Triple.from
                 |> Parser.drop (Parser.keyword () Token.Is)
-                |> Parser.keep pattern
+                |> Parser.keep (pattern { inArgPosition = False })
                 |> Parser.keep
                     (Parser.oneOf
                         [ Parser.succeed Just
@@ -425,12 +455,12 @@ where_ parsers =
 -- PARSERS: LITERALS -----------------------------------------------------------
 
 
-literal : (Core.Literal a -> a) -> (String -> a) -> Parser () () a -> Parser () () a
-literal wrap fromString subexpr =
+literal : Context -> (Core.Literal a -> a) -> (String -> a) -> Parser () () a -> Parser () () a
+literal context wrap fromString subexpr =
     Parser.map wrap <|
         Parser.oneOf
             [ array subexpr
-            , constructor subexpr
+            , constructor context subexpr
             , number
             , record fromString subexpr
             , string
@@ -467,25 +497,31 @@ array subexpr =
             )
 
 
-constructor : Parser () () a -> Parser () () (Core.Literal a)
-constructor subexpr =
+constructor : Context -> Parser () () a -> Parser () () (Core.Literal a)
+constructor { inArgPosition } subexpr =
     let
         args =
-            Parser.loop []
+            Parser.many
                 (\xs ->
-                    Parser.oneOf
-                        [ Parser.succeed (\x -> x :: xs)
-                            |> Parser.keep subexpr
-                            |> Parser.map Parser.Continue
-                        , Parser.succeed (List.reverse xs)
-                            |> Parser.map Parser.Break
-                        ]
+                    [ Parser.succeed (\x -> x :: xs)
+                        |> Parser.keep subexpr
+                        |> Parser.map Parser.Continue
+                    , Parser.succeed (List.reverse xs)
+                        |> Parser.map Parser.Break
+                    ]
                 )
     in
     Parser.succeed Core.LCon
         |> Parser.drop (Parser.symbol () <| Token.Hash)
         |> Parser.keep (Parser.identifier () Token.Lower)
-        |> Parser.keep args
+        |> Parser.andThen
+            (\con ->
+                if inArgPosition then
+                    Parser.succeed <| con []
+
+                else
+                    Parser.map con args
+            )
 
 
 number : Parser () () (Core.Literal a)
@@ -546,14 +582,23 @@ string =
 -- PARSERS: PATTERNS -----------------------------------------------------------
 
 
-pattern : Parser () () Core.Pattern
-pattern =
+pattern : Context -> Parser () () Core.Pattern
+pattern context =
     Parser.oneOf
-        [ pany
-        , plit
+        [ pparens
+        , pany
+        , plit context
         , ptyp
         , pvar
         ]
+
+
+pparens : Parser () () Core.Pattern
+pparens =
+    Parser.succeed Basics.identity
+        |> Parser.drop (Parser.symbol () <| Token.Paren Token.Left)
+        |> Parser.keep (Parser.lazy <| \_ -> pattern { inArgPosition = False })
+        |> Parser.drop (Parser.symbol () <| Token.Paren Token.Right)
 
 
 pany : Parser () () Core.Pattern
@@ -562,9 +607,9 @@ pany =
         |> Parser.drop (Parser.symbol () Token.Underscore)
 
 
-plit : Parser () () Core.Pattern
-plit =
-    literal Core.PLit Core.PVar <| Parser.lazy (\_ -> pattern)
+plit : Context -> Parser () () Core.Pattern
+plit context =
+    literal context Core.PLit Core.PVar <| Parser.lazy (\_ -> pattern { inArgPosition = True })
 
 
 ptyp : Parser () () Core.Pattern
@@ -572,7 +617,7 @@ ptyp =
     Parser.succeed Core.PTyp
         |> Parser.drop (Parser.symbol () Token.At)
         |> Parser.keep (Parser.identifier () Token.Upper)
-        |> Parser.keep (Parser.lazy (\_ -> pattern))
+        |> Parser.keep (Parser.lazy (\_ -> pattern { inArgPosition = True }))
 
 
 pvar : Parser () () Core.Pattern
