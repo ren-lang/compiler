@@ -49,6 +49,7 @@ type Expression
     | Spread Expression
     | String String
     | Sub Expression Expression
+    | Ternary Expression Expression Expression
     | Typeof Expression
     | Undefined
     | Var String
@@ -74,6 +75,9 @@ fromExpr =
 
                         _ ->
                             Comment "TODO: handle binop with non-expr arg"
+
+                Core.EApp (Expr (Call (Var "<if>") [ cond, then_ ])) stmt ->
+                    Expr <| Ternary cond then_ (asExpression stmt)
 
                 Core.EApp (Expr (Call fun args)) (Expr arg) ->
                     Expr <| Call fun (args ++ [ arg ])

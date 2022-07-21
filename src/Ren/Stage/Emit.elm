@@ -159,7 +159,7 @@ fromDeclaration dec =
         Declaration.Let pub name expr ->
             concat
                 [ when pub <| Pretty.string "export "
-                , case JavaScript.fromExpr expr of
+                , case JavaScript.fromExpr <| Expr.desugar expr of
                     JavaScript.Expr (JavaScript.Arrow arg body) ->
                         concat
                             [ Pretty.string "function"
@@ -433,6 +433,18 @@ fromExpression expr =
 
         JavaScript.Sub x y ->
             binop precedence x "-" y
+
+        JavaScript.Ternary cond then_ else_ ->
+            concat
+                [ parenthesise precedence cond
+                , Pretty.space
+                , Pretty.string "?"
+                , fromExpression then_
+                , Pretty.space
+                , Pretty.string ":"
+                , Pretty.space
+                , fromExpression else_
+                ]
 
         JavaScript.Typeof expr_ ->
             concat
