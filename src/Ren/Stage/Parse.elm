@@ -220,6 +220,20 @@ expr context =
 
             else
                 operators
+        , spaces =
+            Parser.oneOf
+                [ Parser.loop ()
+                    (\_ ->
+                        Parser.oneOf
+                            [ Parser.succeed ()
+                                |> Parser.drop (Parser.comment ())
+                                |> Parser.map Parser.Continue
+                            , Parser.succeed ()
+                                |> Parser.map Parser.Break
+                            ]
+                    )
+                , Parser.succeed ()
+                ]
         }
 
 

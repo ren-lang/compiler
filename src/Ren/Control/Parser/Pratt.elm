@@ -37,6 +37,7 @@ type Parsers c x e
 type alias Config c x e =
     { oneOf : List (Parsers c x e -> Parser c x e)
     , andThenOneOf : List (Operator c x e)
+    , spaces : Parser c x ()
     }
 
 
@@ -56,21 +57,27 @@ expression config =
 
 {-| -}
 subExpression : Int -> Parsers c x e -> Parser c x e
-subExpression precedence ((Parsers { oneOf }) as config) =
+subExpression precedence ((Parsers { oneOf, spaces }) as config) =
     let
         parseExpr _ =
             Parser.oneOf <| List.map ((|>) config) oneOf
 
         go expr =
-            Parser.oneOf
-                [ Parser.succeed expr
-                    |> Parser.andThen (operation config precedence)
-                    |> Parser.map Parser.Continue
-                , Parser.succeed expr
-                    |> Parser.map Parser.Break
-                ]
+            Parser.succeed Basics.identity
+                |> Parser.drop spaces
+                |> Parser.keep
+                    (Parser.oneOf
+                        [ Parser.succeed expr
+                            |> Parser.andThen (operation config precedence)
+                            |> Parser.map Parser.Continue
+                        , Parser.succeed expr
+                            |> Parser.map Parser.Break
+                        ]
+                    )
     in
-    Parser.lazy parseExpr
+    Parser.succeed Basics.identity
+        |> Parser.drop spaces
+        |> Parser.keep (Parser.lazy parseExpr)
         |> Parser.andThen (\expr -> Parser.loop expr go)
 
 

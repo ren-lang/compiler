@@ -3,7 +3,7 @@ module Ren.Control.Parser exposing
     , Parser(..), DeadEnd, Loop(..)
     , succeed, commit, problem
     , any, token
-    , keyword, symbol, operator, identifier, end
+    , comment, keyword, symbol, operator, identifier, end
     , number, string
     , map, map2, andThen
     , keep, drop
@@ -26,7 +26,7 @@ module Ren.Control.Parser exposing
 
 @docs succeed, commit, problem
 @docs any, token
-@docs keyword, symbol, operator, identifier, end
+@docs comment, keyword, symbol, operator, identifier, end
 @docs number, string
 
 
@@ -191,6 +191,19 @@ token error tok =
 
             else
                 Bad False <| bagFromState state error
+
+
+{-| -}
+comment : e -> Parser ctx e String
+comment error =
+    Parser <|
+        \state ->
+            case nextToken state of
+                Token.Comment s ->
+                    Good True s { state | offset = state.offset + 1 }
+
+                _ ->
+                    Bad False <| bagFromState state error
 
 
 {-| -}

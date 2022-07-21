@@ -16,7 +16,41 @@ import Set exposing (Set)
 lex : String -> Result () (List Token)
 lex source =
     Parser.run stream source
+        |> Result.map collect
         |> Result.mapError (\_ -> ())
+
+
+collect : List Token -> List Token
+collect tokens =
+    let
+        go tok ( acc, list ) =
+            case ( tok, acc ) of
+                ( Token.Comment a, Just (Token.Comment b) ) ->
+                    ( Just <| Token.Comment <| a ++ "\n" ++ b, list )
+
+                ( Token.Comment _, Just b ) ->
+                    ( Just tok, b :: list )
+
+                ( Token.Comment _, Nothing ) ->
+                    ( Just tok, list )
+
+                ( Token.Unknown a, Just (Token.Unknown b) ) ->
+                    ( Just <| Token.Unknown <| a ++ b, list )
+
+                ( Token.Unknown _, Just b ) ->
+                    ( Just tok, b :: list )
+
+                ( Token.Unknown _, Nothing ) ->
+                    ( Just tok, list )
+
+                ( _, Just b ) ->
+                    ( Nothing, tok :: b :: list )
+
+                ( _, Nothing ) ->
+                    ( Nothing, tok :: list )
+    in
+    List.foldr go ( Nothing, [] ) tokens
+        |> (\( acc, list ) -> Maybe.map ((::) >> (|>) list) acc |> Maybe.withDefault list)
 
 
 
@@ -37,6 +71,7 @@ token =
         [ number
         , string
         , keyword
+        , comment
         , operator
         , symbol
         , identifier
@@ -83,6 +118,15 @@ string =
     Parser.succeed Token.String
         |. Parser.token "\""
         |= Parser.loop [] go
+
+
+comment : Parser Token
+comment =
+    Parser.succeed ()
+        |. Parser.token "//"
+        |. Parser.chompUntilEndOr "\n"
+        |> Parser.getChompedString
+        |> Parser.map Token.Comment
 
 
 keyword : Parser Token
