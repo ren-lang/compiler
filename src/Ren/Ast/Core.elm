@@ -6,6 +6,8 @@ module Ren.Ast.Core exposing
     , isPAny, isPLit, isPTyp, isPVar
     , bindings
     , map, fold, foldWith, unfold
+    , encodePattern, encodeLiteral
+    , patternDecoder, literalDecoder
     )
 
 {-| This module reflects the core functional representation of Ren code. It is
@@ -47,7 +49,21 @@ will not change the result.
 
 ## Utils
 
+
+## JSON
+
+@docs encodePattern, encodeLiteral
+@docs patternDecoder, literalDecoder
+
 -}
+
+-- IMPORTS ---------------------------------------------------------------------
+
+import Json.Decode
+import Json.Encode
+import Ren.Data.Metadata as Metadata
+
+
 
 -- TYPES -----------------------------------------------------------------------
 
@@ -321,4 +337,145 @@ unfold f a =
 
 
 -- CONVERSIONS -----------------------------------------------------------------
+-- JSON ------------------------------------------------------------------------
+
+
+encodePattern : Pattern -> Json.Encode.Value
+encodePattern pattern =
+    Json.Encode.list Basics.identity <|
+        case pattern of
+            PAny ->
+                [ Metadata.encode "PAny" {}
+                ]
+
+            PLit literal ->
+                [ Metadata.encode "PLit" {}
+                , encodeLiteral encodePattern literal
+                ]
+
+            PTyp name pat_ ->
+                [ Metadata.encode "PTyp" {}
+                , Json.Encode.string name
+                , encodePattern pat_
+                ]
+
+            PVar name ->
+                [ Metadata.encode "PVar" {}
+                , Json.Encode.string name
+                ]
+
+
+patternDecoder : Json.Decode.Decoder Pattern
+patternDecoder =
+    Metadata.decoder
+        |> Json.Decode.andThen
+            (\( key, _ ) ->
+                case key of
+                    "PAny" ->
+                        Json.Decode.succeed PAny
+
+                    "PLit" ->
+                        Json.Decode.map PLit
+                            (Json.Decode.index 1 <| literalDecoder <| Json.Decode.lazy (\_ -> patternDecoder))
+
+                    "PTyp" ->
+                        Json.Decode.map2 PTyp
+                            (Json.Decode.index 1 <| Json.Decode.string)
+                            (Json.Decode.index 2 <| Json.Decode.lazy (\_ -> patternDecoder))
+
+                    "PVar" ->
+                        Json.Decode.map PVar
+                            (Json.Decode.index 1 <| Json.Decode.string)
+
+                    _ ->
+                        Json.Decode.fail <| "Unknown pattern type: " ++ key
+            )
+
+
+encodeLiteral : (expr -> Json.Encode.Value) -> Literal expr -> Json.Encode.Value
+encodeLiteral encodeExpr_ literal =
+    let
+        encodeField ( k, v ) =
+            Json.Encode.list Basics.identity
+                [ Metadata.encode "Field" {}
+                , Json.Encode.string k
+                , encodeExpr_ v
+                ]
+    in
+    Json.Encode.list Basics.identity <|
+        case literal of
+            LArr elements ->
+                [ Metadata.encode "LArr" {}
+                , Json.Encode.list encodeExpr_ elements
+                ]
+
+            LCon tag elements ->
+                [ Metadata.encode "LCon" {}
+                , Json.Encode.string tag
+                , Json.Encode.list encodeExpr_ elements
+                ]
+
+            LNum n ->
+                [ Metadata.encode "LNum" {}
+                , Json.Encode.float n
+                ]
+
+            LRec fields ->
+                [ Metadata.encode "LRec" {}
+                , Json.Encode.list encodeField fields
+                ]
+
+            LStr s ->
+                [ Metadata.encode "LStr" {}
+                , Json.Encode.string s
+                ]
+
+
+literalDecoder : Json.Decode.Decoder expr -> Json.Decode.Decoder (Literal expr)
+literalDecoder exprDecoder =
+    let
+        fieldDecoder =
+            Metadata.decoder
+                |> Json.Decode.andThen
+                    (\( key, _ ) ->
+                        if key == "Field" then
+                            Json.Decode.map2 Tuple.pair
+                                (Json.Decode.index 1 <| Json.Decode.string)
+                                (Json.Decode.index 2 <| exprDecoder)
+
+                        else
+                            Json.Decode.fail <| "Unknown record field: " ++ key
+                    )
+    in
+    Metadata.decoder
+        |> Json.Decode.andThen
+            (\( key, _ ) ->
+                case key of
+                    "LArr" ->
+                        Json.Decode.map LArr
+                            (Json.Decode.index 1 <| Json.Decode.list exprDecoder)
+
+                    "LCon" ->
+                        Json.Decode.map2 LCon
+                            (Json.Decode.index 1 <| Json.Decode.string)
+                            (Json.Decode.index 2 <| Json.Decode.list exprDecoder)
+
+                    "LNum" ->
+                        Json.Decode.map LNum
+                            (Json.Decode.index 1 <| Json.Decode.float)
+
+                    "LRec" ->
+                        Json.Decode.map LRec
+                            (Json.Decode.index 1 <| Json.Decode.list fieldDecoder)
+
+                    "LStr" ->
+                        Json.Decode.map LStr
+                            (Json.Decode.index 1 <| Json.Decode.string)
+
+                    _ ->
+                        Json.Decode.fail <| "Unknown literal type: " ++ key
+            )
+
+
+
 -- UTILS -----------------------------------------------------------------------

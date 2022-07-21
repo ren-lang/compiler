@@ -4,7 +4,10 @@ module Ren.Data.Declaration exposing (..)
 
 -- IMPORTS ---------------------------------------------------------------------
 
-import Ren.Ast.Expr exposing (Expr)
+import Json.Decode
+import Json.Encode
+import Ren.Ast.Expr as Expr exposing (Expr)
+import Ren.Data.Metadata as Metadata
 
 
 
@@ -78,4 +81,27 @@ isExternal dec =
 
 -- MANIPULATIONS ---------------------------------------------------------------
 -- CONVERSIONS -----------------------------------------------------------------
+-- JSON ------------------------------------------------------------------------
+
+
+encode : Declaration -> Json.Encode.Value
+encode dec =
+    Json.Encode.list Basics.identity <|
+        case dec of
+            Let pub name_ expr ->
+                [ Metadata.encode "Let" {}
+                , Json.Encode.bool pub
+                , Json.Encode.string name_
+                , Expr.encode expr
+                ]
+
+            Ext pub name_ extName ->
+                [ Metadata.encode "Ext" {}
+                , Json.Encode.bool pub
+                , Json.Encode.string name_
+                , Json.Encode.string extName
+                ]
+
+
+
 -- UTILS -----------------------------------------------------------------------

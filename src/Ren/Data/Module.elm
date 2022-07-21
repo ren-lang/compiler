@@ -4,9 +4,11 @@ module Ren.Data.Module exposing (..)
 
 -- IMPORTS ---------------------------------------------------------------------
 
+import Json.Encode
 import Ren.Ast.Expr exposing (Expr)
 import Ren.Data.Declaration as Declaration exposing (Declaration)
 import Ren.Data.Import as Import exposing (Import)
+import Ren.Data.Metadata as Metadata
 import Util.List as List
 
 
@@ -155,7 +157,7 @@ addDeclaration dec mod =
     { mod
         | declarations =
             mod.declarations
-                |> List.filter (Declaration.name >> (==) (Declaration.name dec))
+                |> List.filter (Declaration.name >> (/=) (Declaration.name dec))
                 |> (::) dec
     }
 
@@ -184,4 +186,17 @@ addExternalDeclaration pub name path mod =
 
 
 -- CONVERSIONS -----------------------------------------------------------------
+-- JSON ------------------------------------------------------------------------
+
+
+encode : Module -> Json.Encode.Value
+encode mod =
+    Json.Encode.list Basics.identity
+        [ Metadata.encode "Module" {}
+        , Json.Encode.list Import.encode mod.imports
+        , Json.Encode.list Declaration.encode mod.declarations
+        ]
+
+
+
 -- UTILS -----------------------------------------------------------------------

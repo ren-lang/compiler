@@ -3,6 +3,7 @@ port module Ren.Compiler.Cli exposing (..)
 -- IMPORTS ---------------------------------------------------------------------
 
 import Json.Decode
+import Json.Encode
 import Node.Chalk exposing (Chalk)
 import Node.Fs exposing (Fs)
 import Node.Gitly exposing (Gitly)
@@ -44,11 +45,11 @@ run ({ chalk, fs, path, process } as ffi) =
         "new" :: name :: _ ->
             exit 0
 
-        "make" :: root :: _ ->
-            make ffi <| ffi.path.resolve [ ffi.process.cwd (), root ]
+        "make" :: root :: args ->
+            make ffi args <| ffi.path.resolve [ ffi.process.cwd (), root ]
 
         "make" :: [] ->
-            make ffi <| ffi.process.cwd ()
+            make ffi [] <| ffi.process.cwd ()
 
         "run" :: args ->
             exit 0
@@ -84,7 +85,7 @@ run ({ chalk, fs, path, process } as ffi) =
             else if List.member "--dump-ast" args then
                 Cmd.batch
                     [ ast
-                        |> Result.map (stdout << Expr.debug)
+                        |> Result.map (stdout << Json.Encode.encode 2 << Expr.encode)
                         |> Result.withDefault (stderr "parser error")
                     , exit 0
                     ]
@@ -128,10 +129,10 @@ run ({ chalk, fs, path, process } as ffi) =
 -- COMMANDS --------------------------------------------------------------------
 
 
-make : FFI -> String -> Cmd Int
-make ffi root =
+make : FFI -> List String -> String -> Cmd Int
+make ffi args root =
     if ffi.fs.isFile root then
-        makeFile ffi root
+        makeFile ffi args root
 
     else
         ffi.fs.readDir root
@@ -142,16 +143,16 @@ make ffi root =
                             ffi.path.join [ root, dirent ]
                     in
                     if ffi.fs.isFile path then
-                        makeFile ffi path
+                        makeFile ffi args path
 
                     else
-                        make ffi path
+                        make ffi args path
                 )
             |> Cmd.batch
 
 
-makeFile : FFI -> String -> Cmd Int
-makeFile ffi path =
+makeFile : FFI -> List String -> String -> Cmd Int
+makeFile ffi args path =
     let
         out =
             path ++ ".js"
@@ -163,14 +164,34 @@ makeFile ffi path =
             }
     in
     if String.endsWith ".ren" path then
-        ffi.fs.readFile path "utf-8"
-            |> Result.fromMaybe ()
-            |> Result.andThen Lexer.lex
-            |> Result.andThen Parser.parse
-            |> Result.map (Emitter.emit 80 meta)
-            |> Result.map (ffi.fs.writeFile out)
-            |> Result.map (\_ -> Cmd.none)
-            |> Result.withDefault (stderr <| "error compiling `" ++ path ++ "`")
+        if List.member "--dump-tokens" args then
+            ffi.fs.readFile path "utf-8"
+                |> Result.fromMaybe ()
+                |> Result.andThen Lexer.lex
+                |> Result.map Token.debug
+                |> Result.map (ffi.fs.writeFile <| path ++ ".json")
+                |> Result.map (\_ -> Cmd.none)
+                |> Result.withDefault (stderr <| "error compiling `" ++ path ++ "`")
+
+        else if List.member "--dump-ast" args then
+            ffi.fs.readFile path "utf-8"
+                |> Result.fromMaybe ()
+                |> Result.andThen Lexer.lex
+                |> Result.andThen Parser.parse
+                |> Result.map (Module.encode >> Json.Encode.encode 2)
+                |> Result.map (ffi.fs.writeFile <| path ++ ".json")
+                |> Result.map (\_ -> Cmd.none)
+                |> Result.withDefault (stderr <| "error compiling `" ++ path ++ "`")
+
+        else
+            ffi.fs.readFile path "utf-8"
+                |> Result.fromMaybe ()
+                |> Result.andThen Lexer.lex
+                |> Result.andThen Parser.parse
+                |> Result.map (Emitter.emit 80 meta)
+                |> Result.map (ffi.fs.writeFile out)
+                |> Result.map (\_ -> Cmd.none)
+                |> Result.withDefault (stderr <| "error compiling `" ++ path ++ "`")
 
     else
         Cmd.none

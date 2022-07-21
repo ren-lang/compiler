@@ -55,29 +55,27 @@ module_ =
     in
     Parser.succeed makeModule
         |> Parser.keep
-            (Parser.loop []
+            (Parser.many
                 (\imps ->
-                    Parser.oneOf
-                        [ Parser.succeed (\imp -> imp :: imps)
-                            |> Parser.keep import_
-                            |> Parser.map Parser.Continue
-                        , Parser.succeed ()
-                            |> Parser.map (\_ -> List.reverse imps)
-                            |> Parser.map Parser.Break
-                        ]
+                    [ Parser.succeed (\imp -> imp :: imps)
+                        |> Parser.keep import_
+                        |> Parser.map Parser.Continue
+                    , Parser.succeed ()
+                        |> Parser.map (\_ -> List.reverse imps)
+                        |> Parser.map Parser.Break
+                    ]
                 )
             )
         |> Parser.keep
-            (Parser.loop []
+            (Parser.many
                 (\decs ->
-                    Parser.oneOf
-                        [ Parser.succeed (\dec -> dec :: decs)
-                            |> Parser.keep declaration
-                            |> Parser.map Parser.Continue
-                        , Parser.succeed ()
-                            |> Parser.map (\_ -> List.reverse decs)
-                            |> Parser.map Parser.Break
-                        ]
+                    [ Parser.succeed (\dec -> dec :: decs)
+                        |> Parser.keep declaration
+                        |> Parser.map Parser.Continue
+                    , Parser.succeed ()
+                        |> Parser.map (\_ -> List.reverse decs)
+                        |> Parser.map Parser.Break
+                    ]
                 )
             )
 
@@ -171,7 +169,7 @@ localDeclaration pub =
         |> Parser.drop (Parser.keyword () Token.Let)
         |> Parser.keep (Parser.identifier () Token.Lower)
         |> Parser.drop (Parser.symbol () Token.Equal)
-        |> Parser.keep (expr { inArgPosition = True })
+        |> Parser.keep (Parser.map Expr.desugar <| expr { inArgPosition = False })
 
 
 externalDeclaration : Bool -> Parser () () Declaration
@@ -272,7 +270,7 @@ callables context =
         , placeholder
         , scoped
         , var
-        , literal context Expr.Literal Expr.Var <| Parser.lazy <| \_ -> expr { inArgPosition = True }
+        , literal context Expr.Literal Expr.Var <| \ctx -> Parser.lazy (\_ -> expr ctx)
         ]
 
 
@@ -390,6 +388,7 @@ let_ parsers =
         |> Parser.keep (Pratt.subExpression 0 parsers)
         |> Parser.drop (Parser.symbol () Token.Semicolon)
         |> Parser.keep (Pratt.subExpression 0 parsers)
+        |> Parser.backtrackable
 
 
 placeholder : Parser () () Expr
@@ -469,14 +468,14 @@ where_ parsers =
 -- PARSERS: LITERALS -----------------------------------------------------------
 
 
-literal : Context -> (Core.Literal a -> a) -> (String -> a) -> Parser () () a -> Parser () () a
+literal : Context -> (Core.Literal a -> a) -> (String -> a) -> (Context -> Parser () () a) -> Parser () () a
 literal context wrap fromString subexpr =
     Parser.map wrap <|
         Parser.oneOf
-            [ array subexpr
-            , constructor context subexpr
+            [ array <| subexpr { inArgPosition = False }
+            , constructor context <| subexpr { inArgPosition = True }
             , number
-            , record fromString subexpr
+            , record fromString <| subexpr { inArgPosition = False }
             , string
             ]
 
@@ -623,7 +622,7 @@ pany =
 
 plit : Context -> Parser () () Core.Pattern
 plit context =
-    literal context Core.PLit Core.PVar <| Parser.lazy (\_ -> pattern { inArgPosition = True })
+    literal context Core.PLit Core.PVar <| \ctx -> Parser.lazy (\_ -> pattern ctx)
 
 
 ptyp : Parser () () Core.Pattern

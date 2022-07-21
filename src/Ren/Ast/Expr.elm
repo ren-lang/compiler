@@ -5,7 +5,8 @@ module Ren.Ast.Expr exposing
     , operatorFromName, operatorFromSymbol
     , operatorName
     , transform, desugar
-    , lower, debug
+    , lower
+    , decoder, encode
     )
 
 {-|
@@ -23,7 +24,7 @@ module Ren.Ast.Expr exposing
 
 ## Constructors
 
-@docs raise
+@docs raise, fromJson, fromJsonString
 @docs operatorFromName, operatorFromSymbol
 
 
@@ -39,7 +40,10 @@ module Ren.Ast.Expr exposing
 
 ## Conversions
 
-@docs lower, debug
+@docs lower, toJson
+
+
+## JSON
 
 
 ## Utils
@@ -48,7 +52,10 @@ module Ren.Ast.Expr exposing
 
 -- IMPORTS ---------------------------------------------------------------------
 
+import Json.Decode
+import Json.Encode
 import Ren.Ast.Core
+import Ren.Data.Metadata as Metadata
 import Util.List as List
 import Util.Triple as Triple
 
@@ -328,9 +335,31 @@ replacePlaceholders expr =
             replaceWhen (names [ lhs, rhs ]) <|
                 Binop op (replace 0 lhs) (replace 1 rhs)
 
+        -- When the last argument to a function call is a placeholder, we don't
+        -- need to generate a lambda for it because functions are curried anyway!
         Call fun args ->
-            replaceWhen (names (fun :: args)) <|
-                Call (replace 0 fun) (replaceMany 1 args)
+            case List.reverse args of
+                [] ->
+                    fun
+
+                Placeholder :: [] ->
+                    fun
+
+                -- Just keep dropping placeholders while they're the last argument.
+                -- If function application is all placeholders, eg something like:
+                --
+                --     f _ _ _
+                --
+                -- This will ultimately desugar to simply:
+                --
+                --     f
+                --
+                Placeholder :: _ ->
+                    replacePlaceholders <| Call fun (List.drop 1 args)
+
+                _ ->
+                    replaceWhen (names (fun :: args)) <|
+                        Call (replace 0 fun) (replaceMany 1 args)
 
         If cond then_ else_ ->
             replaceWhen (names [ cond, then_, else_ ]) <|
@@ -347,6 +376,18 @@ replacePlaceholders expr =
         Literal (Ren.Ast.Core.LArr elements) ->
             replaceWhen (names elements) <|
                 Literal (Ren.Ast.Core.LArr <| replaceMany 0 elements)
+
+        Literal (Ren.Ast.Core.LCon tag args) ->
+            replaceWhen (names args) <|
+                Literal (Ren.Ast.Core.LCon tag <| replaceMany 0 args)
+
+        Literal (Ren.Ast.Core.LRec fields) ->
+            let
+                ( keys, vals ) =
+                    List.unzip fields
+            in
+            replaceWhen (names vals) <|
+                Literal (Ren.Ast.Core.LRec <| List.map2 Tuple.pair keys <| replaceMany 0 vals)
 
         Literal _ ->
             expr
@@ -387,12 +428,54 @@ desugar expr =
 
 
 transform : (Expr -> Expr) -> Expr -> Expr
-transform f =
+transform f expr =
     let
-        applyTransformation =
-            Ren.Ast.Core.map lower >> Ren.Ast.Core.Expr >> raise >> f
+        transformCase ( pattern, guard, body ) =
+            ( pattern, Maybe.map f guard, f body )
     in
-    lower >> Ren.Ast.Core.fold applyTransformation
+    f <|
+        case expr of
+            Access rec key ->
+                Access (transform f rec) key
+
+            Binop op lhs rhs ->
+                Binop op (transform f lhs) (transform f rhs)
+
+            Call fun args ->
+                Call (transform f fun) (List.map (transform f) args)
+
+            If cond then_ else_ ->
+                If (transform f cond) (transform f then_) (transform f else_)
+
+            Lambda args body ->
+                Lambda args (transform f body)
+
+            Let name expr_ body ->
+                Let name (transform f expr_) (transform f body)
+
+            Literal (Ren.Ast.Core.LArr elements) ->
+                Literal (Ren.Ast.Core.LArr <| List.map (transform f) elements)
+
+            Literal (Ren.Ast.Core.LCon tag args) ->
+                Literal (Ren.Ast.Core.LCon tag (List.map (transform f) args))
+
+            Literal (Ren.Ast.Core.LRec fields) ->
+                Literal (Ren.Ast.Core.LRec <| List.map (Tuple.mapSecond (transform f)) fields)
+
+            Literal lit ->
+                Literal lit
+
+            Placeholder ->
+                Placeholder
+
+            Scoped scope name ->
+                Scoped scope name
+
+            Where expr_ cases ->
+                Where (transform f expr_) (List.map transformCase cases)
+
+            Var name ->
+                Var name
 
 
 
@@ -534,152 +617,174 @@ lower expr_ =
             Ren.Ast.Core.var name
 
 
-debug : Expr -> String
-debug expr =
+
+-- JSON ------------------------------------------------------------------------
+
+
+encode : Expr -> Json.Encode.Value
+encode expr =
     let
-        indent n s =
-            String.split "\n" s
-                |> List.map ((++) (String.repeat n " "))
-                |> String.join "\n"
-
-        debugPattern pat =
-            case pat of
-                Ren.Ast.Core.PAny ->
-                    "<pattern any>"
-
-                Ren.Ast.Core.PLit (Ren.Ast.Core.LArr patterns) ->
-                    String.join "\n" <|
-                        List.concat
-                            [ [ "<pattern array>" ]
-                            , List.map (indent 4 << debugPattern) patterns
-                            ]
-
-                Ren.Ast.Core.PLit (Ren.Ast.Core.LCon tag args) ->
-                    String.join "\n" <|
-                        List.concat
-                            [ [ "<pattern constructor> " ++ tag ]
-                            , List.map (indent 4 << debugPattern) args
-                            ]
-
-                Ren.Ast.Core.PLit (Ren.Ast.Core.LNum n) ->
-                    "<pattern number> " ++ String.fromFloat n
-
-                Ren.Ast.Core.PLit (Ren.Ast.Core.LStr s) ->
-                    "<pattern string> '" ++ s ++ "'"
-
-                Ren.Ast.Core.PLit (Ren.Ast.Core.LRec fields) ->
-                    String.join "\n" <|
-                        List.concat
-                            [ [ "<pattern record>" ]
-                            , List.map (indent 4 << debugFieldPattern) fields
-                            ]
-
-                Ren.Ast.Core.PTyp typ pattern ->
-                    String.join "\n" <|
-                        [ "<pattern type> @" ++ typ
-                        , debugPattern pattern
-                        ]
-
-                Ren.Ast.Core.PVar name ->
-                    "<pattern var> " ++ name
-
-        debugField ( key, val ) =
-            key ++ " " ++ debug val
-
-        debugFieldPattern ( key, pat ) =
-            key ++ " " ++ debugPattern pat
-
-        debugCase ( pattern, guard, body ) =
-            String.join "\n" <|
-                List.concat
-                    [ [ "<case>"
-                      , indent 4 <| debugPattern pattern
-                      ]
-                    , Maybe.withDefault [] <| Maybe.map (List.singleton << indent 4 << (++) "<guard> " << debug) guard
-                    , [ indent 4 <| debug body ]
-                    ]
+        encodeCase ( pattern, guard, body ) =
+            Json.Encode.list Basics.identity
+                [ Metadata.encode "Case" {}
+                , Ren.Ast.Core.encodePattern pattern
+                , Maybe.withDefault Json.Encode.null <| Maybe.map encode guard
+                , encode body
+                ]
     in
-    String.join "\n" <|
+    Json.Encode.list Basics.identity <|
         case expr of
             Access expr_ key ->
-                [ "<access> " ++ key
-                , indent 4 <| debug expr_
+                [ Metadata.encode "Access" {}
+                , encode expr_
+                , Json.Encode.string key
                 ]
 
             Binop op lhs rhs ->
-                [ "<binop> " ++ operatorName op
-                , indent 4 <| debug lhs
-                , indent 4 <| debug rhs
+                [ Metadata.encode "Binop" {}
+                , Json.Encode.string <| operatorName op
+                , encode lhs
+                , encode rhs
                 ]
 
             Call fun args ->
-                List.concat
-                    [ [ "<call>"
-                      , indent 4 <| debug fun
-                      ]
-                    , List.map (indent 4 << debug) args
-                    ]
+                [ Metadata.encode "Call" {}
+                , encode fun
+                , Json.Encode.list encode args
+                ]
 
             If cond then_ else_ ->
-                [ "<if>"
-                , indent 4 <| debug cond
-                , indent 4 <| debug then_
-                , indent 4 <| debug else_
+                [ Metadata.encode "If" {}
+                , encode cond
+                , encode then_
+                , encode else_
                 ]
 
             Lambda args body ->
-                List.concat
-                    [ [ "<lambda>" ]
-                    , List.map (indent 4 << debugPattern) args
-                    , [ indent 4 <| debug body ]
-                    ]
-
-            Let name expr_ body ->
-                [ "<let> " ++ debugPattern name
-                , indent 4 <| debug expr_
-                , indent 4 <| debug body
+                [ Metadata.encode "Lambda" {}
+                , Json.Encode.list Ren.Ast.Core.encodePattern args
+                , encode body
                 ]
 
-            Literal (Ren.Ast.Core.LArr elements) ->
-                List.concat
-                    [ [ "<literal array>" ]
-                    , List.map (indent 4 << debug) elements
-                    ]
+            Let name expr_ body ->
+                [ Metadata.encode "Let" {}
+                , Ren.Ast.Core.encodePattern name
+                , encode expr_
+                , encode body
+                ]
 
-            Literal (Ren.Ast.Core.LCon tag args) ->
-                List.concat
-                    [ [ "<literal constructor> #" ++ tag ]
-                    , List.map (indent 4 << debug) args
-                    ]
-
-            Literal (Ren.Ast.Core.LNum n) ->
-                [ "<literal number> " ++ String.fromFloat n ]
-
-            Literal (Ren.Ast.Core.LRec fields) ->
-                List.concat
-                    [ [ "<literal record>" ]
-                    , List.map (indent 4 << debugField) fields
-                    ]
-
-            Literal (Ren.Ast.Core.LStr s) ->
-                [ "<literal string> '" ++ s ++ "'" ]
+            Literal literal ->
+                [ Metadata.encode "Literal" {}
+                , Ren.Ast.Core.encodeLiteral encode literal
+                ]
 
             Placeholder ->
-                [ "<placeholder>" ]
+                [ Metadata.encode "Placeholder" {}
+                ]
 
-            Scoped namespace name ->
-                [ "<scoped> " ++ String.join "." namespace ++ "." ++ name ]
+            Scoped scope name ->
+                [ Metadata.encode "Scoped" {}
+                , Json.Encode.list Json.Encode.string scope
+                , Json.Encode.string name
+                ]
 
             Where expr_ cases ->
-                List.concat
-                    [ [ "<where>"
-                      , indent 4 <| debug expr_
-                      ]
-                    , List.map (indent 4 << debugCase) cases
-                    ]
+                [ Metadata.encode "Where" {}
+                , encode expr_
+                , Json.Encode.list encodeCase cases
+                ]
 
             Var name ->
-                [ "<var> " ++ name ]
+                [ Metadata.encode "Var" {}
+                , Json.Encode.string name
+                ]
+
+
+decoder : Json.Decode.Decoder Expr
+decoder =
+    let
+        lazyDecoder =
+            Json.Decode.lazy <| \_ -> decoder
+
+        operatorDecoder =
+            Json.Decode.string
+                |> Json.Decode.andThen
+                    (\name ->
+                        case operatorFromName name of
+                            Just operator ->
+                                Json.Decode.succeed operator
+
+                            Nothing ->
+                                Json.Decode.fail <| "Unknown operator: " ++ name
+                    )
+
+        caseDecoder =
+            Json.Decode.map3 Triple.from
+                (Json.Decode.index 1 <| Ren.Ast.Core.patternDecoder)
+                (Json.Decode.index 2 <| Json.Decode.nullable <| lazyDecoder)
+                (Json.Decode.index 3 <| lazyDecoder)
+    in
+    Metadata.decoder
+        |> Json.Decode.andThen
+            (\( key, _ ) ->
+                case key of
+                    "Access" ->
+                        Json.Decode.map2 Access
+                            (Json.Decode.index 1 <| lazyDecoder)
+                            (Json.Decode.index 2 <| Json.Decode.string)
+
+                    "Binop" ->
+                        Json.Decode.map3 Binop
+                            (Json.Decode.index 1 <| operatorDecoder)
+                            (Json.Decode.index 2 <| lazyDecoder)
+                            (Json.Decode.index 3 <| lazyDecoder)
+
+                    "Call" ->
+                        Json.Decode.map2 Call
+                            (Json.Decode.index 1 <| lazyDecoder)
+                            (Json.Decode.index 2 <| Json.Decode.list lazyDecoder)
+
+                    "If" ->
+                        Json.Decode.map3 If
+                            (Json.Decode.index 1 <| lazyDecoder)
+                            (Json.Decode.index 2 <| lazyDecoder)
+                            (Json.Decode.index 3 <| lazyDecoder)
+
+                    "Lambda" ->
+                        Json.Decode.map2 Lambda
+                            (Json.Decode.index 1 <| Json.Decode.list Ren.Ast.Core.patternDecoder)
+                            (Json.Decode.index 2 <| lazyDecoder)
+
+                    "Let" ->
+                        Json.Decode.map3 Let
+                            (Json.Decode.index 1 <| Ren.Ast.Core.patternDecoder)
+                            (Json.Decode.index 2 <| lazyDecoder)
+                            (Json.Decode.index 3 <| lazyDecoder)
+
+                    "Literal" ->
+                        Json.Decode.map Literal
+                            (Json.Decode.index 1 <| Ren.Ast.Core.literalDecoder lazyDecoder)
+
+                    "Placeholder" ->
+                        Json.Decode.succeed Placeholder
+
+                    "Scoped" ->
+                        Json.Decode.map2 Scoped
+                            (Json.Decode.index 1 <| Json.Decode.list Json.Decode.string)
+                            (Json.Decode.index 2 <| Json.Decode.string)
+
+                    "Where" ->
+                        Json.Decode.map2 Where
+                            (Json.Decode.index 1 <| lazyDecoder)
+                            (Json.Decode.index 2 <| Json.Decode.list caseDecoder)
+
+                    "Var" ->
+                        Json.Decode.map Var
+                            (Json.Decode.index 1 <| Json.Decode.string)
+
+                    _ ->
+                        Json.Decode.fail <| "Unknown expression type: " ++ key
+            )
 
 
 
