@@ -617,7 +617,7 @@ debug expr =
                     [ [ "<call>"
                       , indent 4 <| debug fun
                       ]
-                    , "" :: (List.intersperse "" <| List.map (indent 4 << debug) args)
+                    , List.map (indent 4 << debug) args
                     ]
 
             If cond then_ else_ ->
