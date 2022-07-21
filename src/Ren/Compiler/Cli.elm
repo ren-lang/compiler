@@ -13,9 +13,9 @@ import Ren.Ast.Core as Core
 import Ren.Ast.Expr as Expr
 import Ren.Data.Module as Module
 import Ren.Data.Token as Token
-import Ren.Stage.Emit exposing (emit)
-import Ren.Stage.Lex exposing (lex)
-import Ren.Stage.Parse exposing (parseExpr)
+import Ren.Stage.Emit as Emitter
+import Ren.Stage.Lex as Lexer
+import Ren.Stage.Parse as Parser
 import Task
 
 
@@ -45,10 +45,10 @@ run ({ chalk, fs, path, process } as ffi) =
             exit 0
 
         "make" :: root :: _ ->
-            exit 0
+            make ffi <| ffi.path.resolve [ ffi.process.cwd (), root ]
 
         "make" :: [] ->
-            exit 0
+            make ffi <| ffi.process.cwd ()
 
         "run" :: args ->
             exit 0
@@ -62,16 +62,16 @@ run ({ chalk, fs, path, process } as ffi) =
         "eval" :: str :: args ->
             let
                 stream =
-                    lex str
+                    Lexer.lex str
 
                 ast =
-                    Result.andThen parseExpr stream
+                    Result.andThen Parser.parseExpr stream
 
                 javascript =
                     ast
                         |> Result.map (Expr.desugar >> Expr.Lambda [ Core.PAny ])
                         |> Result.map (\expr -> Module.addLocalDeclaration True "$eval" expr Module.empty)
-                        |> Result.map (emit 80 { name = "$eval", root = process.cwd (), includeFFI = False })
+                        |> Result.map (Emitter.emit 80 { name = "$eval", root = process.cwd (), includeFFI = False })
             in
             if List.member "--dump-tokens" args then
                 Cmd.batch
@@ -122,6 +122,58 @@ run ({ chalk, fs, path, process } as ffi) =
                     , "  - ren " ++ chalk.green "eval" ++ " <expr>"
                     , ""
                     ]
+
+
+
+-- COMMANDS --------------------------------------------------------------------
+
+
+make : FFI -> String -> Cmd Int
+make ffi root =
+    if ffi.fs.isFile root then
+        makeFile ffi root
+
+    else
+        ffi.fs.readDir root
+            |> List.map
+                (\dirent ->
+                    let
+                        path =
+                            ffi.path.join [ root, dirent ]
+                    in
+                    if ffi.fs.isFile path then
+                        makeFile ffi path
+
+                    else
+                        make ffi path
+                )
+            |> Cmd.batch
+
+
+makeFile : FFI -> String -> Cmd Int
+makeFile ffi path =
+    let
+        out =
+            path ++ ".js"
+
+        meta =
+            { name = ffi.path.basename path <| Just ".ren"
+            , root = ""
+            , includeFFI = True
+            }
+    in
+    if String.endsWith ".ren" path then
+        ffi.fs.readFile path "utf-8"
+            |> Result.fromMaybe ()
+            |> Result.andThen Lexer.lex
+            |> Result.andThen Parser.parse
+            |> Result.map (Emitter.emit 80 meta)
+            |> Result.map (ffi.fs.writeFile out)
+            |> Result.map (\_ -> Cmd.none)
+            |> Result.withDefault (stderr <| "error compiling `" ++ path ++ "`")
+
+    else
+        Cmd.none
 
 
 
