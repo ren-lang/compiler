@@ -37,8 +37,8 @@ token =
         [ number
         , string
         , keyword
-        , symbol
         , operator
+        , symbol
         , identifier
         , Parser.chompIf (Basics.always True)
             |> Parser.getChompedString
