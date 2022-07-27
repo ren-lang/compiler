@@ -12,7 +12,7 @@ import Node.Process exposing (Process)
 import Process
 import Ren.Ast.Core as Core
 import Ren.Ast.Expr as Expr
-import Ren.Data.Module as Module
+import Ren.Ast.Mod as Mod
 import Ren.Data.Token as Token
 import Ren.Stage.Emit as Emitter
 import Ren.Stage.Lex as Lexer
@@ -71,7 +71,7 @@ run ({ chalk, fs, path, process } as ffi) =
                 javascript =
                     ast
                         |> Result.map (Expr.desugar >> Expr.Lambda [ Core.PAny ])
-                        |> Result.map (\expr -> Module.addLocalDeclaration True "$eval" expr Module.empty)
+                        |> Result.map (\expr -> Mod.addLocalDec True "$eval" expr Mod.empty)
                         |> Result.map (Emitter.emit 80 { name = "$eval", root = process.cwd (), includeFFI = False })
             in
             if List.member "--dump-tokens" args then
@@ -178,7 +178,7 @@ makeFile ffi args path =
                 |> Result.fromMaybe ()
                 |> Result.andThen Lexer.lex
                 |> Result.andThen Parser.parse
-                |> Result.map (Module.encode >> Json.Encode.encode 2)
+                |> Result.map (Mod.encode >> Json.Encode.encode 2)
                 |> Result.map (ffi.fs.writeFile <| path ++ ".json")
                 |> Result.map (\_ -> Cmd.none)
                 |> Result.withDefault (stderr <| "error compiling `" ++ path ++ "`")

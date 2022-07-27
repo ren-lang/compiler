@@ -1,11 +1,12 @@
-module Ren.Data.Import exposing (..)
+module Ren.Ast.Mod.Import exposing (..)
 
 {-| -}
 
 -- IMPORTS ---------------------------------------------------------------------
 
+import Json.Decode
 import Json.Encode
-import Ren.Data.Metadata as Metadata
+import Util.Json as Json
 import Util.List as List
 
 
@@ -105,24 +106,57 @@ encode : Import -> Json.Encode.Value
 encode imp =
     let
         encodeSource source =
-            Json.Encode.list Basics.identity <|
-                case source of
-                    Local ->
-                        [ Metadata.encode "Local" {} ]
+            case source of
+                Local ->
+                    Json.taggedEncoder "Local" [] []
 
-                    Package ->
-                        [ Metadata.encode "Package" {} ]
+                Package ->
+                    Json.taggedEncoder "Package" [] []
 
-                    External ->
-                        [ Metadata.encode "External" {} ]
+                External ->
+                    Json.taggedEncoder "External" [] []
     in
-    Json.Encode.list Basics.identity
-        [ Metadata.encode "Import" {}
-        , Json.Encode.string imp.path
+    Json.taggedEncoder "Import"
+        []
+        [ Json.Encode.string imp.path
         , encodeSource imp.source
         , Json.Encode.list Json.Encode.string imp.name
         , Json.Encode.list Json.Encode.string imp.unqualified
         ]
+
+
+decoder : Json.Decode.Decoder Import
+decoder =
+    let
+        sourceDecoder =
+            Json.taggedDecoder
+                (\str ->
+                    case str of
+                        "Local" ->
+                            Json.Decode.succeed Local
+
+                        "Package" ->
+                            Json.Decode.succeed Package
+
+                        "External" ->
+                            Json.Decode.succeed External
+
+                        _ ->
+                            Json.Decode.fail <| "Unknown source: " ++ str
+                )
+    in
+    Json.taggedDecoder
+        (\key ->
+            if key == "Import" then
+                Json.Decode.map4 Import
+                    (Json.Decode.index 1 <| Json.Decode.string)
+                    (Json.Decode.index 2 <| sourceDecoder)
+                    (Json.Decode.index 3 <| Json.Decode.list Json.Decode.string)
+                    (Json.Decode.index 4 <| Json.Decode.list Json.Decode.string)
+
+            else
+                Json.Decode.fail <| "Unknown key: " ++ key
+        )
 
 
 

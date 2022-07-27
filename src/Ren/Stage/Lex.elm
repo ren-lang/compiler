@@ -13,11 +13,11 @@ import Set exposing (Set)
 --
 
 
-lex : String -> Result () (List Token)
+lex : String -> Result String (List Token)
 lex source =
     Parser.run stream source
         |> Result.map collect
-        |> Result.mapError (\_ -> ())
+        |> Result.mapError (\_ -> "lexer error")
 
 
 collect : List Token -> List Token

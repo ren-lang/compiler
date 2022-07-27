@@ -4,7 +4,6 @@ module Ren.Ast.JavaScript exposing (..)
 
 -- IMPORTS ---------------------------------------------------------------------
 
-import Ren.Ast.Core as Core
 import Ren.Ast.Expr as Expr exposing (Expr)
 import Util.List as List
 import Util.Math
@@ -63,114 +62,97 @@ type Expression
 fromExpr : Expr -> Statement
 fromExpr =
     let
-        go exprF =
-            case exprF of
-                Core.EApp (Expr (Call (Var "<access>") [ String key ])) stmt ->
-                    Expr <| Access (asExpression stmt) [ key ]
+        branchFromCase ( pattern, guard, body ) =
+            If (checksFromPattern (Var "$pat") pattern)
+                (case guard of
+                    Just (Expr g) ->
+                        Block <|
+                            List.concat
+                                [ assignmentsFromPattern (Var "$pat") pattern
+                                , [ If g (return body) Nothing ]
+                                ]
 
-                Core.EApp (Expr (Call (Var "<binop>") [ String op, lhs ])) stmt ->
-                    case Expr.operatorFromName op of
-                        Just operator ->
-                            Expr <| fromOperator operator lhs (asExpression stmt)
-
-                        _ ->
-                            Comment "TODO: handle binop with non-expr arg"
-
-                Core.EApp (Expr (Call (Var "<if>") [ cond, then_ ])) stmt ->
-                    Expr <| Ternary cond then_ (asExpression stmt)
-
-                Core.EApp (Expr (Call fun args)) (Expr arg) ->
-                    Expr <| Call fun (args ++ [ arg ])
-
-                Core.EApp (Expr fun) (Expr arg) ->
-                    Expr <| Call fun [ arg ]
-
-                Core.EApp fun arg ->
-                    Block [ fun, arg ]
-
-                Core.ELam arg (Expr (IIFE (Just ( name, expr )) (Block body))) ->
-                    Expr <| Arrow arg (return <| Block <| Const name expr :: body)
-
-                Core.ELam arg (Expr (IIFE (Just ( name, expr )) body)) ->
-                    Expr <| Arrow arg (return <| Block [ Const name expr, body ])
-
-                Core.ELam arg (Expr (IIFE Nothing body)) ->
-                    Expr <| Arrow arg (return body)
-
-                Core.ELam arg body ->
-                    Expr <| Arrow arg (return body)
-
-                Core.ELet "" expr (Block body) ->
-                    Block <| expr :: body
-
-                Core.ELet "" expr body ->
-                    Block [ expr, body ]
-
-                Core.ELet name stmt (Block body) ->
-                    Block <| Const name (asExpression stmt) :: body
-
-                Core.ELet name stmt body ->
-                    Block [ Const name (asExpression stmt), body ]
-
-                Core.ELit (Core.LArr elements) ->
-                    Expr <| Array <| List.map asExpression elements
-
-                Core.ELit (Core.LCon "true" []) ->
-                    Expr <| Bool True
-
-                Core.ELit (Core.LCon "false" []) ->
-                    Expr <| Bool False
-
-                Core.ELit (Core.LCon "undefined" []) ->
-                    Expr Undefined
-
-                Core.ELit (Core.LCon tag args) ->
-                    Expr <| Array <| String tag :: List.map asExpression args
-
-                Core.ELit (Core.LNum n) ->
-                    Expr <| Number n
-
-                Core.ELit (Core.LRec fields) ->
-                    Expr <| Object <| List.map (Tuple.mapSecond asExpression) fields
-
-                Core.ELit (Core.LStr s) ->
-                    Expr <| String s
-
-                Core.EVar name ->
-                    Expr <| Var name
-
-                Core.EPat (Expr expr) cases ->
-                    let
-                        branchFromCase ( pattern, guard, body ) =
-                            If (checksFromPattern (Var "$pat") pattern)
-                                (case guard of
-                                    Just (Expr g) ->
-                                        Block <|
-                                            List.concat
-                                                [ assignmentsFromPattern (Var "$pat") pattern
-                                                , [ If g (return body) Nothing ]
-                                                ]
-
-                                    _ ->
-                                        return <|
-                                            Block <|
-                                                List.concat
-                                                    [ assignmentsFromPattern (Var "$pat") pattern
-                                                    , [ body ]
-                                                    ]
-                                )
-                                Nothing
-                    in
-                    [ Throw "Non-exhaustive pattern match" ]
-                        |> (++) (List.map (return << branchFromCase) cases)
-                        |> Block
-                        |> IIFE (Just ( "$pat", expr ))
-                        |> Expr
-
-                Core.EPat _ _ ->
-                    Throw "TODO: Core.EPat _ _ ->"
+                    _ ->
+                        return <|
+                            Block <|
+                                List.concat
+                                    [ assignmentsFromPattern (Var "$pat") pattern
+                                    , [ body ]
+                                    ]
+                )
+                Nothing
     in
-    Expr.lower >> Core.fold go
+    Expr.fold
+        { access = \stmt key -> Expr <| Access (asExpression stmt) [ key ]
+        , binop = \op lhs rhs -> Expr <| fromOperator op (asExpression lhs) (asExpression rhs)
+        , call = \fun args -> Expr <| Call (asExpression fun) (List.map asExpression args)
+        , if_ =
+            \cond then_ else_ ->
+                Expr <| Ternary (asExpression cond) (asExpression then_) (asExpression <| else_)
+        , lambda =
+            \args body ->
+                List.foldr
+                    (\pattern stmt ->
+                        case pattern of
+                            Expr.PVar name ->
+                                Expr <| Arrow name (return stmt)
+
+                            _ ->
+                                [ Throw "Non-exhaustive pattern match", return <| branchFromCase ( pattern, Nothing, stmt ) ]
+                                    |> Block
+                                    |> Arrow "$pat"
+                                    |> Expr
+                    )
+                    body
+                    args
+        , let_ =
+            \pattern stmt body ->
+                case pattern of
+                    Expr.PVar name ->
+                        Block [ Const name (asExpression stmt), body ]
+
+                    _ ->
+                        [ Throw "Non-exhaustive pattern match", return <| branchFromCase ( pattern, Nothing, body ) ]
+                            |> Block
+                            |> IIFE (Just ( "$pat", asExpression stmt ))
+                            |> Expr
+        , literal =
+            \lit ->
+                case lit of
+                    Expr.LArr elements ->
+                        Expr <| Array <| List.map asExpression elements
+
+                    Expr.LCon "true" [] ->
+                        Expr <| Bool True
+
+                    Expr.LCon "false" [] ->
+                        Expr <| Bool False
+
+                    Expr.LCon "undefined" [] ->
+                        Expr Undefined
+
+                    Expr.LCon tag args ->
+                        Expr <| Array <| String tag :: List.map asExpression args
+
+                    Expr.LNum n ->
+                        Expr <| Number n
+
+                    Expr.LRec fields ->
+                        Expr <| Object <| List.map (Tuple.mapSecond asExpression) fields
+
+                    Expr.LStr s ->
+                        Expr <| String s
+        , placeholder = Throw "bad placeholder"
+        , scoped = \scope name -> Expr <| Var <| String.join "$" scope ++ name
+        , where_ =
+            \stmt cases ->
+                [ Throw "Non-exhaustive pattern match" ]
+                    |> (++) (List.map (return << branchFromCase) cases)
+                    |> Block
+                    |> IIFE (Just ( "$pat", asExpression stmt ))
+                    |> Expr
+        , var = \var -> Expr <| Var var
+        }
 
 
 fromOperator : Expr.Operator -> Expression -> Expression -> Expression
@@ -225,13 +207,13 @@ fromOperator op lhs rhs =
             Sub lhs rhs
 
 
-checksFromPattern : Expression -> Core.Pattern -> Expression
+checksFromPattern : Expression -> Expr.Pattern -> Expression
 checksFromPattern expr pattern =
     case pattern of
-        Core.PAny ->
+        Expr.PAny ->
             Bool True
 
-        Core.PLit (Core.LArr elements) ->
+        Expr.PLit (Expr.LArr elements) ->
             elements
                 |> List.indexedMap (\i el -> checksFromPattern (Index expr <| Number <| Basics.toFloat i) el)
                 -- Patterns like the wildcard `_` are always just true. This is
@@ -249,24 +231,24 @@ checksFromPattern expr pattern =
                 -- need to call a method on the global `Array` object instead.
                 |> List.foldl (\y x -> And x y) (Call (Access (Var "globalThis") [ "Array", "isArray" ]) [ expr ])
 
-        Core.PLit (Core.LCon "true" []) ->
+        Expr.PLit (Expr.LCon "true" []) ->
             Eq expr <| Bool True
 
-        Core.PLit (Core.LCon "false" []) ->
+        Expr.PLit (Expr.LCon "false" []) ->
             Eq expr <| Bool False
 
-        Core.PLit (Core.LCon "undefined" []) ->
+        Expr.PLit (Expr.LCon "undefined" []) ->
             Eq expr Undefined
 
-        Core.PLit (Core.LCon tag args) ->
+        Expr.PLit (Expr.LCon tag args) ->
             -- Variants are represented as arrays at runtime, where the first
             -- element is the tag and the rest are any arguments.
-            checksFromPattern expr <| Core.PLit <| Core.LArr <| (Core.PLit (Core.LStr tag) :: args)
+            checksFromPattern expr <| Expr.PLit <| Expr.LArr <| (Expr.PLit (Expr.LStr tag) :: args)
 
-        Core.PLit (Core.LNum n) ->
+        Expr.PLit (Expr.LNum n) ->
             Eq expr <| Number n
 
-        Core.PLit (Core.LRec fields) ->
+        Expr.PLit (Expr.LRec fields) ->
             fields
                 |> List.map (\( k, v ) -> checksFromPattern (Access expr [ k ]) v)
                 -- As with arrays, we can safely remove checks that will always
@@ -274,15 +256,15 @@ checksFromPattern expr pattern =
                 |> List.filter ((/=) (Bool True))
                 |> List.foldl (\y x -> And x y) (Eq (Typeof expr) (String "object"))
 
-        Core.PLit (Core.LStr s) ->
+        Expr.PLit (Expr.LStr s) ->
             Eq expr <| String s
 
-        Core.PTyp "Array" pat ->
+        Expr.PTyp "Array" pat ->
             And
                 (Call (Access (Var "Array") [ "isArray" ]) [ expr ])
                 (checksFromPattern expr pat)
 
-        Core.PTyp type_ pat ->
+        Expr.PTyp type_ pat ->
             And
                 (Or
                     (Eq (Typeof expr) (String type_))
@@ -290,38 +272,38 @@ checksFromPattern expr pattern =
                 )
                 (checksFromPattern expr pat)
 
-        Core.PVar _ ->
+        Expr.PVar _ ->
             Bool True
 
 
-assignmentsFromPattern : Expression -> Core.Pattern -> List Statement
+assignmentsFromPattern : Expression -> Expr.Pattern -> List Statement
 assignmentsFromPattern expr pattern =
     case pattern of
-        Core.PAny ->
+        Expr.PAny ->
             []
 
-        Core.PLit (Core.LArr elements) ->
+        Expr.PLit (Expr.LArr elements) ->
             elements
                 |> List.indexedMap (\i el -> assignmentsFromPattern (Index expr <| Number <| Basics.toFloat i) el)
                 |> List.concat
 
-        Core.PLit (Core.LCon _ args) ->
-            assignmentsFromPattern expr <| Core.PLit <| Core.LArr <| Core.PAny :: args
+        Expr.PLit (Expr.LCon _ args) ->
+            assignmentsFromPattern expr <| Expr.PLit <| Expr.LArr <| Expr.PAny :: args
 
-        Core.PLit (Core.LNum _) ->
+        Expr.PLit (Expr.LNum _) ->
             []
 
-        Core.PLit (Core.LRec fields) ->
+        Expr.PLit (Expr.LRec fields) ->
             fields
                 |> List.concatMap (\( k, v ) -> assignmentsFromPattern (Access expr [ k ]) v)
 
-        Core.PLit (Core.LStr _) ->
+        Expr.PLit (Expr.LStr _) ->
             []
 
-        Core.PTyp _ pat ->
+        Expr.PTyp _ pat ->
             assignmentsFromPattern expr pat
 
-        Core.PVar name ->
+        Expr.PVar name ->
             [ Const name expr ]
 
 

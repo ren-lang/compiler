@@ -5,7 +5,7 @@ module Ren.Data.Token exposing (..)
 -- IMPORTS ---------------------------------------------------------------------
 --
 
-import Ren.Ast.Expr as Expr
+import Ren.Ast.Expr.Op as Operator exposing (Operator)
 import Set exposing (Set)
 import String
 
@@ -25,7 +25,7 @@ type Token
     | Identifier Case String
     | Keyword Keyword
     | Number Float
-    | Operator Expr.Operator
+    | Operator Operator
     | String String
     | Symbol Symbol
     | Unknown String
@@ -88,7 +88,7 @@ keywords =
             -- Imports
             [ [ "import", "pkg", "ext", "exposing", "as" ]
 
-            -- Declarations
+            -- Decs
             , [ "pub", "type", "let", "ext", "do" ]
 
             --
@@ -133,7 +133,7 @@ symbols =
 {-| -}
 operators : Set String
 operators =
-    Set.fromList Expr.operatorSymbols
+    Set.fromList Operator.symbols
 
 
 
@@ -256,7 +256,7 @@ symbol s =
 {-| -}
 operator : String -> Maybe Token
 operator s =
-    Expr.operatorFromSymbol s
+    Operator.fromSymbol s
         |> Maybe.map Operator
 
 
@@ -396,7 +396,7 @@ debug stream =
                     "<number>" ++ " " ++ String.fromFloat n
 
                 Operator op ->
-                    "<operator>" ++ " '" ++ Expr.operatorName op ++ "'"
+                    "<operator>" ++ " '" ++ Operator.name op ++ "'"
 
                 String s ->
                     "<string>" ++ " '" ++ s ++ "'"

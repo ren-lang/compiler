@@ -48,7 +48,7 @@ module Ren.Control.Parser exposing
 -- IMPORTS ---------------------------------------------------------------------
 
 import Array exposing (Array)
-import Ren.Ast.Expr as Expr
+import Ren.Ast.Expr.Op exposing (Operator)
 import Ren.Data.Token as Token exposing (Token)
 
 
@@ -172,38 +172,35 @@ problem error =
 
 any : e -> Parser ctx e Token
 any error =
-    Parser <|
-        \state ->
-            case nextToken state of
-                Token.EOF ->
-                    Bad False <| bagFromState state error
+    Parser <| \state ->
+    case nextToken state of
+        Token.EOF ->
+            Bad False <| bagFromState state error
 
-                tok ->
-                    Good True tok { state | offset = state.offset + 1 }
+        tok ->
+            Good True tok { state | offset = state.offset + 1 }
 
 
 token : e -> Token -> Parser ctx e ()
 token error tok =
-    Parser <|
-        \state ->
-            if nextToken state == tok then
-                Good True () { state | offset = state.offset + 1 }
+    Parser <| \state ->
+    if nextToken state == tok then
+        Good True () { state | offset = state.offset + 1 }
 
-            else
-                Bad False <| bagFromState state error
+    else
+        Bad False <| bagFromState state error
 
 
 {-| -}
 comment : e -> Parser ctx e String
 comment error =
-    Parser <|
-        \state ->
-            case nextToken state of
-                Token.Comment s ->
-                    Good True s { state | offset = state.offset + 1 }
+    Parser <| \state ->
+    case nextToken state of
+        Token.Comment s ->
+            Good True s { state | offset = state.offset + 1 }
 
-                _ ->
-                    Bad False <| bagFromState state error
+        _ ->
+            Bad False <| bagFromState state error
 
 
 {-| -}
@@ -219,7 +216,7 @@ symbol error sym =
 
 
 {-| -}
-operator : e -> Expr.Operator -> Parser ctx e ()
+operator : e -> Operator -> Parser ctx e ()
 operator error op =
     token error <| Token.Operator op
 
@@ -227,13 +224,12 @@ operator error op =
 {-| -}
 end : e -> Parser ctx e ()
 end error =
-    Parser <|
-        \state ->
-            if Array.length state.stream <= state.offset then
-                Good False () state
+    Parser <| \state ->
+    if Array.length state.stream <= state.offset then
+        Good False () state
 
-            else
-                Bad False (bagFromState state error)
+    else
+        Bad False (bagFromState state error)
 
 
 
@@ -242,18 +238,17 @@ end error =
 
 identifier : e -> Token.Case -> Parser ctx e String
 identifier error casing =
-    Parser <|
-        \state ->
-            case nextToken state of
-                Token.Identifier c s ->
-                    if c == casing then
-                        Good True s { state | offset = state.offset + 1 }
+    Parser <| \state ->
+    case nextToken state of
+        Token.Identifier c s ->
+            if c == casing then
+                Good True s { state | offset = state.offset + 1 }
 
-                    else
-                        Bad False <| bagFromState state error
+            else
+                Bad False <| bagFromState state error
 
-                _ ->
-                    Bad False <| bagFromState state error
+        _ ->
+            Bad False <| bagFromState state error
 
 
 
@@ -263,27 +258,25 @@ identifier error casing =
 {-| -}
 number : e -> Parser ctx e Float
 number expecting =
-    Parser <|
-        \state ->
-            case nextToken state of
-                Token.Number n ->
-                    Good True n { state | offset = state.offset + 1 }
+    Parser <| \state ->
+    case nextToken state of
+        Token.Number n ->
+            Good True n { state | offset = state.offset + 1 }
 
-                _ ->
-                    Bad False <| bagFromState state expecting
+        _ ->
+            Bad False <| bagFromState state expecting
 
 
 {-| -}
 string : e -> Parser ctx e String
 string expecting =
-    Parser <|
-        \state ->
-            case nextToken state of
-                Token.String s ->
-                    Good True s { state | offset = state.offset + 1 }
+    Parser <| \state ->
+    case nextToken state of
+        Token.String s ->
+            Good True s { state | offset = state.offset + 1 }
 
-                _ ->
-                    Bad False <| bagFromState state expecting
+        _ ->
+            Bad False <| bagFromState state expecting
 
 
 
@@ -293,14 +286,13 @@ string expecting =
 {-| -}
 map : (a -> b) -> Parser ctx e a -> Parser ctx e b
 map f parser =
-    Parser <|
-        \state ->
-            case runwrap parser state of
-                Good c a nextState ->
-                    Good c (f a) nextState
+    Parser <| \state ->
+    case runwrap parser state of
+        Good c a nextState ->
+            Good c (f a) nextState
 
-                Bad c error ->
-                    Bad c error
+        Bad c error ->
+            Bad c error
 
 
 {-| -}
@@ -312,19 +304,18 @@ map2 f parseA parseB =
 {-| -}
 andThen : (a -> Parser ctx e b) -> Parser ctx e a -> Parser ctx e b
 andThen f parseA =
-    Parser <|
-        \state ->
-            case runwrap parseA state of
-                Bad c error ->
-                    Bad c error
+    Parser <| \state ->
+    case runwrap parseA state of
+        Bad c error ->
+            Bad c error
 
-                Good c1 a nextState ->
-                    case runwrap (f a) nextState of
-                        Bad c2 error ->
-                            Bad (c1 || c2) error
+        Good c1 a nextState ->
+            case runwrap (f a) nextState of
+                Bad c2 error ->
+                    Bad (c1 || c2) error
 
-                        Good c2 b finalState ->
-                            Good (c1 || c2) b finalState
+                Good c2 b finalState ->
+                    Good (c1 || c2) b finalState
 
 
 
@@ -356,14 +347,13 @@ lazy thunk =
 {-| -}
 backtrackable : Parser ctx e a -> Parser ctx e a
 backtrackable parser =
-    Parser <|
-        \state ->
-            case runwrap parser state of
-                Bad _ error ->
-                    Bad False error
+    Parser <| \state ->
+    case runwrap parser state of
+        Bad _ error ->
+            Bad False error
 
-                Good _ val nextState ->
-                    Good False val nextState
+        Good _ val nextState ->
+            Good False val nextState
 
 
 
@@ -427,18 +417,17 @@ oneOfHelp s0 bag parsers =
 {-| -}
 chompIf : (Token -> Bool) -> e -> Parser ctx e ()
 chompIf predicate expecting =
-    Parser <|
-        \state ->
-            Array.get state.offset state.stream
-                |> Maybe.map predicate
-                |> Maybe.withDefault False
-                |> (\matches ->
-                        if matches then
-                            Good True () { state | offset = state.offset + 1 }
+    Parser <| \state ->
+    Array.get state.offset state.stream
+        |> Maybe.map predicate
+        |> Maybe.withDefault False
+        |> (\matches ->
+                if matches then
+                    Good True () { state | offset = state.offset + 1 }
 
-                        else
-                            Bad False (bagFromState state expecting)
-                   )
+                else
+                    Bad False (bagFromState state expecting)
+           )
 
 
 {-| -}

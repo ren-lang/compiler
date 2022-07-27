@@ -1,11 +1,6 @@
 module Ren.Ast.Expr exposing
-    ( Expr(..), Operator(..)
-    , operators, operatorNames, operatorSymbols
-    , raise
-    , operatorFromName, operatorFromSymbol
-    , operatorName
-    , transform, desugar
-    , lower
+    ( Expr(..)
+    , fold, foldWith, transform, desugar
     , decoder, encode
     )
 
@@ -14,7 +9,7 @@ module Ren.Ast.Expr exposing
 
 ## Types
 
-@docs Expr, Operator
+@docs Expr
 
 
 ## Constants
@@ -24,7 +19,7 @@ module Ren.Ast.Expr exposing
 
 ## Constructors
 
-@docs raise, fromJson, fromJsonString
+@docs fromJson, fromJsonString
 @docs operatorFromName, operatorFromSymbol
 
 
@@ -35,12 +30,12 @@ module Ren.Ast.Expr exposing
 
 ## Manipulations
 
-@docs transform, desugar
+@docs fold, foldWith, transform, desugar
 
 
 ## Conversions
 
-@docs lower, toJson
+@docs toJson
 
 
 ## JSON
@@ -54,8 +49,12 @@ module Ren.Ast.Expr exposing
 
 import Json.Decode
 import Json.Encode
-import Ren.Ast.Core
-import Ren.Data.Metadata as Metadata
+import Ren.Ast.Expr.Lit as Lit exposing (Lit)
+import Ren.Ast.Expr.Meta as Meta exposing (Meta)
+import Ren.Ast.Expr.Op as Operator exposing (Operator)
+import Ren.Ast.Expr.Pat as Pattern exposing (Pattern)
+import Ren.Ast.Type as Type exposing (Type)
+import Util.Json as Json
 import Util.List as List
 import Util.Triple as Triple
 
@@ -66,344 +65,191 @@ import Util.Triple as Triple
 
 {-| -}
 type Expr
-    = Access Expr String
-    | Binop Operator Expr Expr
-    | Call Expr (List Expr)
-    | If Expr Expr Expr
-    | Lambda (List Ren.Ast.Core.Pattern) Expr
-    | Let Ren.Ast.Core.Pattern Expr Expr
-    | Literal (Ren.Ast.Core.Literal Expr)
-    | Placeholder
-    | Scoped (List String) String
-    | Where Expr (List ( Ren.Ast.Core.Pattern, Maybe Expr, Expr ))
-    | Var String
-
-
-{-| -}
-type Operator
-    = Add --    +
-    | And --    and
-    | Concat -- ++
-    | Cons --   ::
-    | Div --    /
-    | Eq --     ==
-    | Gte --    >=
-    | Gt --     >
-    | Lte --    <=
-    | Lt --     <
-    | Mod --    %
-    | Mul --    *
-    | Neq --    !=
-    | Or --     or
-    | Pipe --   |>
-    | Sub --    -
+    = Access Meta Expr String
+    | Annotated Meta Expr Type
+    | Binop Meta Operator Expr Expr
+    | Call Meta Expr (List Expr)
+    | If Meta Expr Expr Expr
+    | Lambda Meta (List Pattern) Expr
+    | Let Meta Pattern Expr Expr
+    | Lit Meta (Lit Expr)
+    | Placeholder Meta
+    | Scoped Meta (List String) String
+    | Where Meta Expr (List ( Pattern, Maybe Expr, Expr ))
+    | Var Meta String
 
 
 
 -- CONSTANTS -------------------------------------------------------------------
-
-
-{-| Elm (frustratingly) only allows `Set`s of `comparable` values, which does not
-include custom types. This is a list of every operator Ren has as the next-best
-thing.
-
-This is guaranteed to be in the same order as `operatorNames` and `operatorSymbols`
-
--}
-operators : List Operator
-operators =
-    List.map Triple.first operatorsNamesAndSymbols
-
-
-{-| -}
-operatorNames : List String
-operatorNames =
-    List.map Triple.second operatorsNamesAndSymbols
-
-
-{-| -}
-operatorSymbols : List String
-operatorSymbols =
-    List.map Triple.third operatorsNamesAndSymbols
-
-
-{-| -}
-operatorsNamesAndSymbols : List ( Operator, String, String )
-operatorsNamesAndSymbols =
-    [ ( Add, "add", "+" )
-    , ( And, "and", "and" )
-    , ( Concat, "concat", "++" )
-    , ( Cons, "cons", "::" )
-    , ( Div, "div", "/" )
-    , ( Eq, "eq", "==" )
-    , ( Gte, "gte", ">=" )
-    , ( Gt, "gt", ">" )
-    , ( Lte, "lte", "<=" )
-    , ( Lt, "lt", "<" )
-    , ( Mod, "mod", "%" )
-    , ( Mul, "mul", "*" )
-    , ( Neq, "neq", "!=" )
-    , ( Or, "or", "or" )
-    , ( Pipe, "pipe", "|>" )
-    , ( Sub, "sub", "-" )
-    ]
-
-
-
 -- CONSTRUCTORS ----------------------------------------------------------------
-
-
-{-| Take an expression from our core 𝝺-calculus representation and raise it up
-to the higher-level `Expr` type. This will take some of the magical variables
-used and expand them into more useful forms. For example, binary operators are
-represented in the core as:
-
-    Expr
-        (EApp
-            (Expr
-                (EApp
-                    (Expr
-                        (EApp
-                            (Expr (EVar "<binop>"))
-                            (Expr (ELit (LStr "add")))
-                        )
-                    )
-                    (Expr (EVar "x"))
-                )
-            )
-            (Expr (EVar "y"))
-        )
-
--}
-raise : Ren.Ast.Core.Expr -> Expr
-raise =
-    let
-        go exprF =
-            case exprF of
-                Ren.Ast.Core.EApp (Call (Var "<access>") [ Literal (Ren.Ast.Core.LStr key) ]) expr ->
-                    Access expr key
-
-                Ren.Ast.Core.EApp (Call (Var "<binop>") [ (Literal (Ren.Ast.Core.LStr s)) as expr, lhs ]) rhs ->
-                    case operatorFromName s of
-                        Just op ->
-                            Binop op lhs rhs
-
-                        Nothing ->
-                            Call expr [ lhs, rhs ]
-
-                Ren.Ast.Core.EApp (Call (Var "<if>") [ cond, then_ ]) else_ ->
-                    If cond then_ else_
-
-                Ren.Ast.Core.EApp (Call fun args) arg ->
-                    Call fun (args ++ [ arg ])
-
-                Ren.Ast.Core.EApp fun arg ->
-                    Call fun [ arg ]
-
-                Ren.Ast.Core.ELam arg (Lambda args body) ->
-                    Lambda (Ren.Ast.Core.PVar arg :: args) body
-
-                Ren.Ast.Core.ELam arg body ->
-                    Lambda [ Ren.Ast.Core.PVar arg ] body
-
-                Ren.Ast.Core.ELet name expr body ->
-                    Let (Ren.Ast.Core.PVar name) expr body
-
-                Ren.Ast.Core.ELit lit ->
-                    Literal lit
-
-                Ren.Ast.Core.EVar "<placeholder>" ->
-                    Placeholder
-
-                Ren.Ast.Core.EVar var ->
-                    case List.reverse <| String.split "$" var of
-                        [] ->
-                            Placeholder
-
-                        name :: [] ->
-                            Var name
-
-                        name :: scope ->
-                            Scoped (List.reverse scope) name
-
-                Ren.Ast.Core.EPat expr cases ->
-                    Where expr cases
-    in
-    Ren.Ast.Core.fold go
-
-
-{-| -}
-operatorFromName : String -> Maybe Operator
-operatorFromName name =
-    List.indexOf name operatorNames
-        |> Maybe.andThen (\i -> List.at i operators)
-
-
-{-| -}
-operatorFromSymbol : String -> Maybe Operator
-operatorFromSymbol symbol =
-    List.indexOf symbol operatorSymbols
-        |> Maybe.andThen (\i -> List.at i operators)
-
-
-
 -- QUERIES ---------------------------------------------------------------------
 
 
-{-| -}
-operatorName : Operator -> String
-operatorName op =
-    List.find (Triple.first >> (==) op) operatorsNamesAndSymbols
-        |> Maybe.map Triple.second
-        -- This default should never be hit, we hardcode the list of operators
-        -- and their names/symbols.
-        |> Maybe.withDefault ""
+meta : Expr -> Meta
+meta expr =
+    case expr of
+        Access metadata _ _ ->
+            metadata
+
+        Annotated metadata _ _ ->
+            metadata
+
+        Binop metadata _ _ _ ->
+            metadata
+
+        Call metadata _ _ ->
+            metadata
+
+        If metadata _ _ _ ->
+            metadata
+
+        Lambda metadata _ _ ->
+            metadata
+
+        Let metadata _ _ _ ->
+            metadata
+
+        Lit metadata _ ->
+            metadata
+
+        Placeholder metadata ->
+            metadata
+
+        Scoped metadata _ _ ->
+            metadata
+
+        Where metadata _ _ ->
+            metadata
+
+        Var metadata _ ->
+            metadata
 
 
 
 -- MANIPULATIONS ---------------------------------------------------------------
 
 
-replacePlaceholders : Expr -> Expr
-replacePlaceholders expr =
+foldWith :
+    { access : Expr -> a -> String -> a
+    , annotated : Expr -> a -> Type -> a
+    , binop : Expr -> Operator -> a -> a -> a
+    , call : Expr -> a -> List a -> a
+    , if_ : Expr -> a -> a -> a -> a
+    , lambda : Expr -> List Pattern -> a -> a
+    , let_ : Expr -> Pattern -> a -> a -> a
+    , literal : Expr -> Lit a -> a
+    , placeholder : Expr -> a
+    , scoped : Expr -> List String -> String -> a
+    , where_ : Expr -> a -> List ( Pattern, Maybe a, a ) -> a
+    , var : Expr -> String -> a
+    }
+    -> Expr
+    -> a
+foldWith f expr =
     let
-        -- Creates a valid JavaScript variable name from a placholder.
-        name i =
-            "$temp" ++ String.fromInt i
-
-        -- Given a list of expressions, creates a list of valid JavaScript variable
-        -- names for each placeholder. Rather than incrementing sequentially,
-        -- the variable's name is based on the index of the placeholder:
-        --
-        --     [ Placeholder, Var "x", Placeholder ]
-        --
-        -- becomes:
-        --
-        --     [ "$temp0", "$temp2" ]
-        --
-        names exprs =
-            exprs
-                |> List.indexedMap
-                    (\i e ->
-                        if e == Placeholder then
-                            Just <| name i
-
-                        else
-                            Nothing
-                    )
-                |> List.filterMap Basics.identity
-
-        -- Replace a placeholder a variable. If the given expression is not an
-        -- expression this is a no-op.
-        replace i e =
-            if e == Placeholder then
-                Var <| name i
-
-            else
-                e
-
-        -- Replace all placeholders in an expression. An offset is used when
-        -- generating the variable names:
-        --
-        --     replaceWhen (fun :: args) <|
-        --         Lambda (names (fun :: args)) <|
-        --             -- Note that the names generated for `args` is offset by
-        --             -- 1 because we may have already replaced a placeholder in
-        --             -- `fun`.
-        --             Call (replace 0 fun) (replaceMany 1 args)
-        --
-        replaceMany offset exprs =
-            exprs
-                |> List.indexedMap (\i e -> replace (i + offset) e)
-
-        -- If the list of replacement names is not empty, create a lambda using
-        -- those names as the arguments and the supplied body, otherwise return
-        -- the initial expression unchanged.
-        replaceWhen args body =
-            if List.isEmpty args then
-                expr
-
-            else
-                Lambda (List.map Ren.Ast.Core.PVar args) body
+        foldCase ( pattern, guard, body ) =
+            ( pattern, Maybe.map (foldWith f) guard, foldWith f body )
     in
     case expr of
-        Access rec key ->
-            replaceWhen (names [ rec ]) <|
-                Access (replace 0 rec) key
+        Access _ rec key ->
+            f.access expr (foldWith f rec) key
 
-        Binop op lhs rhs ->
-            replaceWhen (names [ lhs, rhs ]) <|
-                Binop op (replace 0 lhs) (replace 1 rhs)
+        Annotated _ expr_ type_ ->
+            f.annotated expr (foldWith f expr_) type_
 
-        -- When the last argument to a function call is a placeholder, we don't
-        -- need to generate a lambda for it because functions are curried anyway!
-        Call fun args ->
-            case List.reverse args of
-                [] ->
-                    fun
+        Binop _ op lhs rhs ->
+            f.binop expr op (foldWith f lhs) (foldWith f rhs)
 
-                Placeholder :: [] ->
-                    fun
+        Call _ fun args ->
+            f.call expr (foldWith f fun) (List.map (foldWith f) args)
 
-                -- Just keep dropping placeholders while they're the last argument.
-                -- If function application is all placeholders, eg something like:
-                --
-                --     f _ _ _
-                --
-                -- This will ultimately desugar to simply:
-                --
-                --     f
-                --
-                Placeholder :: _ ->
-                    replacePlaceholders <| Call fun (List.drop 1 args)
+        If _ cond then_ else_ ->
+            f.if_ expr (foldWith f cond) (foldWith f then_) (foldWith f else_)
 
-                _ ->
-                    replaceWhen (names (fun :: args)) <|
-                        Call (replace 0 fun) (replaceMany 1 args)
+        Lambda _ args body ->
+            f.lambda expr args (foldWith f body)
 
-        If cond then_ else_ ->
-            replaceWhen (names [ cond, then_, else_ ]) <|
-                If (replace 0 cond)
-                    (replace 1 then_)
-                    (replace 2 else_)
+        Let _ name expr_ body ->
+            f.let_ expr name (foldWith f expr_) (foldWith f body)
 
-        Lambda _ _ ->
-            expr
+        Lit _ (Lit.Array elements) ->
+            f.literal expr (Lit.Array <| List.map (foldWith f) elements)
 
-        Let _ _ _ ->
-            expr
+        Lit _ (Lit.Enum tag args) ->
+            f.literal expr (Lit.Enum tag (List.map (foldWith f) args))
 
-        Literal (Ren.Ast.Core.LArr elements) ->
-            replaceWhen (names elements) <|
-                Literal (Ren.Ast.Core.LArr <| replaceMany 0 elements)
+        Lit _ (Lit.Number n) ->
+            f.literal expr (Lit.Number n)
 
-        Literal (Ren.Ast.Core.LCon tag args) ->
-            replaceWhen (names args) <|
-                Literal (Ren.Ast.Core.LCon tag <| replaceMany 0 args)
+        Lit _ (Lit.Record fields) ->
+            f.literal expr (Lit.Record <| List.map (Tuple.mapSecond (foldWith f)) fields)
 
-        Literal (Ren.Ast.Core.LRec fields) ->
-            let
-                ( keys, vals ) =
-                    List.unzip fields
-            in
-            replaceWhen (names vals) <|
-                Literal (Ren.Ast.Core.LRec <| List.map2 Tuple.pair keys <| replaceMany 0 vals)
+        Lit _ (Lit.String s) ->
+            f.literal expr (Lit.String s)
 
-        Literal _ ->
-            expr
+        Placeholder _ ->
+            f.placeholder expr
 
-        Placeholder ->
-            expr
+        Scoped _ scope name ->
+            f.scoped expr scope name
 
-        Scoped _ _ ->
-            expr
+        Where _ expr_ cases ->
+            f.where_ expr (foldWith f expr_) (List.map foldCase cases)
 
-        Where expr_ cases ->
-            replaceWhen (names [ expr_ ]) <|
-                Where (replace 0 expr_) cases
+        Var _ name ->
+            f.var expr name
 
-        Var _ ->
-            expr
+
+fold :
+    { access : a -> String -> a
+    , annotated : a -> Type -> a
+    , binop : Operator -> a -> a -> a
+    , call : a -> List a -> a
+    , if_ : a -> a -> a -> a
+    , lambda : List Pattern -> a -> a
+    , let_ : Pattern -> a -> a -> a
+    , literal : Lit a -> a
+    , placeholder : a
+    , scoped : List String -> String -> a
+    , where_ : a -> List ( Pattern, Maybe a, a ) -> a
+    , var : String -> a
+    }
+    -> Expr
+    -> a
+fold f expr =
+    foldWith
+        { access = Basics.always f.access
+        , annotated = Basics.always f.annotated
+        , binop = Basics.always f.binop
+        , call = Basics.always f.call
+        , if_ = Basics.always f.if_
+        , lambda = Basics.always f.lambda
+        , let_ = Basics.always f.let_
+        , literal = Basics.always f.literal
+        , placeholder = Basics.always f.placeholder
+        , scoped = Basics.always f.scoped
+        , where_ = Basics.always f.where_
+        , var = Basics.always f.var
+        }
+        expr
+
+
+transform : (Expr -> Expr) -> Expr -> Expr
+transform f =
+    foldWith
+        { access = \e expr key -> f <| Access (meta e) expr key
+        , annotated = \e expr type_ -> f <| Annotated (meta e) expr type_
+        , binop = \e op lhs rhs -> f <| Binop (meta e) op lhs rhs
+        , call = \e fun args -> f <| Call (meta e) fun args
+        , if_ = \e cond then_ else_ -> f <| If (meta e) cond then_ else_
+        , lambda = \e args body -> f <| Lambda (meta e) args body
+        , let_ = \e name expr body -> f <| Let (meta e) name expr body
+        , literal = \e lit -> f <| Lit (meta e) lit
+        , placeholder = \e -> f <| Placeholder (meta e)
+        , scoped = \e scope name -> f <| Scoped (meta e) scope name
+        , where_ = \e expr cases -> f <| Where (meta e) expr cases
+        , var = \e name -> f <| Var (meta e) name
+        }
 
 
 desugar : Expr -> Expr
@@ -427,197 +273,157 @@ desugar expr =
     transform applyN expr
 
 
-transform : (Expr -> Expr) -> Expr -> Expr
-transform f expr =
+replacePlaceholders : Expr -> Expr
+replacePlaceholders expr =
     let
-        transformCase ( pattern, guard, body ) =
-            ( pattern, Maybe.map f guard, f body )
+        -- Creates a valid JavaScript variable name from a placholder.
+        name i =
+            "$temp" ++ String.fromInt i
+
+        -- Given a list of expressions, creates a list of valid JavaScript variable
+        -- names for each placeholder. Rather than incrementing sequentially,
+        -- the variable's name is based on the index of the placeholder:
+        --
+        --     [ Placeholder, Var "x", Placeholder ]
+        --
+        -- becomes:
+        --
+        --     [ "$temp0", "$temp2" ]
+        --
+        names exprs =
+            exprs
+                |> List.indexedMap
+                    (\i e ->
+                        case e of
+                            Placeholder _ ->
+                                Just <| name i
+
+                            _ ->
+                                Nothing
+                    )
+                |> List.filterMap Basics.identity
+
+        -- Replace a placeholder a variable. If the given expression is not an
+        -- expression this is a no-op.
+        replace i e =
+            case e of
+                Placeholder metadata ->
+                    Var metadata <| name i
+
+                _ ->
+                    e
+
+        -- Replace all placeholders in an expression. An offset is used when
+        -- generating the variable names:
+        --
+        --     replaceWhen (fun :: args) <|
+        --         Lambda (names (fun :: args)) <|
+        --             -- Note that the names generated for `args` is offset by
+        --             -- 1 because we may have already replaced a placeholder in
+        --             -- `fun`.
+        --             Call (replace 0 fun) (replaceMany 1 args)
+        --
+        replaceMany offset exprs =
+            exprs
+                |> List.indexedMap (\i e -> replace (i + offset) e)
+
+        -- If the list of replacement names is not empty, create a lambda using
+        -- those names as the arguments and the supplied body, otherwise return
+        -- the initial expression unchanged.
+        replaceWhen metadata args body =
+            if List.isEmpty args then
+                expr
+
+            else
+                Lambda metadata (List.map Pattern.Var args) body
     in
-    f <|
-        case expr of
-            Access rec key ->
-                Access (transform f rec) key
+    case expr of
+        Access metadata rec key ->
+            replaceWhen metadata (names [ rec ]) <|
+                Access metadata (replace 0 rec) key
 
-            Binop op lhs rhs ->
-                Binop op (transform f lhs) (transform f rhs)
+        Annotated metadata expr_ type_ ->
+            replaceWhen metadata (names [ expr_ ]) <|
+                Annotated metadata (replace 0 expr_) type_
 
-            Call fun args ->
-                Call (transform f fun) (List.map (transform f) args)
+        Binop metadata op lhs rhs ->
+            replaceWhen metadata (names [ lhs, rhs ]) <|
+                Binop metadata op (replace 0 lhs) (replace 1 rhs)
 
-            If cond then_ else_ ->
-                If (transform f cond) (transform f then_) (transform f else_)
+        -- When the last argument to a function call is a placeholder, we don't
+        -- need to generate a lambda for it because functions are curried anyway!
+        Call metadata fun args ->
+            case List.reverse args of
+                [] ->
+                    fun
 
-            Lambda args body ->
-                Lambda args (transform f body)
+                (Placeholder _) :: [] ->
+                    fun
 
-            Let name expr_ body ->
-                Let name (transform f expr_) (transform f body)
+                -- Just keep dropping placeholders while they're the last argument.
+                -- If function application is all placeholders, eg something like:
+                --
+                --     f _ _ _
+                --
+                -- This will ultimately desugar to simply:
+                --
+                --     f
+                --
+                (Placeholder _) :: _ ->
+                    replacePlaceholders <| Call metadata fun (List.drop 1 args)
 
-            Literal (Ren.Ast.Core.LArr elements) ->
-                Literal (Ren.Ast.Core.LArr <| List.map (transform f) elements)
+                _ ->
+                    replaceWhen metadata (names (fun :: args)) <|
+                        Call metadata (replace 0 fun) (replaceMany 1 args)
 
-            Literal (Ren.Ast.Core.LCon tag args) ->
-                Literal (Ren.Ast.Core.LCon tag (List.map (transform f) args))
+        If metadata cond then_ else_ ->
+            replaceWhen metadata (names [ cond, then_, else_ ]) <|
+                If metadata
+                    (replace 0 cond)
+                    (replace 1 then_)
+                    (replace 2 else_)
 
-            Literal (Ren.Ast.Core.LRec fields) ->
-                Literal (Ren.Ast.Core.LRec <| List.map (Tuple.mapSecond (transform f)) fields)
+        Lambda _ _ _ ->
+            expr
 
-            Literal lit ->
-                Literal lit
+        Let _ _ _ _ ->
+            expr
 
-            Placeholder ->
-                Placeholder
+        Lit metadata (Lit.Array elements) ->
+            replaceWhen metadata (names elements) <|
+                Lit metadata (Lit.Array <| replaceMany 0 elements)
 
-            Scoped scope name ->
-                Scoped scope name
+        Lit metadata (Lit.Enum tag args) ->
+            replaceWhen metadata (names args) <|
+                Lit metadata (Lit.Enum tag <| replaceMany 0 args)
 
-            Where expr_ cases ->
-                Where (transform f expr_) (List.map transformCase cases)
+        Lit metadata (Lit.Record fields) ->
+            let
+                ( keys, vals ) =
+                    List.unzip fields
+            in
+            replaceWhen metadata (names vals) <|
+                Lit metadata (Lit.Record <| List.map2 Tuple.pair keys <| replaceMany 0 vals)
 
-            Var name ->
-                Var name
+        Lit _ _ ->
+            expr
+
+        Placeholder _ ->
+            expr
+
+        Scoped _ _ _ ->
+            expr
+
+        Where metadata expr_ cases ->
+            replaceWhen metadata (names [ expr_ ]) <|
+                Where metadata (replace 0 expr_) cases
+
+        Var _ _ ->
+            expr
 
 
 
 -- CONVERSIONS -----------------------------------------------------------------
-
-
-{-| Lower a Ren expression to a core representation based on the 𝝺-calculus. Some
-constructs are represented using special internal variables, for example:
-
-    Access (Var "foo") "bar"
-
-is represented as:
-
-    Expr
-        (EApp
-            (Expr
-                (EApp
-                    (Expr (EVar "<access>"))
-                    (Expr (ELit (LStr "bar")))
-                )
-            )
-            (Expr (EVar "foo"))
-        )
-
-This is the reverse of `raise`. In fact, you if you call `raise (lower expr)` you
-should get back exactly the same expression.
-
--}
-lower : Expr -> Ren.Ast.Core.Expr
-lower expr_ =
-    case expr_ of
-        Access expr key ->
-            Ren.Ast.Core.app (Ren.Ast.Core.var "<access>")
-                [ Ren.Ast.Core.str key
-                , lower expr
-                ]
-
-        Binop op lhs rhs ->
-            Ren.Ast.Core.app (Ren.Ast.Core.var "<binop>")
-                [ Ren.Ast.Core.str <| operatorName op
-                , lower lhs
-                , lower rhs
-                ]
-
-        Call fun args ->
-            Ren.Ast.Core.app (lower fun) <|
-                List.map lower args
-
-        If cond then_ else_ ->
-            Ren.Ast.Core.app (Ren.Ast.Core.var "<if>")
-                [ lower cond
-                , lower then_
-                , lower else_
-                ]
-
-        Lambda args body ->
-            let
-                name i =
-                    "$temp" ++ String.fromInt i
-
-                names patterns =
-                    List.map name <| List.range 0 <| List.length patterns - 1
-            in
-            case List.partitionWhile Ren.Ast.Core.isPVar args of
-                ( [], patterns ) ->
-                    Ren.Ast.Core.lam (names patterns) <|
-                        Ren.Ast.Core.pat (Ren.Ast.Core.arr <| List.map Ren.Ast.Core.var <| names patterns)
-                            [ ( Ren.Ast.Core.PLit (Ren.Ast.Core.LArr patterns)
-                              , Nothing
-                              , lower body
-                              )
-                            ]
-
-                ( pvars, [] ) ->
-                    Ren.Ast.Core.lam (List.concatMap Ren.Ast.Core.bindings pvars) <|
-                        lower body
-
-                ( pvars, patterns ) ->
-                    Ren.Ast.Core.lam (List.concatMap Ren.Ast.Core.bindings pvars) <|
-                        Ren.Ast.Core.lam (names patterns) <|
-                            Ren.Ast.Core.pat (Ren.Ast.Core.arr <| List.map Ren.Ast.Core.var <| names patterns)
-                                [ ( Ren.Ast.Core.PLit (Ren.Ast.Core.LArr patterns)
-                                  , Nothing
-                                  , lower body
-                                  )
-                                ]
-
-        Let (Ren.Ast.Core.PVar name) expr body ->
-            Ren.Ast.Core.let_ [ ( name, lower expr ) ] <|
-                lower body
-
-        Let pattern expr body ->
-            Ren.Ast.Core.pat (lower expr)
-                [ ( pattern
-                  , Nothing
-                  , lower body
-                  )
-                ]
-
-        Literal (Ren.Ast.Core.LArr elements) ->
-            Ren.Ast.Core.arr <|
-                List.map lower elements
-
-        Literal (Ren.Ast.Core.LCon tag args) ->
-            Ren.Ast.Core.con tag <|
-                List.map lower args
-
-        Literal (Ren.Ast.Core.LNum n) ->
-            Ren.Ast.Core.num n
-
-        Literal (Ren.Ast.Core.LRec fields) ->
-            Ren.Ast.Core.rec <|
-                List.map (Tuple.mapSecond lower) fields
-
-        Literal (Ren.Ast.Core.LStr s) ->
-            Ren.Ast.Core.str s
-
-        Placeholder ->
-            Ren.Ast.Core.var "<placeholder>"
-
-        Scoped scope name ->
-            Ren.Ast.Core.var <|
-                String.join "$" scope
-                    ++ "$"
-                    ++ name
-
-        Where expr cases ->
-            Ren.Ast.Core.pat (lower expr) <|
-                List.map
-                    (\( pattern, guard, body ) ->
-                        ( pattern
-                        , Maybe.map lower guard
-                        , lower body
-                        )
-                    )
-                    cases
-
-        Var name ->
-            Ren.Ast.Core.var name
-
-
-
 -- JSON ------------------------------------------------------------------------
 
 
@@ -625,78 +431,95 @@ encode : Expr -> Json.Encode.Value
 encode expr =
     let
         encodeCase ( pattern, guard, body ) =
-            Json.Encode.list Basics.identity
-                [ Metadata.encode "Case" {}
-                , Ren.Ast.Core.encodePattern pattern
+            Json.taggedEncoder "Case"
+                []
+                [ Pattern.encode pattern
                 , Maybe.withDefault Json.Encode.null <| Maybe.map encode guard
                 , encode body
                 ]
     in
-    Json.Encode.list Basics.identity <|
-        case expr of
-            Access expr_ key ->
-                [ Metadata.encode "Access" {}
-                , encode expr_
+    case expr of
+        Access metadata expr_ key ->
+            Json.taggedEncoder "Access"
+                (Meta.encode metadata)
+                [ encode expr_
                 , Json.Encode.string key
                 ]
 
-            Binop op lhs rhs ->
-                [ Metadata.encode "Binop" {}
-                , Json.Encode.string <| operatorName op
+        Annotated metadata expr_ type_ ->
+            Json.taggedEncoder "Annotated"
+                (Meta.encode metadata)
+                [ encode expr_
+                , Type.encode type_
+                ]
+
+        Binop metadata op lhs rhs ->
+            Json.taggedEncoder "Binop"
+                (Meta.encode metadata)
+                [ Operator.encode op
                 , encode lhs
                 , encode rhs
                 ]
 
-            Call fun args ->
-                [ Metadata.encode "Call" {}
-                , encode fun
+        Call metadata fun args ->
+            Json.taggedEncoder "Call"
+                (Meta.encode metadata)
+                [ encode fun
                 , Json.Encode.list encode args
                 ]
 
-            If cond then_ else_ ->
-                [ Metadata.encode "If" {}
-                , encode cond
+        If metadata cond then_ else_ ->
+            Json.taggedEncoder "If"
+                (Meta.encode metadata)
+                [ encode cond
                 , encode then_
                 , encode else_
                 ]
 
-            Lambda args body ->
-                [ Metadata.encode "Lambda" {}
-                , Json.Encode.list Ren.Ast.Core.encodePattern args
+        Lambda metadata args body ->
+            Json.taggedEncoder "Lambda"
+                (Meta.encode metadata)
+                [ Json.Encode.list Pattern.encode args
                 , encode body
                 ]
 
-            Let name expr_ body ->
-                [ Metadata.encode "Let" {}
-                , Ren.Ast.Core.encodePattern name
+        Let metadata name expr_ body ->
+            Json.taggedEncoder "Let"
+                (Meta.encode metadata)
+                [ Pattern.encode name
                 , encode expr_
                 , encode body
                 ]
 
-            Literal literal ->
-                [ Metadata.encode "Literal" {}
-                , Ren.Ast.Core.encodeLiteral encode literal
+        Lit metadata literal ->
+            Json.taggedEncoder "Lit"
+                (Meta.encode metadata)
+                [ Lit.encode encode literal
                 ]
 
-            Placeholder ->
-                [ Metadata.encode "Placeholder" {}
-                ]
+        Placeholder metadata ->
+            Json.taggedEncoder "Placeholder"
+                (Meta.encode metadata)
+                []
 
-            Scoped scope name ->
-                [ Metadata.encode "Scoped" {}
-                , Json.Encode.list Json.Encode.string scope
+        Scoped metadata scope name ->
+            Json.taggedEncoder "Scoped"
+                (Meta.encode metadata)
+                [ Json.Encode.list Json.Encode.string scope
                 , Json.Encode.string name
                 ]
 
-            Where expr_ cases ->
-                [ Metadata.encode "Where" {}
-                , encode expr_
+        Where metadata expr_ cases ->
+            Json.taggedEncoder "Where"
+                (Meta.encode metadata)
+                [ encode expr_
                 , Json.Encode.list encodeCase cases
                 ]
 
-            Var name ->
-                [ Metadata.encode "Var" {}
-                , Json.Encode.string name
+        Var metadata name ->
+            Json.taggedEncoder "Var"
+                (Meta.encode metadata)
+                [ Json.Encode.string name
                 ]
 
 
@@ -706,85 +529,89 @@ decoder =
         lazyDecoder =
             Json.Decode.lazy <| \_ -> decoder
 
-        operatorDecoder =
-            Json.Decode.string
-                |> Json.Decode.andThen
-                    (\name ->
-                        case operatorFromName name of
-                            Just operator ->
-                                Json.Decode.succeed operator
-
-                            Nothing ->
-                                Json.Decode.fail <| "Unknown operator: " ++ name
-                    )
-
         caseDecoder =
             Json.Decode.map3 Triple.from
-                (Json.Decode.index 1 <| Ren.Ast.Core.patternDecoder)
+                (Json.Decode.index 1 <| Pattern.decoder)
                 (Json.Decode.index 2 <| Json.Decode.nullable <| lazyDecoder)
                 (Json.Decode.index 3 <| lazyDecoder)
     in
-    Metadata.decoder
-        |> Json.Decode.andThen
-            (\( key, _ ) ->
-                case key of
-                    "Access" ->
-                        Json.Decode.map2 Access
-                            (Json.Decode.index 1 <| lazyDecoder)
-                            (Json.Decode.index 2 <| Json.Decode.string)
+    Json.taggedDecoder
+        (\key ->
+            case key of
+                "Access" ->
+                    Json.Decode.map3 Access
+                        (Json.Decode.index 0 <| Meta.decoder)
+                        (Json.Decode.index 1 <| lazyDecoder)
+                        (Json.Decode.index 2 <| Json.Decode.string)
 
-                    "Binop" ->
-                        Json.Decode.map3 Binop
-                            (Json.Decode.index 1 <| operatorDecoder)
-                            (Json.Decode.index 2 <| lazyDecoder)
-                            (Json.Decode.index 3 <| lazyDecoder)
+                "Annotated" ->
+                    Json.Decode.map3 Annotated
+                        (Json.Decode.index 0 <| Meta.decoder)
+                        (Json.Decode.index 1 <| lazyDecoder)
+                        (Json.Decode.index 2 <| Type.decoder)
 
-                    "Call" ->
-                        Json.Decode.map2 Call
-                            (Json.Decode.index 1 <| lazyDecoder)
-                            (Json.Decode.index 2 <| Json.Decode.list lazyDecoder)
+                "Binop" ->
+                    Json.Decode.map4 Binop
+                        (Json.Decode.index 0 <| Meta.decoder)
+                        (Json.Decode.index 1 <| Operator.decoder)
+                        (Json.Decode.index 2 <| lazyDecoder)
+                        (Json.Decode.index 3 <| lazyDecoder)
 
-                    "If" ->
-                        Json.Decode.map3 If
-                            (Json.Decode.index 1 <| lazyDecoder)
-                            (Json.Decode.index 2 <| lazyDecoder)
-                            (Json.Decode.index 3 <| lazyDecoder)
+                "Call" ->
+                    Json.Decode.map3 Call
+                        (Json.Decode.index 0 <| Meta.decoder)
+                        (Json.Decode.index 1 <| lazyDecoder)
+                        (Json.Decode.index 2 <| Json.Decode.list lazyDecoder)
 
-                    "Lambda" ->
-                        Json.Decode.map2 Lambda
-                            (Json.Decode.index 1 <| Json.Decode.list Ren.Ast.Core.patternDecoder)
-                            (Json.Decode.index 2 <| lazyDecoder)
+                "If" ->
+                    Json.Decode.map4 If
+                        (Json.Decode.index 0 <| Meta.decoder)
+                        (Json.Decode.index 1 <| lazyDecoder)
+                        (Json.Decode.index 2 <| lazyDecoder)
+                        (Json.Decode.index 3 <| lazyDecoder)
 
-                    "Let" ->
-                        Json.Decode.map3 Let
-                            (Json.Decode.index 1 <| Ren.Ast.Core.patternDecoder)
-                            (Json.Decode.index 2 <| lazyDecoder)
-                            (Json.Decode.index 3 <| lazyDecoder)
+                "Lambda" ->
+                    Json.Decode.map3 Lambda
+                        (Json.Decode.index 0 <| Meta.decoder)
+                        (Json.Decode.index 1 <| Json.Decode.list Pattern.decoder)
+                        (Json.Decode.index 2 <| lazyDecoder)
 
-                    "Literal" ->
-                        Json.Decode.map Literal
-                            (Json.Decode.index 1 <| Ren.Ast.Core.literalDecoder lazyDecoder)
+                "Let" ->
+                    Json.Decode.map4 Let
+                        (Json.Decode.index 0 <| Meta.decoder)
+                        (Json.Decode.index 1 <| Pattern.decoder)
+                        (Json.Decode.index 2 <| lazyDecoder)
+                        (Json.Decode.index 3 <| lazyDecoder)
 
-                    "Placeholder" ->
-                        Json.Decode.succeed Placeholder
+                "Lit" ->
+                    Json.Decode.map2 Lit
+                        (Json.Decode.index 0 <| Meta.decoder)
+                        (Json.Decode.index 1 <| Lit.decoder lazyDecoder)
 
-                    "Scoped" ->
-                        Json.Decode.map2 Scoped
-                            (Json.Decode.index 1 <| Json.Decode.list Json.Decode.string)
-                            (Json.Decode.index 2 <| Json.Decode.string)
+                "Placeholder" ->
+                    Json.Decode.map Placeholder
+                        (Json.Decode.index 0 <| Meta.decoder)
 
-                    "Where" ->
-                        Json.Decode.map2 Where
-                            (Json.Decode.index 1 <| lazyDecoder)
-                            (Json.Decode.index 2 <| Json.Decode.list caseDecoder)
+                "Scoped" ->
+                    Json.Decode.map3 Scoped
+                        (Json.Decode.index 0 <| Meta.decoder)
+                        (Json.Decode.index 1 <| Json.Decode.list Json.Decode.string)
+                        (Json.Decode.index 2 <| Json.Decode.string)
 
-                    "Var" ->
-                        Json.Decode.map Var
-                            (Json.Decode.index 1 <| Json.Decode.string)
+                "Where" ->
+                    Json.Decode.map3 Where
+                        (Json.Decode.index 0 <| Meta.decoder)
+                        (Json.Decode.index 1 <| lazyDecoder)
+                        (Json.Decode.index 2 <| Json.Decode.list caseDecoder)
 
-                    _ ->
-                        Json.Decode.fail <| "Unknown expression type: " ++ key
-            )
+                "Var" ->
+                    Json.Decode.map2 Var
+                        (Json.Decode.index 0 <| Meta.decoder)
+                        (Json.Decode.index 1 <| Json.Decode.string)
+
+                _ ->
+                    Json.Decode.fail <| "Unknown expression type: " ++ key
+        )
 
 
 

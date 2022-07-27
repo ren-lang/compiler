@@ -3,57 +3,53 @@ module Ren.Stage.Parse exposing (..)
 {-| -}
 
 -- IMPORTS ---------------------------------------------------------------------
-
-import Ren.Ast.Core as Core
-import Ren.Ast.Expr as Expr exposing (Expr)
-import Ren.Control.Parser as Parser exposing (Parser)
-import Ren.Control.Parser.Pratt as Pratt
-import Ren.Data.Declaration as Declaration exposing (Declaration)
-import Ren.Data.Import as Import exposing (Import)
-import Ren.Data.Module as Module exposing (Module)
-import Ren.Data.Token as Token
-import Util.Maybe as Maybe
-import Util.Triple as Triple
-
-
-
+-- import Ren.Ast.Decl as Dec exposing (Decl)
+-- import Ren.Ast.Expr as Expr exposing (Expr)
+-- import Ren.Ast.Mod as Mod exposing (Mod)
+-- import Ren.Ast.Type as Type exposing (Type)
+-- import Ren.Control.Parser as Parser exposing (Parser)
+-- import Ren.Control.Parser.Pratt as Pratt
+-- import Ren.Data.Import as Import exposing (Import)
+-- import Ren.Data.Token as Token
+-- import Util.Maybe as Maybe
+-- import Util.Triple as Triple
 --
 
 
-parse : Token.Stream -> Result () Module
+parse : Token.Stream -> Result String Mod
 parse stream =
     stream
         |> Parser.run module_
-        |> Result.mapError (\_ -> ())
+        |> Result.mapError (\_ -> "parser error")
 
 
-parseDeclaration : Token.Stream -> Result () Declaration
-parseDeclaration stream =
+parseDec : Token.Stream -> Result String Decl
+parseDec stream =
     stream
         |> Parser.run declaration
-        |> Result.mapError (\_ -> ())
+        |> Result.mapError (\_ -> "parser error")
 
 
-parseExpr : Token.Stream -> Result () Expr
+parseExpr : Token.Stream -> Result String Expr
 parseExpr stream =
     stream
         |> Parser.run (expr { inArgPosition = False })
-        |> Result.mapError (\_ -> ())
+        |> Result.mapError (\_ -> "parser error")
 
 
 
 -- PARSERS: MODULE -------------------------------------------------------------
 
 
-module_ : Parser () () Module
+module_ : Parser () () Mod
 module_ =
     let
-        makeModule imports declarations =
-            Module.empty
-                |> (\m -> List.foldl Module.addImport m imports)
-                |> (\m -> List.foldl Module.addDeclaration m declarations)
+        makeMod imports declarations =
+            Mod.empty
+                |> (\m -> List.foldl Mod.addImport m imports)
+                |> (\m -> List.foldl Mod.addDec m declarations)
     in
-    Parser.succeed makeModule
+    Parser.succeed makeMod
         |> Parser.keep
             (Parser.many
                 (\imps ->
@@ -154,27 +150,27 @@ import_ =
 -- PARSERS: DECLARATIONS -------------------------------------------------------
 
 
-declaration : Parser () () Declaration
+declaration : Parser () () Decl
 declaration =
-    Parser.andThen (\pub -> Parser.oneOf [ localDeclaration pub, externalDeclaration pub ]) <|
+    Parser.andThen (\pub -> Parser.oneOf [ localDec pub, externalDec pub ]) <|
         Parser.oneOf
             [ Parser.succeed True |> Parser.drop (Parser.keyword () Token.Pub)
             , Parser.succeed False
             ]
 
 
-localDeclaration : Bool -> Parser () () Declaration
-localDeclaration pub =
-    Parser.succeed (Declaration.local pub)
+localDec : Bool -> Parser () () Decl
+localDec pub =
+    Parser.succeed (Dec.local pub)
         |> Parser.drop (Parser.keyword () Token.Let)
         |> Parser.keep (Parser.identifier () Token.Lower)
         |> Parser.drop (Parser.symbol () Token.Equal)
         |> Parser.keep (Parser.map Expr.desugar <| expr { inArgPosition = False })
 
 
-externalDeclaration : Bool -> Parser () () Declaration
-externalDeclaration pub =
-    Parser.succeed (Declaration.external pub)
+externalDec : Bool -> Parser () () Decl
+externalDec pub =
+    Parser.succeed (Dec.external pub)
         |> Parser.drop (Parser.keyword () Token.Ext)
         |> Parser.keep (Parser.identifier () Token.Lower)
         |> Parser.drop (Parser.symbol () Token.Equal)
@@ -270,7 +266,10 @@ callables context =
         , placeholder
         , scoped
         , var
-        , literal context Expr.Literal Expr.Var <| \ctx -> Parser.lazy (\_ -> expr ctx)
+        , literal context
+            (Expr.Literal <| Expr.Metadata)
+            Expr.Var
+            (\ctx -> Parser.lazy <| \_ -> expr ctx)
         ]
 
 
@@ -468,7 +467,7 @@ where_ parsers =
 -- PARSERS: LITERALS -----------------------------------------------------------
 
 
-literal : Context -> (Core.Literal a -> a) -> (String -> a) -> (Context -> Parser () () a) -> Parser () () a
+literal : Context -> (Expr.Literal a -> a) -> (String -> a) -> (Context -> Parser () () a) -> Parser () () a
 literal context wrap fromString subexpr =
     Parser.map wrap <|
         Parser.oneOf
@@ -480,7 +479,7 @@ literal context wrap fromString subexpr =
             ]
 
 
-array : Parser () () a -> Parser () () (Core.Literal a)
+array : Parser () () a -> Parser () () (Expr.Literal a)
 array subexpr =
     let
         elements =
@@ -497,7 +496,7 @@ array subexpr =
                         ]
                 )
     in
-    Parser.succeed Core.LArr
+    Parser.succeed Expr.LArr
         |> Parser.drop (Parser.symbol () <| Token.Bracket Token.Left)
         |> Parser.keep
             (Parser.oneOf
@@ -510,7 +509,7 @@ array subexpr =
             )
 
 
-constructor : Context -> Parser () () a -> Parser () () (Core.Literal a)
+constructor : Context -> Parser () () a -> Parser () () (Expr.Literal a)
 constructor { inArgPosition } subexpr =
     let
         args =
@@ -524,7 +523,7 @@ constructor { inArgPosition } subexpr =
                     ]
                 )
     in
-    Parser.succeed Core.LCon
+    Parser.succeed Expr.LCon
         |> Parser.drop (Parser.symbol () <| Token.Hash)
         |> Parser.keep (Parser.identifier () Token.Lower)
         |> Parser.andThen
@@ -537,13 +536,13 @@ constructor { inArgPosition } subexpr =
             )
 
 
-number : Parser () () (Core.Literal a)
+number : Parser () () (Expr.Literal a)
 number =
-    Parser.succeed Core.LNum
+    Parser.succeed Expr.LNum
         |> Parser.keep (Parser.number ())
 
 
-record : (String -> a) -> Parser () () a -> Parser () () (Core.Literal a)
+record : (String -> a) -> Parser () () a -> Parser () () (Expr.Literal a)
 record fromString subexpr =
     let
         field =
@@ -572,7 +571,7 @@ record fromString subexpr =
                         ]
                 )
     in
-    Parser.succeed Core.LRec
+    Parser.succeed Expr.LRec
         |> Parser.drop (Parser.symbol () <| Token.Brace Token.Left)
         |> Parser.keep
             (Parser.oneOf
@@ -585,9 +584,9 @@ record fromString subexpr =
             )
 
 
-string : Parser () () (Core.Literal a)
+string : Parser () () (Expr.Literal a)
 string =
-    Parser.succeed Core.LStr
+    Parser.succeed Expr.LStr
         |> Parser.keep (Parser.string ())
 
 
@@ -595,7 +594,7 @@ string =
 -- PARSERS: PATTERNS -----------------------------------------------------------
 
 
-pattern : Context -> Parser () () Core.Pattern
+pattern : Context -> Parser () () Expr.Pattern
 pattern context =
     Parser.oneOf
         [ pparens
@@ -606,7 +605,7 @@ pattern context =
         ]
 
 
-pparens : Parser () () Core.Pattern
+pparens : Parser () () Expr.Pattern
 pparens =
     Parser.succeed Basics.identity
         |> Parser.drop (Parser.symbol () <| Token.Paren Token.Left)
@@ -614,26 +613,26 @@ pparens =
         |> Parser.drop (Parser.symbol () <| Token.Paren Token.Right)
 
 
-pany : Parser () () Core.Pattern
+pany : Parser () () Expr.Pattern
 pany =
-    Parser.succeed Core.PAny
+    Parser.succeed Expr.PAny
         |> Parser.drop (Parser.symbol () Token.Underscore)
 
 
-plit : Context -> Parser () () Core.Pattern
+plit : Context -> Parser () () Expr.Pattern
 plit context =
-    literal context Core.PLit Core.PVar <| \ctx -> Parser.lazy (\_ -> pattern ctx)
+    literal context Expr.PLit Expr.PVar <| \ctx -> Parser.lazy (\_ -> pattern ctx)
 
 
-ptyp : Parser () () Core.Pattern
+ptyp : Parser () () Expr.Pattern
 ptyp =
-    Parser.succeed Core.PTyp
+    Parser.succeed Expr.PTyp
         |> Parser.drop (Parser.symbol () Token.At)
         |> Parser.keep (Parser.identifier () Token.Upper)
         |> Parser.keep (Parser.lazy (\_ -> pattern { inArgPosition = True }))
 
 
-pvar : Parser () () Core.Pattern
+pvar : Parser () () Expr.Pattern
 pvar =
-    Parser.succeed Core.PVar
+    Parser.succeed Expr.PVar
         |> Parser.keep (Parser.identifier () Token.Lower)

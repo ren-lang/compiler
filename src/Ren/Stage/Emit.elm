@@ -5,11 +5,11 @@ module Ren.Stage.Emit exposing (..)
 -- IMPORTS ---------------------------------------------------------------------
 
 import Pretty
+import Ren.Ast.Decl as Dec exposing (Decl)
 import Ren.Ast.Expr as Expr exposing (Expr)
 import Ren.Ast.JavaScript as JavaScript exposing (precedence)
-import Ren.Data.Declaration as Declaration exposing (Declaration)
+import Ren.Ast.Mod exposing (Mod)
 import Ren.Data.Import as Import exposing (Import)
-import Ren.Data.Module exposing (Module)
 import Util.Math
 
 
@@ -17,14 +17,14 @@ import Util.Math
 --
 
 
-emit : Int -> Metadata -> Module -> String
+emit : Int -> Metadata -> Mod -> String
 emit width meta mod =
-    Pretty.pretty width <| fromModule meta mod
+    Pretty.pretty width <| fromMod meta mod
 
 
-emitDeclaration : Int -> Declaration -> String
-emitDeclaration width decl =
-    Pretty.pretty width <| fromDeclaration decl
+emitDec : Int -> Decl -> String
+emitDec width decl =
+    Pretty.pretty width <| fromDec decl
 
 
 emitExpr : Int -> Expr -> String
@@ -56,8 +56,8 @@ type alias Metadata =
 -- CONSTRUCTORS ----------------------------------------------------------------
 
 
-fromModule : Metadata -> Module -> Doc
-fromModule meta mod =
+fromMod : Metadata -> Mod -> Doc
+fromMod meta mod =
     let
         ffiImport =
             concat
@@ -82,7 +82,7 @@ fromModule meta mod =
             |> (::) (when meta.includeFFI ffiImport)
             |> Pretty.join Pretty.line
         , mod.declarations
-            |> List.map fromDeclaration
+            |> List.map fromDec
             |> Pretty.join doubleline
         ]
 
@@ -153,10 +153,10 @@ fromImport meta imp =
                 ]
 
 
-fromDeclaration : Declaration -> Doc
-fromDeclaration dec =
+fromDec : Decl -> Doc
+fromDec dec =
     case dec of
-        Declaration.Let pub name expr ->
+        Dec.Let pub name expr ->
             concat
                 [ when pub <| Pretty.string "export "
                 , case JavaScript.fromExpr <| Expr.desugar expr of
@@ -185,7 +185,7 @@ fromDeclaration dec =
                             ]
                 ]
 
-        Declaration.Ext pub name str ->
+        Dec.Ext pub name str ->
             concat
                 [ when pub <| Pretty.string "export "
                 , Pretty.string "const"
