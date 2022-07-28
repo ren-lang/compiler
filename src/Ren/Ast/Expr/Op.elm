@@ -1,5 +1,34 @@
 module Ren.Ast.Expr.Op exposing (..)
 
+{-|
+
+
+## Types
+
+@docs Op
+
+
+## Constants
+
+@docs all, names, symbols
+
+
+## Constructors
+
+@docs fromName, fromSymbol
+
+
+## Queries
+
+@docs name, symbol
+
+
+## JSON
+
+@docs encode, decoder
+
+-}
+
 -- IMPORTS ---------------------------------------------------------------------
 
 import Json.Decode
@@ -12,7 +41,7 @@ import Util.Triple as Triple
 -- TYPES -----------------------------------------------------------------------
 
 
-type Operator
+type Op
     = Add --    +
     | And --    and
     | Concat -- ++
@@ -35,7 +64,7 @@ type Operator
 -- CONSTANTS -------------------------------------------------------------------
 
 
-all : List Operator
+all : List Op
 all =
     List.map Triple.first allNamesAndSymbols
 
@@ -50,7 +79,7 @@ symbols =
     List.map Triple.third allNamesAndSymbols
 
 
-allNamesAndSymbols : List ( Operator, String, String )
+allNamesAndSymbols : List ( Op, String, String )
 allNamesAndSymbols =
     [ ( Add, "add", "+" )
     , ( And, "and", "and" )
@@ -75,13 +104,13 @@ allNamesAndSymbols =
 -- CONSTRUCTORS ----------------------------------------------------------------
 
 
-fromName : String -> Maybe Operator
+fromName : String -> Maybe Op
 fromName n =
     List.indexOf n names
         |> Maybe.andThen (\i -> List.at i all)
 
 
-fromSymbol : String -> Maybe Operator
+fromSymbol : String -> Maybe Op
 fromSymbol s =
     List.indexOf s symbols
         |> Maybe.andThen (\i -> List.at i all)
@@ -91,7 +120,7 @@ fromSymbol s =
 -- QUERIES ---------------------------------------------------------------------
 
 
-name : Operator -> String
+name : Op -> String
 name op =
     List.find (Triple.first >> (==) op) allNamesAndSymbols
         |> Maybe.map Triple.second
@@ -100,7 +129,7 @@ name op =
         |> Maybe.withDefault ""
 
 
-symbol : Operator -> String
+symbol : Op -> String
 symbol op =
     List.find (Triple.first >> (==) op) allNamesAndSymbols
         |> Maybe.map Triple.third
@@ -113,12 +142,12 @@ symbol op =
 -- JSON ------------------------------------------------------------------------
 
 
-encode : Operator -> Json.Encode.Value
+encode : Op -> Json.Encode.Value
 encode op =
     Json.Encode.string <| name op
 
 
-decoder : Json.Decode.Decoder Operator
+decoder : Json.Decode.Decoder Op
 decoder =
     Json.Decode.string
         |> Json.Decode.andThen

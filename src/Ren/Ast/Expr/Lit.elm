@@ -1,4 +1,27 @@
-module Ren.Ast.Expr.Lit exposing (..)
+module Ren.Ast.Expr.Lit exposing
+    ( Lit(..)
+    , ParseContext, Parsers, parser
+    , encode, decoder
+    )
+
+{-|
+
+
+## Types
+
+@docs Lit
+
+
+## Parsing
+
+@docs ParseContext, Parsers, parser
+
+
+## JSON
+
+@docs encode, decoder
+
+-}
 
 -- IMPORTS ---------------------------------------------------------------------
 
@@ -13,6 +36,7 @@ import Util.Json as Json
 -- TYPES -----------------------------------------------------------------------
 
 
+{-| -}
 type Lit expr
     = Array (List expr)
     | Enum String (List expr)
@@ -21,14 +45,16 @@ type Lit expr
     | String String
 
 
-type alias Context r =
-    { r | inArgPosition : Bool }
+{-| -}
+type alias ParseContext =
+    { inArgPosition : Bool }
 
 
+{-| -}
 type alias Parsers a =
     { fromString : String -> a
-    , itemParser : Parser () () a
-    , wrapParser : Parser () () a
+    , itemParser : Parser () String a
+    , wrapParser : Parser () String a
     }
 
 
@@ -36,7 +62,8 @@ type alias Parsers a =
 -- PARSERS ---------------------------------------------------------------------
 
 
-parser : Context r -> Parsers a -> Parser () () (Lit a)
+{-| -}
+parser : ParseContext -> Parsers a -> Parser () String (Lit a)
 parser context itemParsers =
     Parser.oneOf
         [ arrayParser itemParsers
@@ -47,36 +74,36 @@ parser context itemParsers =
         ]
 
 
-arrayParser : Parsers a -> Parser () () (Lit a)
+arrayParser : Parsers a -> Parser () String (Lit a)
 arrayParser { itemParser } =
     let
         elements =
             Parser.many
                 (\els ->
                     [ Parser.succeed (\el -> el :: els)
-                        |> Parser.drop (Parser.symbol () <| Token.Comma)
+                        |> Parser.drop (Parser.symbol "" <| Token.Comma)
                         |> Parser.keep itemParser
                         |> Parser.map Parser.Continue
                     , Parser.succeed (\_ -> List.reverse els)
-                        |> Parser.keep (Parser.symbol () <| Token.Bracket Token.Right)
+                        |> Parser.keep (Parser.symbol "" <| Token.Bracket Token.Right)
                         |> Parser.map Parser.Break
                     ]
                 )
     in
     Parser.succeed Array
-        |> Parser.drop (Parser.symbol () <| Token.Bracket Token.Left)
+        |> Parser.drop (Parser.symbol "" <| Token.Bracket Token.Left)
         |> Parser.keep
             (Parser.oneOf
                 [ Parser.succeed (::)
                     |> Parser.keep itemParser
                     |> Parser.keep elements
                 , Parser.succeed []
-                    |> Parser.drop (Parser.symbol () <| Token.Bracket Token.Right)
+                    |> Parser.drop (Parser.symbol "" <| Token.Bracket Token.Right)
                 ]
             )
 
 
-enumParser : Context r -> Parsers a -> Parser () () (Lit a)
+enumParser : ParseContext -> Parsers a -> Parser () String (Lit a)
 enumParser { inArgPosition } { wrapParser } =
     let
         args =
@@ -91,8 +118,8 @@ enumParser { inArgPosition } { wrapParser } =
                 )
     in
     Parser.succeed Enum
-        |> Parser.drop (Parser.symbol () <| Token.Hash)
-        |> Parser.keep (Parser.identifier () Token.Lower)
+        |> Parser.drop (Parser.symbol "" <| Token.Hash)
+        |> Parser.keep (Parser.identifier "" Token.Lower)
         |> Parser.andThen
             (\con ->
                 if inArgPosition then
@@ -103,22 +130,22 @@ enumParser { inArgPosition } { wrapParser } =
             )
 
 
-numberParser : Parser () () (Lit a)
+numberParser : Parser () String (Lit a)
 numberParser =
     Parser.succeed Number
-        |> Parser.keep (Parser.number ())
+        |> Parser.keep (Parser.number "")
 
 
-recordParser : Parsers a -> Parser () () (Lit a)
+recordParser : Parsers a -> Parser () String (Lit a)
 recordParser { fromString, itemParser } =
     let
         field =
             Parser.succeed (\key val -> ( key, Maybe.withDefault (fromString key) val ))
-                |> Parser.keep (Parser.identifier () Token.Lower)
+                |> Parser.keep (Parser.identifier "" Token.Lower)
                 |> Parser.keep
                     (Parser.oneOf
                         [ Parser.succeed Just
-                            |> Parser.drop (Parser.symbol () <| Token.Colon)
+                            |> Parser.drop (Parser.symbol "" <| Token.Colon)
                             |> Parser.keep itemParser
                         , Parser.succeed Nothing
                         ]
@@ -128,38 +155,39 @@ recordParser { fromString, itemParser } =
             Parser.many
                 (\fs ->
                     [ Parser.succeed (\f -> f :: fs)
-                        |> Parser.drop (Parser.symbol () Token.Comma)
+                        |> Parser.drop (Parser.symbol "" Token.Comma)
                         |> Parser.keep field
                         |> Parser.map Parser.Continue
                     , Parser.succeed (\_ -> List.reverse fs)
-                        |> Parser.keep (Parser.symbol () <| Token.Brace Token.Right)
+                        |> Parser.keep (Parser.symbol "" <| Token.Brace Token.Right)
                         |> Parser.map Parser.Break
                     ]
                 )
     in
     Parser.succeed Record
-        |> Parser.drop (Parser.symbol () <| Token.Brace Token.Left)
+        |> Parser.drop (Parser.symbol "" <| Token.Brace Token.Left)
         |> Parser.keep
             (Parser.oneOf
                 [ Parser.succeed (::)
                     |> Parser.keep field
                     |> Parser.keep fields
                 , Parser.succeed []
-                    |> Parser.drop (Parser.symbol () <| Token.Brace Token.Right)
+                    |> Parser.drop (Parser.symbol "" <| Token.Brace Token.Right)
                 ]
             )
 
 
-stringParser : Parser () () (Lit a)
+stringParser : Parser () String (Lit a)
 stringParser =
     Parser.succeed String
-        |> Parser.keep (Parser.string ())
+        |> Parser.keep (Parser.string "")
 
 
 
 -- JSON ------------------------------------------------------------------------
 
 
+{-| -}
 encode : (expr -> Json.Encode.Value) -> Lit expr -> Json.Encode.Value
 encode encodeExpr literal =
     let
@@ -203,6 +231,7 @@ encode encodeExpr literal =
                 ]
 
 
+{-| -}
 decoder : Json.Decode.Decoder expr -> Json.Decode.Decoder (Lit expr)
 decoder exprDecoder =
     let
