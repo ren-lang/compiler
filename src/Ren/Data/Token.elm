@@ -5,7 +5,7 @@ module Ren.Data.Token exposing (..)
 -- IMPORTS ---------------------------------------------------------------------
 --
 
-import Ren.Ast.Expr.Op as Operator exposing (Operator)
+import Ren.Ast.Expr.Op as Operator exposing (Op)
 import Set exposing (Set)
 import String
 
@@ -25,7 +25,7 @@ type Token
     | Identifier Case String
     | Keyword Keyword
     | Number Float
-    | Operator Operator
+    | Operator Op
     | String String
     | Symbol Symbol
     | Unknown String
