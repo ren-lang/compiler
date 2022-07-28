@@ -41,13 +41,6 @@ from ( x, y ) ( a, b ) =
 
 merge : Span -> Span -> Span
 merge a b =
-    let
-        _ =
-            Debug.log "a" a
-
-        _ =
-            Debug.log "b" b
-    in
     { start =
         if toComparable a.start < toComparable b.start then
             a.start
