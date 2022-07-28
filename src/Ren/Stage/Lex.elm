@@ -5,6 +5,7 @@ module Ren.Stage.Lex exposing (..)
 -- IMPORTS ---------------------------------------------------------------------
 
 import Parser exposing ((|.), (|=), Parser)
+import Ren.Data.Span as Span exposing (Span)
 import Ren.Data.Token as Token exposing (Token)
 import Set exposing (Set)
 
@@ -13,34 +14,34 @@ import Set exposing (Set)
 --
 
 
-lex : String -> Result String (List Token)
+lex : String -> Result String (List ( Token, Span ))
 lex source =
     Parser.run stream source
         |> Result.map collect
         |> Result.mapError (\_ -> "lexer error")
 
 
-collect : List Token -> List Token
+collect : List ( Token, Span ) -> List ( Token, Span )
 collect tokens =
     let
         go tok ( acc, list ) =
             case ( tok, acc ) of
-                ( Token.Comment a, Just (Token.Comment b) ) ->
-                    ( Just <| Token.Comment <| a ++ "\n" ++ b, list )
+                ( ( Token.Comment a, s1 ), Just ( Token.Comment b, s2 ) ) ->
+                    ( Just <| ( Token.Comment <| a ++ "\n" ++ b, Span.merge s1 s2 ), list )
 
-                ( Token.Comment _, Just b ) ->
+                ( ( Token.Comment _, _ ), Just b ) ->
                     ( Just tok, b :: list )
 
-                ( Token.Comment _, Nothing ) ->
+                ( ( Token.Comment _, _ ), Nothing ) ->
                     ( Just tok, list )
 
-                ( Token.Unknown a, Just (Token.Unknown b) ) ->
-                    ( Just <| Token.Unknown <| a ++ b, list )
+                ( ( Token.Unknown a, s1 ), Just ( Token.Unknown b, s2 ) ) ->
+                    ( Just <| ( Token.Unknown <| a ++ b, Span.merge s1 s2 ), list )
 
-                ( Token.Unknown _, Just b ) ->
+                ( ( Token.Unknown _, _ ), Just b ) ->
                     ( Just tok, b :: list )
 
-                ( Token.Unknown _, Nothing ) ->
+                ( ( Token.Unknown _, _ ), Nothing ) ->
                     ( Just tok, list )
 
                 ( _, Just b ) ->
@@ -57,7 +58,7 @@ collect tokens =
 -- PARSERS ---------------------------------------------------------------------
 
 
-stream : Parser (List Token)
+stream : Parser (List ( Token, Span ))
 stream =
     Parser.succeed Basics.identity
         |. Parser.spaces
@@ -65,20 +66,23 @@ stream =
         |. Parser.end
 
 
-token : Parser Token
+token : Parser ( Token, Span )
 token =
-    Parser.oneOf
-        [ number
-        , string
-        , keyword
-        , comment
-        , operator
-        , symbol
-        , identifier
-        , Parser.chompIf (Basics.always True)
-            |> Parser.getChompedString
-            |> Parser.map Token.Unknown
-        ]
+    Parser.succeed (\start tok end -> ( tok, Span.from start end ))
+        |= Parser.getPosition
+        |= Parser.oneOf
+            [ number
+            , string
+            , keyword
+            , comment
+            , operator
+            , symbol
+            , identifier
+            , Parser.chompIf (Basics.always True)
+                |> Parser.getChompedString
+                |> Parser.map Token.Unknown
+            ]
+        |= Parser.getPosition
 
 
 number : Parser Token
