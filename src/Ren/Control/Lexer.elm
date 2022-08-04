@@ -1,4 +1,4 @@
-module Ren.Stage.Lex exposing (..)
+module Ren.Control.Lexer exposing (..)
 
 {-| -}
 
@@ -14,8 +14,8 @@ import Set exposing (Set)
 --
 
 
-lex : String -> Result String (List ( Token, Span ))
-lex source =
+run : String -> Result String (List ( Token, Span ))
+run source =
     Parser.run stream source
         |> Result.map collect
         |> Result.mapError (\_ -> "lexer error")

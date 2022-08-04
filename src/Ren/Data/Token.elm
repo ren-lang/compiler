@@ -5,17 +5,16 @@ module Ren.Data.Token exposing (..)
 -- IMPORTS ---------------------------------------------------------------------
 --
 
-import Ren.Ast.Expr.Op as Operator exposing (Op)
+import Json.Decode
+import Json.Encode
+import Ren.Ast.Expr.Op as Op exposing (Op)
 import Set exposing (Set)
 import String
+import Util.Json as Json
 
 
 
 -- TYPES -----------------------------------------------------------------------
-
-
-type alias Stream =
-    List Token
 
 
 {-| -}
@@ -133,7 +132,7 @@ symbols =
 {-| -}
 operators : Set String
 operators =
-    Set.fromList Operator.symbols
+    Set.fromList Op.symbols
 
 
 
@@ -256,7 +255,7 @@ symbol s =
 {-| -}
 operator : String -> Maybe Token
 operator s =
-    Operator.fromSymbol s
+    Op.fromSymbol s
         |> Maybe.map Operator
 
 
@@ -339,125 +338,166 @@ isOperator s =
 -- CONVERSIONS -----------------------------------------------------------------
 
 
-debug : Stream -> String
-debug stream =
-    let
-        toString tok =
-            case tok of
-                Comment s ->
-                    "<comment>" ++ " " ++ s
+toJson : Token -> String
+toJson =
+    encode >> Json.Encode.encode 4
 
-                EOF ->
-                    "<eof>"
 
-                Identifier _ s ->
-                    "<identifier>" ++ " " ++ s
 
-                Keyword As ->
-                    "<keyword>" ++ " as"
+-- JSON ------------------------------------------------------------------------
 
-                Keyword Else ->
-                    "<keyword>" ++ " else"
 
-                Keyword Exposing ->
-                    "<keyword> exposing"
+encode : Token -> Json.Encode.Value
+encode token =
+    case token of
+        Comment comment ->
+            Json.taggedEncoder "Comment"
+                []
+                [ Json.Encode.string comment ]
 
-                Keyword Ext ->
-                    "<keyword> ext"
+        EOF ->
+            Json.taggedEncoder "EOF" [] []
 
-                Keyword Fun ->
-                    "<keyword> fun"
+        Identifier case_ id ->
+            Json.taggedEncoder "Identifier"
+                []
+                [ Json.Encode.string <|
+                    if case_ == Upper then
+                        "Upper"
 
-                Keyword If ->
-                    "<keyword> if"
+                    else
+                        "Lower"
+                , Json.Encode.string id
+                ]
 
-                Keyword Import ->
-                    "<keyword> import"
+        Keyword kwd ->
+            Json.taggedEncoder "Keyword"
+                []
+                [ encodeKeyword kwd
+                ]
 
-                Keyword Is ->
-                    "<keyword> is"
+        Number n ->
+            Json.taggedEncoder "Number"
+                []
+                [ Json.Encode.float n
+                ]
 
-                Keyword Let ->
-                    "<keyword> let"
+        Operator op ->
+            Json.taggedEncoder "Operator"
+                []
+                [ Op.encode op
+                ]
 
-                Keyword Pkg ->
-                    "<keyword> pkg"
+        String s ->
+            Json.taggedEncoder "String"
+                []
+                [ Json.Encode.string s
+                ]
 
-                Keyword Pub ->
-                    "<keyword> pub"
+        Symbol sym ->
+            Json.taggedEncoder "Symbol"
+                []
+                [ encodeSymbol sym
+                ]
 
-                Keyword Then ->
-                    "<keyword> then"
+        Unknown unknown ->
+            Json.taggedEncoder "Unknown"
+                []
+                [ Json.Encode.string unknown ]
 
-                Keyword Where ->
-                    "<keyword where>"
 
-                Number n ->
-                    "<number>" ++ " " ++ String.fromFloat n
+encodeKeyword : Keyword -> Json.Encode.Value
+encodeKeyword kwd =
+    Json.Encode.string <|
+        case kwd of
+            As ->
+                "As"
 
-                Operator op ->
-                    "<operator>" ++ " '" ++ Operator.name op ++ "'"
+            Else ->
+                "Else"
 
-                String s ->
-                    "<string>" ++ " '" ++ s ++ "'"
+            Exposing ->
+                "Exposing"
 
-                Symbol At ->
-                    "<symbol> '@'"
+            Ext ->
+                "Ext"
 
-                Symbol Colon ->
-                    "<symbol> ':'"
+            Fun ->
+                "Fun"
 
-                Symbol Comma ->
-                    "<symbol> ','"
+            If ->
+                "If"
 
-                Symbol Equal ->
-                    "<symbol> '='"
+            Import ->
+                "Import"
 
-                Symbol FatArrow ->
-                    "<symbol> '=>'"
+            Is ->
+                "Is"
 
-                Symbol Hash ->
-                    "<symbol> '#'"
+            Let ->
+                "Let"
 
-                Symbol (Brace Left) ->
-                    "<symbol> '{'"
+            Pkg ->
+                "Pkg"
 
-                Symbol (Brace Right) ->
-                    "<symbol> '}'"
+            Pub ->
+                "Pub"
 
-                Symbol (Bracket Left) ->
-                    "<symbol> '['"
+            Then ->
+                "Then"
 
-                Symbol (Bracket Right) ->
-                    "<symbol> ']'"
+            Where ->
+                "Where"
 
-                Symbol (Paren Left) ->
-                    "<symbol> '('"
 
-                Symbol (Paren Right) ->
-                    "<symbol> ')'"
+encodeSymbol : Symbol -> Json.Encode.Value
+encodeSymbol sym =
+    Json.Encode.string <|
+        case sym of
+            At ->
+                "@"
 
-                Symbol Period ->
-                    "<symbol> '.'"
+            Colon ->
+                ":"
 
-                Symbol Semicolon ->
-                    "<symbol> ';'"
+            Comma ->
+                ","
 
-                Symbol Underscore ->
-                    "<symbol> _"
+            Equal ->
+                "="
 
-                Unknown s ->
-                    "<unknown>" ++ " " ++ s
-    in
-    case stream of
-        [] ->
-            "[]"
+            FatArrow ->
+                "=>"
 
-        token :: [] ->
-            "[ " ++ toString token ++ " ]"
+            Hash ->
+                "#"
 
-        _ :: _ ->
-            "[ " ++ String.join "\n, " (List.map toString stream) ++ "\n]"
+            Brace Left ->
+                "{"
+
+            Brace Right ->
+                "}"
+
+            Bracket Left ->
+                "["
+
+            Bracket Right ->
+                "]"
+
+            Paren Left ->
+                "("
+
+            Paren Right ->
+                ")"
+
+            Period ->
+                "."
+
+            Semicolon ->
+                ";"
+
+            Underscore ->
+                "_"
 
 
 

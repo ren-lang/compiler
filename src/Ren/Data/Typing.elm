@@ -24,8 +24,8 @@ type alias Typing =
 
 
 from : Monoenv -> Type -> Typing
-from env t =
-    ( env, t )
+from env_ t =
+    ( env_, t )
 
 
 mono : String -> Type -> Typing
@@ -43,8 +43,18 @@ poly t =
 
 
 free : Typing -> Set String
-free ( env, t ) =
-    Set.union (Type.free t) (Monoenv.free env)
+free ( env_, t ) =
+    Set.union (Type.free t) (Monoenv.free env_)
+
+
+env : Typing -> Monoenv
+env =
+    Tuple.first
+
+
+type_ : Typing -> Type
+type_ =
+    Tuple.second
 
 
 
@@ -70,15 +80,27 @@ substitute s typing =
     Tuple.mapBoth (Monoenv.substitute s) (Type.substitute s) typing
 
 
+updateEnv : (Monoenv -> Monoenv) -> Typing -> Typing
+updateEnv =
+    Tuple.mapFirst
+
+
+updateType : (Type -> Type) -> Typing -> Typing
+updateType =
+    Tuple.mapSecond
+
+
 
 -- CONVERSIONS -----------------------------------------------------------------
 
 
 toString : Typing -> String
-toString ( env, t ) =
-    String.join " " [ Monoenv.toString env, "⊢", Type.toString t ]
+toString ( env_, t ) =
+    String.join " " [ Monoenv.toString env_, "⊢", Type.toString t ]
 
-
+toJson : Typing -> String
+toJson =
+    encode >> Json.Encode.encode 4
 
 -- JSON ------------------------------------------------------------------------
 

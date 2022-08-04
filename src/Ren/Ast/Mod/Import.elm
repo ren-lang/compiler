@@ -6,6 +6,8 @@ module Ren.Ast.Mod.Import exposing (..)
 
 import Json.Decode
 import Json.Encode
+import Ren.Control.Parser as Parser exposing (Parser)
+import Ren.Data.Token as Token
 import Util.Json as Json
 import Util.List as List
 
@@ -99,6 +101,87 @@ merge a b =
 
 
 -- CONVERSIONS -----------------------------------------------------------------
+-- PARSERS ---------------------------------------------------------------------
+
+
+parser : Parser () String Import
+parser =
+    importParser
+        |> Parser.andThen
+            (\makeImport ->
+                Parser.succeed makeImport
+                    |> Parser.keep (Parser.string "")
+                    |> Parser.keep nameParser
+                    |> Parser.keep unqualifiedParser
+            )
+
+
+importParser : Parser () String (String -> List String -> List String -> Import)
+importParser =
+    Parser.succeed Basics.identity
+        |> Parser.drop (Parser.keyword "" Token.Import)
+        |> Parser.keep
+            (Parser.oneOf
+                [ Parser.succeed package
+                    |> Parser.drop (Parser.keyword "" Token.Pkg)
+                , Parser.succeed external
+                    |> Parser.drop (Parser.keyword "" Token.Ext)
+                , Parser.succeed local
+                ]
+            )
+
+
+nameParser : Parser () String (List String)
+nameParser =
+    Parser.oneOf
+        [ Parser.succeed (::)
+            |> Parser.drop (Parser.keyword "" Token.As)
+            |> Parser.keep (Parser.identifier "" Token.Upper)
+            |> Parser.keep
+                (Parser.loop []
+                    (\ns ->
+                        Parser.oneOf
+                            [ Parser.succeed (\n -> n :: ns)
+                                |> Parser.drop (Parser.symbol "" Token.Period)
+                                |> Parser.keep (Parser.identifier "" Token.Upper)
+                                |> Parser.map Parser.Continue
+                            , Parser.succeed ()
+                                |> Parser.map (\_ -> List.reverse ns)
+                                |> Parser.map Parser.Break
+                            ]
+                    )
+                )
+        , Parser.succeed []
+        ]
+
+
+unqualifiedParser : Parser () String (List String)
+unqualifiedParser =
+    Parser.oneOf
+        [ Parser.succeed (::)
+            |> Parser.drop (Parser.keyword "" Token.Exposing)
+            |> Parser.drop (Parser.symbol "" <| Token.Brace Token.Left)
+            |> Parser.keep (Parser.identifier "" Token.Lower)
+            |> Parser.keep
+                (Parser.loop []
+                    (\ns ->
+                        Parser.oneOf
+                            [ Parser.succeed (\n -> n :: ns)
+                                |> Parser.drop (Parser.symbol "" Token.Comma)
+                                |> Parser.keep (Parser.identifier "" Token.Lower)
+                                |> Parser.map Parser.Continue
+                            , Parser.succeed ()
+                                |> Parser.drop (Parser.symbol "" <| Token.Brace Token.Right)
+                                |> Parser.map (\_ -> List.reverse ns)
+                                |> Parser.map Parser.Break
+                            ]
+                    )
+                )
+        , Parser.succeed []
+        ]
+
+
+
 -- JSON ------------------------------------------------------------------------
 
 

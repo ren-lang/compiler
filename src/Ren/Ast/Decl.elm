@@ -6,8 +6,10 @@ module Ren.Ast.Decl exposing (..)
 
 import Json.Decode
 import Json.Encode
-import Ren.Ast.Decl.Meta as Meta exposing (Meta)
+import Ren.Ast.Decl.Meta as Meta
 import Ren.Ast.Expr as Expr exposing (Expr)
+import Ren.Control.Parser as Parser exposing (Parser)
+import Ren.Data.Token as Token
 import Util.Json as Json
 
 
@@ -20,9 +22,26 @@ type Decl
     | Ext Meta Bool String String
 
 
+type alias Meta =
+    Meta.Meta
+
+
 
 -- CONSTANTS -------------------------------------------------------------------
 -- CONSTRUCTORS ----------------------------------------------------------------
+
+
+local : Meta -> Bool -> String -> Expr -> Decl
+local meta pub name_ expr =
+    Let meta pub name_ expr
+
+
+external : Meta -> Bool -> String -> String -> Decl
+external meta pub name_ extName =
+    Ext meta pub name_ extName
+
+
+
 -- QUERIES ---------------------------------------------------------------------
 
 
@@ -68,7 +87,61 @@ isExternal dec =
 
 
 -- MANIPULATIONS ---------------------------------------------------------------
+
+
+transformMeta : (Meta -> Meta) -> Decl -> Decl
+transformMeta f decl =
+    case decl of
+        Let meta pub name_ expr ->
+            Let (f meta) pub name_ expr
+
+        Ext meta pub name_ extName ->
+            Ext (f meta) pub name_ extName
+
+
+
 -- CONVERSIONS -----------------------------------------------------------------
+
+
+toJson : Decl -> String
+toJson =
+    encode >> Json.Encode.encode 4
+
+
+
+-- PARSING ---------------------------------------------------------------------
+
+
+parser : Parser () String Decl
+parser =
+    visibilityParser
+        |> Parser.andThen
+            (\pub ->
+                Parser.oneOf
+                    [ Parser.succeed (local Meta.default pub)
+                        |> Parser.drop (Parser.keyword "" Token.Let)
+                        |> Parser.keep (Parser.identifier "" Token.Lower)
+                        |> Parser.drop (Parser.symbol "" Token.Equal)
+                        |> Parser.keep (Parser.map Expr.desugar <| Expr.parser { inArgPosition = False })
+                    , Parser.succeed (external Meta.default pub)
+                        |> Parser.drop (Parser.keyword "" Token.Ext)
+                        |> Parser.keep (Parser.identifier "" Token.Lower)
+                        |> Parser.drop (Parser.symbol "" Token.Equal)
+                        |> Parser.keep (Parser.string "")
+                    ]
+            )
+        |> withParseMetadata
+
+
+visibilityParser : Parser () String Bool
+visibilityParser =
+    Parser.oneOf
+        [ Parser.succeed True |> Parser.drop (Parser.keyword "" Token.Pub)
+        , Parser.succeed False
+        ]
+
+
+
 -- JSON ------------------------------------------------------------------------
 
 
@@ -118,3 +191,15 @@ decoder =
 
 
 -- UTILS -----------------------------------------------------------------------
+
+
+withParseMetadata : Parser () String Decl -> Parser () String Decl
+withParseMetadata =
+    let
+        addComments comments expr =
+            transformMeta (\metadata -> List.foldr Meta.addComment metadata comments) expr
+
+        addSpan span expr =
+            transformMeta (\metadata -> Meta.setSpan span metadata) expr
+    in
+    Parser.withComments "" addComments >> Parser.withSpan addSpan

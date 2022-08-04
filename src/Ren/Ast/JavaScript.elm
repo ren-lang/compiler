@@ -5,6 +5,9 @@ module Ren.Ast.JavaScript exposing (..)
 -- IMPORTS ---------------------------------------------------------------------
 
 import Ren.Ast.Expr as Expr exposing (Expr)
+import Ren.Ast.Expr.Lit as Lit
+import Ren.Ast.Expr.Op as Op exposing (Op)
+import Ren.Ast.Expr.Pat as Pat exposing (Pat)
 import Util.List as List
 import Util.Math
 
@@ -84,6 +87,7 @@ fromExpr =
     in
     Expr.fold
         { access = \stmt key -> Expr <| Access (asExpression stmt) [ key ]
+        , annotated = \stmt _ -> stmt
         , binop = \op lhs rhs -> Expr <| fromOperator op (asExpression lhs) (asExpression rhs)
         , call = \fun args -> Expr <| Call (asExpression fun) (List.map asExpression args)
         , if_ =
@@ -94,7 +98,7 @@ fromExpr =
                 List.foldr
                     (\pattern stmt ->
                         case pattern of
-                            Expr.PVar name ->
+                            Pat.Var name ->
                                 Expr <| Arrow name (return stmt)
 
                             _ ->
@@ -108,7 +112,7 @@ fromExpr =
         , let_ =
             \pattern stmt body ->
                 case pattern of
-                    Expr.PVar name ->
+                    Pat.Var name ->
                         Block [ Const name (asExpression stmt), body ]
 
                     _ ->
@@ -119,28 +123,28 @@ fromExpr =
         , literal =
             \lit ->
                 case lit of
-                    Expr.LArr elements ->
+                    Lit.Array elements ->
                         Expr <| Array <| List.map asExpression elements
 
-                    Expr.LCon "true" [] ->
+                    Lit.Enum "true" [] ->
                         Expr <| Bool True
 
-                    Expr.LCon "false" [] ->
+                    Lit.Enum "false" [] ->
                         Expr <| Bool False
 
-                    Expr.LCon "undefined" [] ->
+                    Lit.Enum "undefined" [] ->
                         Expr Undefined
 
-                    Expr.LCon tag args ->
+                    Lit.Enum tag args ->
                         Expr <| Array <| String tag :: List.map asExpression args
 
-                    Expr.LNum n ->
+                    Lit.Number n ->
                         Expr <| Number n
 
-                    Expr.LRec fields ->
+                    Lit.Record fields ->
                         Expr <| Object <| List.map (Tuple.mapSecond asExpression) fields
 
-                    Expr.LStr s ->
+                    Lit.String s ->
                         Expr <| String s
         , placeholder = Throw "bad placeholder"
         , scoped = \scope name -> Expr <| Var <| String.join "$" scope ++ name
@@ -155,65 +159,65 @@ fromExpr =
         }
 
 
-fromOperator : Expr.Operator -> Expression -> Expression -> Expression
+fromOperator : Op -> Expression -> Expression -> Expression
 fromOperator op lhs rhs =
     case op of
-        Expr.Add ->
+        Op.Add ->
             Add lhs rhs
 
-        Expr.And ->
+        Op.And ->
             And lhs rhs
 
-        Expr.Concat ->
+        Op.Concat ->
             Array [ Spread lhs, Spread rhs ]
 
-        Expr.Cons ->
+        Op.Cons ->
             Array [ lhs, Spread rhs ]
 
-        Expr.Div ->
+        Op.Div ->
             Div lhs rhs
 
-        Expr.Eq ->
+        Op.Eq ->
             Eq lhs rhs
 
-        Expr.Gte ->
+        Op.Gte ->
             Gte lhs rhs
 
-        Expr.Gt ->
+        Op.Gt ->
             Gt lhs rhs
 
-        Expr.Lte ->
+        Op.Lte ->
             Lte lhs rhs
 
-        Expr.Lt ->
+        Op.Lt ->
             Lt lhs rhs
 
-        Expr.Mod ->
+        Op.Mod ->
             Mod lhs rhs
 
-        Expr.Mul ->
+        Op.Mul ->
             Mul lhs rhs
 
-        Expr.Neq ->
+        Op.Neq ->
             Neq lhs rhs
 
-        Expr.Or ->
+        Op.Or ->
             Or lhs rhs
 
-        Expr.Pipe ->
+        Op.Pipe ->
             Call rhs [ lhs ]
 
-        Expr.Sub ->
+        Op.Sub ->
             Sub lhs rhs
 
 
-checksFromPattern : Expression -> Expr.Pattern -> Expression
+checksFromPattern : Expression -> Pat -> Expression
 checksFromPattern expr pattern =
     case pattern of
-        Expr.PAny ->
+        Pat.Any ->
             Bool True
 
-        Expr.PLit (Expr.LArr elements) ->
+        Pat.Literal (Lit.Array elements) ->
             elements
                 |> List.indexedMap (\i el -> checksFromPattern (Index expr <| Number <| Basics.toFloat i) el)
                 -- Patterns like the wildcard `_` are always just true. This is
@@ -231,24 +235,24 @@ checksFromPattern expr pattern =
                 -- need to call a method on the global `Array` object instead.
                 |> List.foldl (\y x -> And x y) (Call (Access (Var "globalThis") [ "Array", "isArray" ]) [ expr ])
 
-        Expr.PLit (Expr.LCon "true" []) ->
+        Pat.Literal (Lit.Enum "true" []) ->
             Eq expr <| Bool True
 
-        Expr.PLit (Expr.LCon "false" []) ->
+        Pat.Literal (Lit.Enum "false" []) ->
             Eq expr <| Bool False
 
-        Expr.PLit (Expr.LCon "undefined" []) ->
+        Pat.Literal (Lit.Enum "undefined" []) ->
             Eq expr Undefined
 
-        Expr.PLit (Expr.LCon tag args) ->
+        Pat.Literal (Lit.Enum tag args) ->
             -- Variants are represented as arrays at runtime, where the first
             -- element is the tag and the rest are any arguments.
-            checksFromPattern expr <| Expr.PLit <| Expr.LArr <| (Expr.PLit (Expr.LStr tag) :: args)
+            checksFromPattern expr <| Pat.Literal <| Lit.Array <| (Pat.Literal (Lit.String tag) :: args)
 
-        Expr.PLit (Expr.LNum n) ->
+        Pat.Literal (Lit.Number n) ->
             Eq expr <| Number n
 
-        Expr.PLit (Expr.LRec fields) ->
+        Pat.Literal (Lit.Record fields) ->
             fields
                 |> List.map (\( k, v ) -> checksFromPattern (Access expr [ k ]) v)
                 -- As with arrays, we can safely remove checks that will always
@@ -256,15 +260,18 @@ checksFromPattern expr pattern =
                 |> List.filter ((/=) (Bool True))
                 |> List.foldl (\y x -> And x y) (Eq (Typeof expr) (String "object"))
 
-        Expr.PLit (Expr.LStr s) ->
+        Pat.Literal (Lit.String s) ->
             Eq expr <| String s
 
-        Expr.PTyp "Array" pat ->
+        Pat.Type "Array" pat ->
             And
                 (Call (Access (Var "Array") [ "isArray" ]) [ expr ])
                 (checksFromPattern expr pat)
 
-        Expr.PTyp type_ pat ->
+        Pat.Spread _ ->
+            Bool True
+
+        Pat.Type type_ pat ->
             And
                 (Or
                     (Eq (Typeof expr) (String type_))
@@ -272,38 +279,41 @@ checksFromPattern expr pattern =
                 )
                 (checksFromPattern expr pat)
 
-        Expr.PVar _ ->
+        Pat.Var _ ->
             Bool True
 
 
-assignmentsFromPattern : Expression -> Expr.Pattern -> List Statement
+assignmentsFromPattern : Expression -> Pat -> List Statement
 assignmentsFromPattern expr pattern =
     case pattern of
-        Expr.PAny ->
+        Pat.Any ->
             []
 
-        Expr.PLit (Expr.LArr elements) ->
+        Pat.Literal (Lit.Array elements) ->
             elements
                 |> List.indexedMap (\i el -> assignmentsFromPattern (Index expr <| Number <| Basics.toFloat i) el)
                 |> List.concat
 
-        Expr.PLit (Expr.LCon _ args) ->
-            assignmentsFromPattern expr <| Expr.PLit <| Expr.LArr <| Expr.PAny :: args
+        Pat.Literal (Lit.Enum _ args) ->
+            assignmentsFromPattern expr <| Pat.Literal <| Lit.Array <| Pat.Any :: args
 
-        Expr.PLit (Expr.LNum _) ->
+        Pat.Literal (Lit.Number _) ->
             []
 
-        Expr.PLit (Expr.LRec fields) ->
+        Pat.Literal (Lit.Record fields) ->
             fields
                 |> List.concatMap (\( k, v ) -> assignmentsFromPattern (Access expr [ k ]) v)
 
-        Expr.PLit (Expr.LStr _) ->
+        Pat.Literal (Lit.String _) ->
             []
 
-        Expr.PTyp _ pat ->
+        Pat.Spread name ->
+            []
+
+        Pat.Type _ pat ->
             assignmentsFromPattern expr pat
 
-        Expr.PVar name ->
+        Pat.Var name ->
             [ Const name expr ]
 
 
@@ -389,6 +399,25 @@ statements stmt =
 
 
 -- MANIPULATIONS ---------------------------------------------------------------
+
+
+flatten : Statement -> Statement
+flatten stmt =
+    let
+        go s =
+            case s of
+                Block stmts ->
+                    List.concatMap go stmts
+
+                _ ->
+                    [ s ]
+    in
+    case stmt of
+        Block stmts ->
+            Block <| List.concatMap go stmts
+
+        _ ->
+            stmt
 
 
 return : Statement -> Statement

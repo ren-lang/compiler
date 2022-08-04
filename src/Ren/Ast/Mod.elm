@@ -9,6 +9,7 @@ import Json.Encode
 import Ren.Ast.Decl as Decl exposing (Decl)
 import Ren.Ast.Mod.Import as Import exposing (Import)
 import Ren.Ast.Mod.Meta as Meta exposing (Meta)
+import Ren.Control.Parser as Parser exposing (Parser)
 import Util.Json as Json
 import Util.List as List
 
@@ -24,6 +25,14 @@ type Mod
 
 -- CONSTANTS -------------------------------------------------------------------
 -- CONSTRUCTORS ----------------------------------------------------------------
+
+
+empty : Mod
+empty =
+    Mod { name = "", path = "", usesFFI = False } [] []
+
+
+
 -- QUERIES ---------------------------------------------------------------------
 
 
@@ -108,6 +117,11 @@ addImport imp (Mod meta imps decls) =
         decls
 
 
+addImports : List Import -> Mod -> Mod
+addImports imps mod =
+    List.foldl addImport mod imps
+
+
 addDecl : Decl -> Mod -> Mod
 addDecl dec (Mod meta imps decls) =
     Mod meta
@@ -118,8 +132,54 @@ addDecl dec (Mod meta imps decls) =
         )
 
 
+addDecls : List Decl -> Mod -> Mod
+addDecls decls mod =
+    List.foldl addDecl mod decls
+
+
 
 -- CONVERSIONS -----------------------------------------------------------------
+
+
+toJson : Mod -> String
+toJson =
+    encode >> Json.Encode.encode 4
+
+
+
+-- PARSERS ---------------------------------------------------------------------
+
+
+parser : Parser () String Mod
+parser =
+    Parser.succeed (\imps decls -> empty |> addImports imps |> addDecls decls)
+        |> Parser.keep
+            (Parser.many
+                (\imps ->
+                    [ Parser.succeed (\imp -> imp :: imps)
+                        |> Parser.keep Import.parser
+                        |> Parser.map Parser.Continue
+                    , Parser.succeed ()
+                        |> Parser.map (\_ -> List.reverse imps)
+                        |> Parser.map Parser.Break
+                    ]
+                )
+            )
+        |> Parser.keep
+            (Parser.many
+                (\decs ->
+                    [ Parser.succeed (\dec -> dec :: decs)
+                        |> Parser.keep Decl.parser
+                        |> Parser.map Parser.Continue
+                    , Parser.succeed ()
+                        |> Parser.map (\_ -> List.reverse decs)
+                        |> Parser.map Parser.Break
+                    ]
+                )
+            )
+
+
+
 -- JSON ------------------------------------------------------------------------
 
 

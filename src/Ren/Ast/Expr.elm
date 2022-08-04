@@ -616,6 +616,14 @@ replacePlaceholders expr =
 
 
 -- CONVERSIONS -----------------------------------------------------------------
+
+
+toJson : Expr -> String
+toJson =
+    encode >> Json.Encode.encode 4
+
+
+
 -- PARSING ---------------------------------------------------------------------
 
 
@@ -648,7 +656,7 @@ operatorParsers =
         operatorParser ( assoc, precedence, sym ) =
             assoc precedence
                 (Parser.operator "" sym)
-                (\lhs rhs -> Binop (Meta.setSpan (mergeSpan lhs rhs) Meta.default) sym lhs rhs)
+                (\lhs rhs -> Binop (Meta.new (mergeSpan lhs rhs)) sym lhs rhs)
 
         mergeSpan lhs rhs =
             Span.merge (meta lhs).span (meta rhs).span

@@ -348,7 +348,13 @@ toParenthesisedString t =
             toString t
 
 
+toJson : Type -> String
+toJson =
+    encode >> Json.Encode.encode 4
 
+
+
+-- PARSING ---------------------------------------------------------------------
 -- JSON ------------------------------------------------------------------------
 
 
@@ -357,40 +363,40 @@ encode t =
     Json.Encode.list Basics.identity <|
         case t of
             Any ->
-                [ Json.Encode.object [ ( "$", Json.Encode.string "TAny" ) ] ]
+                [ Json.Encode.object [ ( "$", Json.Encode.string "Any" ) ] ]
 
             App t1 tN ->
-                [ Json.Encode.object [ ( "$", Json.Encode.string "TApp" ) ]
+                [ Json.Encode.object [ ( "$", Json.Encode.string "App" ) ]
                 , encode t1
                 , Json.Encode.list encode tN
                 ]
 
             Con c ->
-                [ Json.Encode.object [ ( "$", Json.Encode.string "TCon" ) ]
+                [ Json.Encode.object [ ( "$", Json.Encode.string "Con" ) ]
                 , Json.Encode.string c
                 ]
 
             Fun t1 t2 ->
-                [ Json.Encode.object [ ( "$", Json.Encode.string "TFun" ) ]
+                [ Json.Encode.object [ ( "$", Json.Encode.string "Fun" ) ]
                 , encode t1
                 , encode t2
                 ]
 
             Hole ->
-                [ Json.Encode.object [ ( "$", Json.Encode.string "THole" ) ] ]
+                [ Json.Encode.object [ ( "$", Json.Encode.string "Hole" ) ] ]
 
             Rec r ->
-                [ Json.Encode.object [ ( "$", Json.Encode.string "TRec" ) ]
+                [ Json.Encode.object [ ( "$", Json.Encode.string "Rec" ) ]
                 , encodeRow r
                 ]
 
             Sum r ->
-                [ Json.Encode.object [ ( "$", Json.Encode.string "TSum" ) ]
+                [ Json.Encode.object [ ( "$", Json.Encode.string "Sum" ) ]
                 , encodeRow r
                 ]
 
             Var v ->
-                [ Json.Encode.object [ ( "$", Json.Encode.string "TVar" ) ]
+                [ Json.Encode.object [ ( "$", Json.Encode.string "Var" ) ]
                 , Json.Encode.string v
                 ]
 
@@ -413,35 +419,35 @@ decoder =
         |> Json.Decode.andThen
             (\key ->
                 case key of
-                    "TAny" ->
+                    "Any" ->
                         Json.Decode.succeed Any
 
-                    "TApp" ->
+                    "App" ->
                         Json.Decode.map2 App
                             (Json.Decode.index 1 <| lazyDecoder)
                             (Json.Decode.index 2 <| Json.Decode.list lazyDecoder)
 
-                    "TCon" ->
+                    "Con" ->
                         Json.Decode.map Con
                             (Json.Decode.index 1 <| Json.Decode.string)
 
-                    "TFun" ->
+                    "Fun" ->
                         Json.Decode.map2 Fun
                             (Json.Decode.index 1 <| lazyDecoder)
                             (Json.Decode.index 2 <| lazyDecoder)
 
-                    "THole" ->
+                    "Hole" ->
                         Json.Decode.succeed Hole
 
-                    "TRec" ->
+                    "Rec" ->
                         Json.Decode.map Rec
                             (Json.Decode.index 1 <| rowDecoder)
 
-                    "TSum" ->
+                    "Sum" ->
                         Json.Decode.map Sum
                             (Json.Decode.index 1 <| rowDecoder)
 
-                    "TVar" ->
+                    "Var" ->
                         Json.Decode.map Var
                             (Json.Decode.index 1 <| Json.Decode.string)
 

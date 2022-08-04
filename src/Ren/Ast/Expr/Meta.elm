@@ -5,6 +5,16 @@ module Ren.Ast.Expr.Meta exposing (..)
 @docs Meta
 
 
+## Constants
+
+@docs default
+
+
+## Constructors
+
+@docs new
+
+
 ## JSON
 
 @docs encode, decoder
@@ -40,6 +50,19 @@ default : Meta
 default =
     { tipe = Type.Hole
     , span = Span.from ( 1, 1 ) ( 1, 1 )
+    , comment = []
+    }
+
+
+
+-- CONSTRUCTORS ----------------------------------------------------------------
+
+
+{-| -}
+new : Span -> Meta
+new span =
+    { tipe = Type.Hole
+    , span = span
     , comment = []
     }
 

@@ -144,7 +144,7 @@ symbol op =
 
 encode : Op -> Json.Encode.Value
 encode op =
-    Json.Encode.string <| name op
+    Json.Encode.string <| symbol op
 
 
 decoder : Json.Decode.Decoder Op
@@ -152,7 +152,7 @@ decoder =
     Json.Decode.string
         |> Json.Decode.andThen
             (\str ->
-                case fromName str of
+                case fromSymbol str of
                     Just op ->
                         Json.Decode.succeed op
 

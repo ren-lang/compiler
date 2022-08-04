@@ -3,10 +3,11 @@ module Ren.Stage.Check exposing (..)
 -- IMPORTS ---------------------------------------------------------------------
 
 import Dict exposing (Dict)
+import Ren.Ast.Decl as Decl exposing (Decl)
 import Ren.Ast.Expr as Expr exposing (Expr)
-import Ren.Ast.Expr.Lit as Literal exposing (Literal)
-import Ren.Ast.Expr.Op as Operator exposing (Operator)
-import Ren.Ast.Expr.Pat as Pattern exposing (Pattern)
+import Ren.Ast.Expr.Lit as Lit exposing (Lit)
+import Ren.Ast.Expr.Op as Op exposing (Op)
+import Ren.Ast.Expr.Pat as Pat exposing (Pat)
 import Ren.Ast.Type as Type exposing (Type)
 import Ren.Control.Eval as Eval exposing (Eval, bind, succeed, throw)
 import Ren.Control.Eval.Context as Context
@@ -17,17 +18,49 @@ import Ren.Data.Typing as Typing exposing (Typing)
 import Set
 import Util.Dict as Dict
 import Util.List as List
+import Util.Maybe as Maybe
 
 
 
 --
 
 
-checkExpr : Expr -> Result String ( Expr, Typing )
-checkExpr e =
-    expr e (init Dict.empty Dict.empty)
+decl : Decl -> Result String Decl
+decl declaration =
+    case declaration of
+        Decl.Let meta pub name expression ->
+            if meta.tipe == Type.Any then
+                Ok declaration
+
+            else
+                Debug.todo ""
+
+        Decl.Ext _ _ _ _ ->
+            Ok declaration
+
+
+expr : Polyenv -> Dict String Type -> Expr -> Result String ( Expr, Typing )
+expr env types expression =
+    let
+        infer =
+            Expr.fold
+                { access = access
+                , annotated = annotated
+                , binop = binop
+                , call = call
+                , if_ = if_
+                , lambda = lambda
+                , let_ = let_
+                , literal = literal
+                , placeholder = Eval.map Typing.poly next
+                , scoped = scoped
+                , where_ = where_
+                , var = var
+                }
+    in
+    infer expression (init env types)
         |> Tuple.second
-        |> Result.map (Tuple.pair e)
+        |> Result.map (Tuple.pair expression)
 
 
 
@@ -100,31 +133,19 @@ init polyenv types =
 -- INFERENCE -------------------------------------------------------------------
 
 
-expr : Expr -> Infer Typing
-expr =
-    Expr.fold
-        { access = access
-        , binop = binop
-        , call = call
-        , if_ = if_
-        , lambda = lambda
-        , let_ = let_
-        , literal = literal
-        , placeholder = Eval.map Typing.poly next
-        , scoped = scoped
-        , where_ = where_
-        , var = var
-        }
-
-
 access : Infer Typing -> String -> Infer Typing
-access inferExpr_ key =
-    call (instantiate <| Typing.poly <| Type.access key) [ inferExpr_ ]
+access inferExpr key =
+    call (instantiate <| Typing.poly <| Type.access key) [ inferExpr ]
 
 
-binop : Operator -> Infer Typing -> Infer Typing -> Infer Typing
+annotated : Infer Typing -> Type -> Infer Typing
+annotated inferExpr _ =
+    inferExpr
+
+
+binop : Op -> Infer Typing -> Infer Typing -> Infer Typing
 binop op inferLhs inferRhs =
-    call (lookupBuiltin <| "$" ++ Operator.name op) [ inferLhs, inferRhs ]
+    call (lookupBuiltin <| "$" ++ Op.name op) [ inferLhs, inferRhs ]
 
 
 call : Infer Typing -> List (Infer Typing) -> Infer Typing
@@ -165,25 +186,35 @@ if_ inferCond inferThen inferElse =
     call (lookupBuiltin "$if") [ inferCond, inferThen, inferElse ]
 
 
-lambda : List Pattern -> Infer Typing -> Infer Typing
+lambda : List Pat -> Infer Typing -> Infer Typing
 lambda patterns inferBody =
+    case patterns of
+        [] ->
+            inferBody
+
+        pattern :: rest ->
+            bind (pat pattern) <| \( patEnv, patT ) ->
+            bind (lambda rest inferBody) <| \( bodyEnv, bodyT ) ->
+            bind next <| \a ->
+            bind next <| \b ->
+            bind (unify [ patEnv, bodyEnv ] [ Type.Fun patT a, Type.Fun b bodyT ]) <| \( env, t ) ->
+            succeed <| Typing.from (Set.foldl Monoenv.remove env <| Pat.bindings pattern) t
+
+
+let_ : Pat -> Infer Typing -> Infer Typing -> Infer Typing
+let_ pattern inferExpr inferBody =
     Debug.todo ""
 
 
-let_ : Pattern -> Infer Typing -> Infer Typing -> Infer Typing
-let_ pattern inferExpr_ inferBody =
-    Debug.todo ""
-
-
-literal : Literal (Infer Typing) -> Infer Typing
+literal : Lit (Infer Typing) -> Infer Typing
 literal lit =
     case lit of
-        Literal.Array inferElements ->
+        Lit.Array inferElements ->
             Eval.sequence inferElements
                 |> Eval.andThen unifyTypings
                 |> Eval.map (\( env, t ) -> ( env, Type.arr t ))
 
-        Literal.Enum tag inferArgs ->
+        Lit.Enum tag inferArgs ->
             bind (Eval.sequence inferArgs) <| \args ->
             let
                 ( envs, tN ) =
@@ -193,10 +224,10 @@ literal lit =
             bind Context.get <| \{ subst } ->
             succeed <| Typing.from env <| Type.sum [ ( tag, List.map (Type.substitute subst) tN ) ]
 
-        Literal.Number _ ->
+        Lit.Number _ ->
             succeed <| Typing.poly Type.num
 
-        Literal.Record inferKeysAndFields ->
+        Lit.Record inferKeysAndFields ->
             let
                 ( keys, inferFields ) =
                     List.unzip inferKeysAndFields
@@ -210,23 +241,82 @@ literal lit =
             bind Context.get <| \{ subst } ->
             succeed <| Typing.from env <| Type.rec <| List.map2 (\k t -> ( k, Type.substitute subst t )) keys tN
 
-        Literal.String _ ->
+        Lit.String _ ->
             succeed <| Typing.poly Type.str
 
 
 scoped : List String -> String -> Infer Typing
 scoped scope name =
-    lookupPolyenv (String.join "$" scope ++ "$" ++ name)
+    lookupPolyenv <| String.join "$" scope ++ "$" ++ name
 
 
-where_ : Infer Typing -> List ( Pattern, Maybe (Infer Typing), Infer Typing ) -> Infer Typing
-where_ inferExpr_ inferCases =
+where_ : Infer Typing -> List ( Pat, Maybe (Infer Typing), Infer Typing ) -> Infer Typing
+where_ inferExpr inferCases =
     Debug.todo ""
 
 
 var : String -> Infer Typing
 var name =
     lookupPolyenv name |> Eval.andCatch (\_ -> Eval.map (Typing.mono name) next)
+
+
+
+--
+
+
+pat : Pat -> Infer Typing
+pat pattern =
+    case pattern of
+        Pat.Any ->
+            bind next <| \a ->
+            succeed <| Typing.poly a
+
+        Pat.Literal (Lit.Array elements) ->
+            Eval.traverse pat elements
+                |> Eval.andThen unifyTypings
+                |> Eval.map (Typing.updateType Type.arr)
+
+        Pat.Literal (Lit.Enum tag args) ->
+            bind (Eval.traverse pat args) <| \args_ ->
+            let
+                ( envs, tN ) =
+                    List.unzip args_
+            in
+            bind (unifyEnvs envs) <| \env ->
+            bind Context.get <| \{ subst } ->
+            succeed <| Typing.from env <| Type.sum [ ( tag, List.map (Type.substitute subst) tN ) ]
+
+        Pat.Literal (Lit.Number _) ->
+            succeed <| Typing.poly Type.num
+
+        Pat.Literal (Lit.Record fields) ->
+            let
+                ( keys, pats ) =
+                    List.unzip fields
+            in
+            bind (Eval.traverse pat pats) <| \typings ->
+            let
+                ( envs, tN ) =
+                    List.unzip typings
+            in
+            bind (unifyEnvs envs) <| \env ->
+            bind Context.get <| \{ subst } ->
+            succeed <| Typing.from env <| Type.rec <| List.map2 (\k t -> ( k, Type.substitute subst t )) keys tN
+
+        Pat.Literal (Lit.String _) ->
+            succeed <| Typing.poly Type.str
+
+        Pat.Spread name ->
+            bind next <| \a ->
+            succeed <| Typing.mono name <| Type.arr a
+
+        Pat.Type _ p ->
+            bind (pat p) <| \typing ->
+            succeed <| Typing.from (Typing.env typing) Type.Any
+
+        Pat.Var name ->
+            bind next <| \a ->
+            succeed <| Typing.mono name a
 
 
 
@@ -285,7 +375,7 @@ coerce gotT expectedT =
             Eval.sequence <| List.repeat (List.length tN) next
 
         freshenRow l tN row =
-            Eval.map2 (Dict.upsert l) (freshenField tN) row
+            Eval.map2 (\v d -> Dict.update l (Maybe.or (Just v)) d) (freshenField tN) row
     in
     case ( gotT, expectedT ) of
         ( _, Type.Any ) ->

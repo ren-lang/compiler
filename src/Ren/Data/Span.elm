@@ -65,6 +65,11 @@ toComparable { line, column } =
     ( line, column )
 
 
+toJson : Span -> String
+toJson =
+    encode >> Json.Encode.encode 4
+
+
 
 -- JSON ------------------------------------------------------------------------
 
