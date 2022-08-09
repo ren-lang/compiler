@@ -8,7 +8,7 @@ import Json.Decode
 import Json.Encode
 import Ren.Ast.Decl as Decl exposing (Decl)
 import Ren.Ast.Mod.Import as Import exposing (Import)
-import Ren.Ast.Mod.Meta as Meta exposing (Meta)
+import Ren.Ast.Mod.Meta as Meta
 import Ren.Control.Parser as Parser exposing (Parser)
 import Util.Json as Json
 import Util.List as List
@@ -22,6 +22,10 @@ type Mod
     = Mod Meta (List Import) (List Decl)
 
 
+type alias Meta =
+    Meta.Meta
+
+
 
 -- CONSTANTS -------------------------------------------------------------------
 -- CONSTRUCTORS ----------------------------------------------------------------
@@ -29,11 +33,16 @@ type Mod
 
 empty : Mod
 empty =
-    Mod { name = "", path = "", usesFFI = False } [] []
+    Mod { name = "", path = "", pkgPath = ".pkg/", usesFFI = False } [] []
 
 
 
 -- QUERIES ---------------------------------------------------------------------
+
+
+meta : Mod -> Meta
+meta (Mod metadata _ _) =
+    metadata
 
 
 imports : String -> Mod -> Bool
@@ -91,7 +100,7 @@ exportsExternal name (Mod _ _ decls) =
 
 
 addImport : Import -> Mod -> Mod
-addImport imp (Mod meta imps decls) =
+addImport imp (Mod metadata imps decls) =
     let
         -- Check if an import with the same path, source, and name already exists.
         -- This means we can merge the incoming import with and existing one and
@@ -99,7 +108,7 @@ addImport imp (Mod meta imps decls) =
         sameImport { path, source, name } =
             path == imp.path && source == imp.source && name == imp.name
     in
-    Mod meta
+    Mod metadata
         (if List.any (Import.alike imp) imps then
             List.updateBy sameImport
                 (\{ unqualified } ->
@@ -123,8 +132,8 @@ addImports imps mod =
 
 
 addDecl : Decl -> Mod -> Mod
-addDecl dec (Mod meta imps decls) =
-    Mod meta
+addDecl dec (Mod metadata imps decls) =
+    Mod metadata
         imps
         (decls
             |> List.filter (Decl.name >> (/=) (Decl.name dec))
@@ -184,9 +193,9 @@ parser =
 
 
 encode : Mod -> Json.Encode.Value
-encode (Mod meta imps decls) =
+encode (Mod metadata imps decls) =
     Json.taggedEncoder "Mod"
-        (Meta.encode meta)
+        (Meta.encode metadata)
         [ Json.Encode.list Import.encode imps
         , Json.Encode.list Decl.encode decls
         ]
