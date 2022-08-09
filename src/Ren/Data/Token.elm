@@ -56,16 +56,18 @@ type Keyword
 {-| -}
 type Symbol
     = At
+    | Brace Direction
+    | Bracket Direction
     | Colon
     | Comma
     | Equal
     | FatArrow
     | Hash
-    | Brace Direction
-    | Bracket Direction
     | Paren Direction
     | Period
+    | Question
     | Semicolon
+    | Star
     | Underscore
 
 
@@ -125,7 +127,7 @@ symbols =
             , [ "=", "=>" ]
 
             --
-            , [ "@", "#", "_" ]
+            , [ "@", "#", "_", "*", "?" ]
             ]
 
 
@@ -247,6 +249,12 @@ symbol s =
 
         "_" ->
             Just <| Symbol Underscore
+
+        "*" ->
+            Just <| Symbol Star
+
+        "?" ->
+            Just <| Symbol Question
 
         _ ->
             Nothing
@@ -498,6 +506,12 @@ encodeSymbol sym =
 
             Underscore ->
                 "_"
+
+            Star ->
+                "*"
+
+            Question ->
+                "?"
 
 
 
