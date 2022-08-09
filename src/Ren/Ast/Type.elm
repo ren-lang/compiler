@@ -5,8 +5,12 @@ module Ren.Ast.Type exposing (..)
 import Dict exposing (Dict)
 import Json.Decode
 import Json.Encode
+import Ren.Control.Parser as Parser exposing (Parser)
+import Ren.Control.Parser.Pratt as Pratt
 import Ren.Data.Subst as Subst exposing (Subst)
+import Ren.Data.Token as Token
 import Set exposing (Set)
+import Util.Json
 
 
 
@@ -26,6 +30,11 @@ type Type
 
 type alias Row =
     Dict String (List Type)
+
+
+type alias ParseContext =
+    { inArgPosition : Bool
+    }
 
 
 
@@ -301,7 +310,7 @@ toString t =
                 |> List.intersperse "|"
     in
     String.join " " <|
-        case simplify t of
+        case t of
             Any ->
                 [ "*" ]
 
@@ -312,7 +321,7 @@ toString t =
                 [ c ]
 
             Fun t1 t2 ->
-                [ toParenthesisedString t1, "->", toString t2 ]
+                [ toParenthesisedString t1, "→", toString t2 ]
 
             Hole ->
                 [ "?" ]
@@ -355,58 +364,61 @@ toJson =
 
 
 -- PARSING ---------------------------------------------------------------------
+
+
+parser : ParseContext -> Parser () String Type
+parser context =
+    Pratt.expression
+        { oneOf = []
+        , andThenOneOf = []
+        , spaces = Parser.succeed ()
+        }
+
+
+parenthesisedParser : Parser () String Type
+parenthesisedParser =
+    Parser.succeed Basics.identity
+        |> Parser.drop (Parser.symbol "" <| Token.Paren Token.Left)
+        |> Parser.keep (Parser.lazy <| \_ -> parser { inArgPosition = False })
+        |> Parser.drop (Parser.symbol "" <| Token.Paren Token.Right)
+
+
+anyParser : Parser () String Type
+anyParser =
+    Parser.succeed Any
+        |> Parser.drop (Parser.symbol "" <| Token.Star)
+
+
+
 -- JSON ------------------------------------------------------------------------
 
 
 encode : Type -> Json.Encode.Value
 encode t =
-    Json.Encode.list Basics.identity <|
-        case t of
-            Any ->
-                [ Json.Encode.object [ ( "$", Json.Encode.string "Any" ) ] ]
+    case t of
+        Any ->
+            Util.Json.taggedEncoder "Any" [] []
 
-            App t1 tN ->
-                [ Json.Encode.object [ ( "$", Json.Encode.string "App" ) ]
-                , encode t1
-                , Json.Encode.list encode tN
-                ]
+        App t1 tN ->
+            Util.Json.taggedEncoder "App" [] [ encode t1, Json.Encode.list encode tN ]
 
-            Con c ->
-                [ Json.Encode.object [ ( "$", Json.Encode.string "Con" ) ]
-                , Json.Encode.string c
-                ]
+        Con c ->
+            Util.Json.taggedEncoder "Con" [] [ Json.Encode.string c ]
 
-            Fun t1 t2 ->
-                [ Json.Encode.object [ ( "$", Json.Encode.string "Fun" ) ]
-                , encode t1
-                , encode t2
-                ]
+        Fun t1 t2 ->
+            Util.Json.taggedEncoder "Fun" [] [ encode t1, encode t2 ]
 
-            Hole ->
-                [ Json.Encode.object [ ( "$", Json.Encode.string "Hole" ) ] ]
+        Hole ->
+            Util.Json.taggedEncoder "Hole" [] []
 
-            Rec r ->
-                [ Json.Encode.object [ ( "$", Json.Encode.string "Rec" ) ]
-                , encodeRow r
-                ]
+        Rec r ->
+            Util.Json.taggedEncoder "Rec" [] [ Json.Encode.dict Basics.identity (Json.Encode.list encode) r ]
 
-            Sum r ->
-                [ Json.Encode.object [ ( "$", Json.Encode.string "Sum" ) ]
-                , encodeRow r
-                ]
+        Sum r ->
+            Util.Json.taggedEncoder "Sum" [] [ Json.Encode.dict Basics.identity (Json.Encode.list encode) r ]
 
-            Var v ->
-                [ Json.Encode.object [ ( "$", Json.Encode.string "Var" ) ]
-                , Json.Encode.string v
-                ]
-
-
-encodeRow : Row -> Json.Encode.Value
-encodeRow row =
-    Json.Encode.list Basics.identity
-        [ Json.Encode.object [ ( "$", Json.Encode.string "Row" ) ]
-        , Json.Encode.dict Basics.identity (Json.Encode.list encode) row
-        ]
+        Var v ->
+            Util.Json.taggedEncoder "Var" [] [ Json.Encode.string v ]
 
 
 decoder : Json.Decode.Decoder Type
@@ -415,55 +427,41 @@ decoder =
         lazyDecoder =
             Json.Decode.lazy <| \_ -> decoder
     in
-    Json.Decode.index 0 (Json.Decode.field "$" Json.Decode.string)
-        |> Json.Decode.andThen
-            (\key ->
-                case key of
-                    "Any" ->
-                        Json.Decode.succeed Any
+    Util.Json.taggedDecoder
+        (\tag ->
+            case tag of
+                "Any" ->
+                    Json.Decode.succeed Any
 
-                    "App" ->
-                        Json.Decode.map2 App
-                            (Json.Decode.index 1 <| lazyDecoder)
-                            (Json.Decode.index 2 <| Json.Decode.list lazyDecoder)
+                "App" ->
+                    Json.Decode.map2 App
+                        (Json.Decode.index 1 <| lazyDecoder)
+                        (Json.Decode.index 2 <| Json.Decode.list lazyDecoder)
 
-                    "Con" ->
-                        Json.Decode.map Con
-                            (Json.Decode.index 1 <| Json.Decode.string)
+                "Con" ->
+                    Json.Decode.map Con
+                        (Json.Decode.index 1 <| Json.Decode.string)
 
-                    "Fun" ->
-                        Json.Decode.map2 Fun
-                            (Json.Decode.index 1 <| lazyDecoder)
-                            (Json.Decode.index 2 <| lazyDecoder)
+                "Fun" ->
+                    Json.Decode.map2 Fun
+                        (Json.Decode.index 1 <| lazyDecoder)
+                        (Json.Decode.index 2 <| lazyDecoder)
 
-                    "Hole" ->
-                        Json.Decode.succeed Hole
+                "Hole" ->
+                    Json.Decode.succeed Hole
 
-                    "Rec" ->
-                        Json.Decode.map Rec
-                            (Json.Decode.index 1 <| rowDecoder)
+                "Rec" ->
+                    Json.Decode.map Rec
+                        (Json.Decode.index 1 <| Json.Decode.dict <| Json.Decode.list lazyDecoder)
 
-                    "Sum" ->
-                        Json.Decode.map Sum
-                            (Json.Decode.index 1 <| rowDecoder)
+                "Sum" ->
+                    Json.Decode.map Sum
+                        (Json.Decode.index 1 <| Json.Decode.dict <| Json.Decode.list lazyDecoder)
 
-                    "Var" ->
-                        Json.Decode.map Var
-                            (Json.Decode.index 1 <| Json.Decode.string)
+                "Var" ->
+                    Json.Decode.map Var
+                        (Json.Decode.index 1 <| Json.Decode.string)
 
-                    _ ->
-                        Json.Decode.fail <| "Unknown type: " ++ key
-            )
-
-
-rowDecoder : Json.Decode.Decoder Row
-rowDecoder =
-    Json.Decode.index 0 (Json.Decode.field "$" Json.Decode.string)
-        |> Json.Decode.andThen
-            (\key ->
-                if key == "Row" then
-                    Json.Decode.index 1 <| Json.Decode.dict (Json.Decode.list decoder)
-
-                else
-                    Json.Decode.fail <| "Unknown type: " ++ key
-            )
+                _ ->
+                    Json.Decode.fail <| "Unknown tag: " ++ tag
+        )
