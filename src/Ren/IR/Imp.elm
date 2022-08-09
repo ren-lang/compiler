@@ -1,481 +1,840 @@
 module Ren.IR.Imp exposing (..)
 
+{-| -}
+
 -- IMPORTS ---------------------------------------------------------------------
 
-import Json.Decode
-import Json.Encode
-import Util.Json as Json
+import Ren.Ast.Expr as Expr exposing (Expr)
+import Ren.Ast.Expr.Lit as Lit
+import Ren.Ast.Expr.Op as Op exposing (Op)
+import Ren.Ast.Expr.Pat as Pat exposing (Pat)
+import Util.List as List
+import Util.Math
 
 
 
 -- TYPES -----------------------------------------------------------------------
 
 
-type Ast
-    = Access Ast String
-    | Block (List Ast)
-    | Binary Binop Ast Ast
-    | Bool Bool
-    | Call Ast (List Ast)
-    | Const String Ast
-    | For Ast Ast Ast Ast
-    | Function (Maybe String) (List String) Ast
-    | If Ast Ast (Maybe Ast)
-    | Index Ast Ast
-    | Instanceof Ast Ast
+type Statement
+    = Block (List Statement)
+    | Break
+    | Comment String
+    | Const String Expression
+    | Continue
+    | Expr Expression
+    | FunctionDeclaration String (List String) (List Statement)
+    | ForIn String Expression Statement
+    | If Expression Statement (Maybe Statement)
+    | Return Expression
+    | Throw String
+    | While Expression Statement
+
+
+type Expression
+    = Access Expression (List String)
+    | Array (List Expression)
+    | Assign Expression Expression
+    | Binop Expression BinaryOperator Expression
+    | Call Expression (List Expression)
+    | Function (List String) (List Statement)
+    | JSFalse
+    | IIFE Statement
+    | Index Expression Expression
+    | Null
     | Number Float
+    | Object (List ( String, Expression ))
+    | Spread Expression
     | String String
-    | Ternary Ast Ast Ast
-    | Throw Ast
-    | Typeof Ast String
-    | Unary Unop Ast
-    | While Ast Ast
-    | Return (Maybe Ast)
+    | Ternary Expression Expression Expression
+    | JSTrue
     | Undefined
+    | Unop UnaryOperator Expression
     | Var String
-    | Array (List Ast)
-    | Object (List ( String, Ast ))
 
 
-type Unop
+type UnaryOperator
     = Neg
     | New
     | Not
     | Pos
+    | Typeof
 
 
-type Binop
+type BinaryOperator
     = Add
     | And
+    | Comma
     | Div
     | Eq
     | Gt
     | Gte
+    | In
+    | Instanceof
     | Lt
     | Lte
     | Mod
     | Mul
     | Neq
     | Or
-    | Pow
     | Sub
 
 
 
--- JSON ------------------------------------------------------------------------
+-- CONSTANTS -------------------------------------------------------------------
 
 
-encode : Ast -> Json.Encode.Value
-encode ast =
-    case ast of
-        Access expr key ->
-            Json.taggedEncoder "Access"
-                []
-                [ encode expr
-                , Json.Encode.string key
+prelude : List Statement
+prelude =
+    [ Comment "This utility gets applied to all functions defined in ren: top-level"
+    , Comment "declarations, let bindings, or anonymous functions. It allows us"
+    , Comment "to support partial application of functions without explicit"
+    , Comment "currying."
+    , Comment ""
+    , Comment "Any external imports are also automatically wrapped in this utility,"
+    , Comment "which means external JavaScript will also support partial application!"
+    , Comment ""
+    , Comment "Beyond some performance benefits, another reason this utility is"
+    , Comment "useful is that it makes it easier to consume ren code in JavaScript."
+    , Comment "If ren functions were auto-curried, external JavaScript would need"
+    , Comment "to call ren functions like `add(1)(2)` which is not very idiomatic!"
+
+    -- function $function (f, thisArg) {
+    --     if (typeof f == "object" || Array.isArray(f)) {
+    --         for (const k in f) {
+    --             k[f] = $function(k[f], f)
+    --         }
+    --     }
+    --
+    --     if (typeof f != "function") {
+    --         return f
+    --     }
+    --
+    --     return (...args) => {
+    --         if (args.length == f.length) {
+    --             return f(...args)
+    --         }
+    --
+    --         if (args.length > f.length) {
+    --             return $function(f(...args.slice(0, f.length)), thisArg)(...args.slice(f.length))
+    --         }
+    --
+    --         return $function(f.bind(thisArg, ...args), thisArg)
+    --     }
+    -- }
+    , FunctionDeclaration "$function" [ "f" ] <|
+        [ If (Binop (Binop (Unop Typeof (Var "f")) Eq (String "object")) Or (Call (Access (Var "Array") [ "isArray" ]) [ Var "f" ]))
+            (ForIn "k" (Var "f") <|
+                Expr <|
+                    Assign (Index (Var "k") (Var "f")) (Call (Var "$function") [ Index (Var "k") (Var "f"), Var "f" ])
+            )
+            Nothing
+        , If (Binop (Unop Typeof (Var "f")) Neq (String "function"))
+            (Return (Var "f"))
+            Nothing
+        , Return <|
+            Function [ "...args" ] <|
+                [ If (Binop (Access (Var "args") [ "length" ]) Eq (Access (Var "f") [ "length" ]))
+                    (Return <| Call (Var "f") [ Spread <| Var "args" ])
+                    Nothing
+                , If (Binop (Access (Var "args") [ "length" ]) Gt (Access (Var "f") [ "length" ]))
+                    (Block
+                        [ Comment "This allows us to handle functions that have been explicitly curried,"
+                        , Comment "or higher-order functions that return other functions."
+                        , Comment ""
+                        , Comment "If you supply more arguments than the wrapped function's arity, fully"
+                        , Comment "call the function, wrap the result with $function, and then call *that*"
+                        , Comment "function with the remaining arguments."
+                        , Return <|
+                            Call
+                                (Call (Var "$function")
+                                    [ Call (Var "f")
+                                        [ Spread
+                                            (Call (Access (Var "args") [ "slice" ])
+                                                [ Number 0
+                                                , Access (Var "f") [ "length" ]
+                                                ]
+                                            )
+                                        ]
+                                    , Var "thisArg"
+                                    ]
+                                )
+                                [ Spread
+                                    (Call (Access (Var "args") [ "slice" ])
+                                        [ Access (Var "f") [ "length" ] ]
+                                    )
+                                ]
+                        ]
+                    )
+                    Nothing
+                , Return <|
+                    Call
+                        (Var "$function")
+                        [ Call (Access (Var "f") [ "bind" ])
+                            [ Var "thisArg"
+                            , Spread (Var "args")
+                            ]
+                        , Var "thisArg"
+                        ]
+                ]
+        ]
+    , Comment "Ren uses structural equality to compare objects and arrays. This"
+    , Comment "is different to equality in JavaScript that is purely referential."
+    , Comment "We need this utility to use in place of the usual `==` operator."
+
+    --     function $eq (x, y) {
+    --         const values = [x, y]
+    --
+    --         while (values.length > 0) {
+    --             const a = values.pop()
+    --             const b = values.pop()
+    --
+    --             if (a === b) continue
+    --             if (a === null || a === undefined || b === null || b === undefined) return false
+    --
+    --             if (typeof a === 'object' || typeof b === 'object') {
+    --                 if (a.valueOf() === b.valueOf()) continue
+    --                 if (a.constructor !== b.constructor) return false
+    --                 if (a.constructor === Date) {
+    --                     if (!(a > b || a < b)) {
+    --                         continue
+    --                     } else {
+    --                         return false
+    --                     }
+    --                 }
+    --
+    --                 for (const k in a) {
+    --                     values.push(a[k], b[k])
+    --                 }
+    --
+    --                 continue
+    --             }
+    --
+    --             return false
+    --         }
+    --
+    --         return true
+    --     }
+    , FunctionDeclaration "$eq" [ "x", "y" ] <|
+        [ Const "eqs" <| Array [ Var "x", Var "y" ]
+        , While (Binop (Access (Var "eqs") [ "length" ]) Gt (Number 0)) <|
+            Block
+                [ Const "a" <| Call (Access (Var "values") [ "pop" ]) []
+                , Const "b" <| Call (Access (Var "values") [ "pop" ]) []
+                , If (Binop (Var "a") Eq (Var "b")) Continue Nothing
+                , If
+                    (List.foldl (\lhs rhs -> Binop lhs Or rhs)
+                        (Binop (Var "a") Eq Null)
+                        [ Binop (Var "a") Eq Undefined
+                        , Binop (Var "b") Eq Null
+                        , Binop (Var "b") Eq Undefined
+                        ]
+                    )
+                    (Return JSFalse)
+                    Nothing
+                , If
+                    (Binop (Binop (Unop Typeof (Var "a")) Eq (String "object")) Or (Binop (Unop Typeof (Var "b")) Eq (String "object")))
+                    (Block
+                        [ If (Binop (Call (Access (Var "a") [ "valueOf" ]) []) Eq (Call (Access (Var "b") [ "valueOf" ]) [])) Continue Nothing
+                        , If (Binop (Access (Var "a") [ "constructor" ]) Neq (Access (Var "b") [ "constructor" ])) (Return JSFalse) Nothing
+                        , If (Binop (Access (Var "a") [ "constructor" ]) Eq (Var "Date"))
+                            (If (Unop Not (Binop (Binop (Var "a") Gt (Var "b")) Or (Binop (Var "a") Lt (Var "b"))))
+                                Continue
+                                (Just <| Return JSFalse)
+                            )
+                            Nothing
+                        , ForIn "k" (Var "a") <|
+                            Expr <|
+                                Call (Access (Var "values") [ "push" ]) [ Index (Var "a") (Var "k"), Index (Var "b") (Var "k") ]
+                        , Continue
+                        ]
+                    )
+                    Nothing
+                , Return JSFalse
+                ]
+        , Return JSTrue
+        ]
+    ]
+
+
+
+-- CONSTRUCTORS ----------------------------------------------------------------
+
+
+fromExpr : Expr -> Statement
+fromExpr =
+    let
+        branchFromCase arg ( pattern, guard, body ) =
+            If (checksFromPattern (Var arg) pattern)
+                (case guard of
+                    Just (Expr g) ->
+                        Block <|
+                            List.concat
+                                [ assignmentsFromPattern (Var arg) pattern
+                                , [ If g (return body) Nothing ]
+                                ]
+
+                    _ ->
+                        return <|
+                            Block <|
+                                List.concat
+                                    [ assignmentsFromPattern (Var "$pat") pattern
+                                    , [ body ]
+                                    ]
+                )
+                Nothing
+    in
+    Expr.fold
+        { access = \stmt key -> Expr <| Access (asExpression stmt) [ key ]
+        , annotated = \stmt _ -> stmt
+        , binop = \op lhs rhs -> fromOperator op (asExpression lhs) (asExpression rhs)
+        , call = \fun args -> Expr <| Call (asExpression fun) (List.map asExpression args)
+        , if_ = \cond then_ else_ -> Expr <| Ternary (asExpression cond) (asExpression then_) (asExpression <| else_)
+        , lambda =
+            \args body ->
+                args
+                    |> List.indexedMap Tuple.pair
+                    |> List.foldr
+                        (\( i, pattern ) ( names, checks, assignments ) ->
+                            case pattern of
+                                Pat.Var name ->
+                                    ( name :: names, checks, assignments )
+
+                                _ ->
+                                    let
+                                        name =
+                                            "$" ++ String.fromInt i
+                                    in
+                                    ( name :: names
+                                    , checksFromPattern (Var name) pattern :: checks
+                                    , assignmentsFromPattern (Var name) pattern ++ assignments
+                                    )
+                        )
+                        ( [], [], [] )
+                    |> (\( names, checks, assignments ) ->
+                            Call (Var "$function")
+                                [ Function names <|
+                                    case checks of
+                                        check :: rest ->
+                                            [ If (List.foldr (\a b -> Binop a And b) check rest)
+                                                (return <| Block <| assignments ++ [ body ])
+                                                Nothing
+                                            , Throw "Non-exhaustive pattern match"
+                                            ]
+
+                                        [] ->
+                                            [ return <| Block <| assignments ++ [ body ]
+                                            ]
+                                ]
+                       )
+                    |> Expr
+        , let_ =
+            \pattern stmt body ->
+                case ( pattern, asExpression stmt ) of
+                    ( Pat.Var name, expr ) ->
+                        Block [ Const name expr, body ]
+
+                    ( _, Var var ) ->
+                        Block
+                            [ return <| branchFromCase var ( pattern, Nothing, body )
+                            , Throw "Non-exhaustive pattern match"
+                            ]
+
+                    ( _, expr ) ->
+                        Block <|
+                            [ Const "$pat" expr
+                            , return <| branchFromCase "$pat" ( pattern, Nothing, body )
+                            , Throw "Non-exhaustive pattern match"
+                            ]
+        , literal =
+            \lit ->
+                case lit of
+                    Lit.Array elements ->
+                        Expr <| Array <| List.map asExpression elements
+
+                    Lit.Enum "true" [] ->
+                        Expr <| JSTrue
+
+                    Lit.Enum "false" [] ->
+                        Expr <| JSFalse
+
+                    Lit.Enum "undefined" [] ->
+                        Expr Undefined
+
+                    Lit.Enum tag args ->
+                        Expr <| Array <| String tag :: List.map asExpression args
+
+                    Lit.Number n ->
+                        Expr <| Number n
+
+                    Lit.Record fields ->
+                        Expr <| Object <| List.map (Tuple.mapSecond asExpression) fields
+
+                    Lit.String s ->
+                        Expr <| String s
+        , placeholder = Throw "bad placeholder"
+        , scoped = \scope name -> Expr <| Var <| String.join "$" scope ++ name
+        , where_ =
+            \stmt cases ->
+                Block <|
+                    List.concat
+                        [ [ Const "$pat" <| asExpression stmt ]
+                        , List.map (return << branchFromCase "$pat") cases
+                        , [ Throw "Non-exhaustive pattern match" ]
+                        ]
+        , var = \var -> Expr <| Var var
+        }
+
+
+fromOperator : Op -> Expression -> Expression -> Statement
+fromOperator op lhs rhs =
+    case op of
+        Op.Add ->
+            Expr <| Binop lhs Add rhs
+
+        Op.And ->
+            Expr <| Binop lhs And rhs
+
+        Op.Concat ->
+            Expr <| Array [ Spread lhs, Spread rhs ]
+
+        Op.Cons ->
+            Expr <| Array [ lhs, Spread rhs ]
+
+        Op.Div ->
+            Expr <| Binop lhs Div rhs
+
+        Op.Eq ->
+            Expr <| Call (Var "$eq") [ lhs, rhs ]
+
+        Op.Gte ->
+            Expr <| Binop lhs Gte rhs
+
+        Op.Gt ->
+            Expr <| Binop lhs Gt rhs
+
+        Op.Lte ->
+            Expr <| Binop lhs Lte rhs
+
+        Op.Lt ->
+            Expr <| Binop lhs Lt rhs
+
+        Op.Mod ->
+            Expr <| Binop lhs Mod rhs
+
+        Op.Mul ->
+            Expr <| Binop lhs Mul rhs
+
+        Op.Neq ->
+            Expr <| Unop Not <| Call (Var "$eq") [ lhs, rhs ]
+
+        Op.Or ->
+            Expr <| Binop lhs Or rhs
+
+        Op.Pipe ->
+            Block
+                [ Const "$pipe" lhs
+                , case rhs of
+                    Call fun args ->
+                        Expr <| Call fun (args ++ [ lhs ])
+
+                    _ ->
+                        Expr <| Call rhs [ lhs ]
                 ]
 
+        Op.Sub ->
+            Expr <| Binop lhs Sub rhs
+
+
+checksFromPattern : Expression -> Pat -> Expression
+checksFromPattern expr pattern =
+    case pattern of
+        Pat.Any ->
+            JSTrue
+
+        Pat.Literal (Lit.Array elements) ->
+            elements
+                |> List.indexedMap (\i el -> checksFromPattern (Index expr <| Number <| Basics.toFloat i) el)
+                -- Patterns like the wildcard `_` are always just true. This is
+                -- necessary to handle top-level patterns that match on anything
+                -- but once we're inside a container like an array we can just
+                -- remove these checks altogether.
+                |> List.filter ((/=) JSTrue)
+                -- We also want to check the length of the array, if it's not long
+                -- enough to satisfy all the other patterns, there's no point trying
+                -- any of them!
+                |> (::) (Binop (Access expr [ "length" ]) Gte (Number <| Basics.toFloat <| List.length elements))
+                -- Finally, we'll do a runtime type check to confirm the value
+                -- actually *is* an array. In JavaScript doing `typeof arr` will
+                -- (perhaps unintuitively) return `"object"` for arrays, so we
+                -- need to call a method on the global `Array` object instead.
+                |> List.foldl (\y x -> Binop x And y) (Call (Access (Var "globalThis") [ "Array", "isArray" ]) [ expr ])
+
+        Pat.Literal (Lit.Enum "true" []) ->
+            Binop expr Eq JSTrue
+
+        Pat.Literal (Lit.Enum "false" []) ->
+            Binop expr Eq JSFalse
+
+        Pat.Literal (Lit.Enum "undefined" []) ->
+            Binop expr Eq Undefined
+
+        Pat.Literal (Lit.Enum tag args) ->
+            -- Variants are represented as arrays at runtime, where the first
+            -- element is the tag and the rest are any arguments.
+            checksFromPattern expr <| Pat.Literal <| Lit.Array <| (Pat.Literal (Lit.String tag) :: args)
+
+        Pat.Literal (Lit.Number n) ->
+            Binop expr Eq (Number n)
+
+        Pat.Literal (Lit.Record fields) ->
+            fields
+                |> List.concatMap (\( k, v ) -> [ Binop (String k) In expr, checksFromPattern (Access expr [ k ]) v ])
+                -- As with arrays, we can safely remove checks that will always
+                -- succeed.
+                |> List.filter ((/=) JSTrue)
+                |> List.foldl (\y x -> Binop x And y) (Binop (Unop Typeof expr) Eq (String "object"))
+
+        Pat.Literal (Lit.String s) ->
+            Binop expr Eq (String s)
+
+        Pat.Type "Array" pat ->
+            Binop
+                (Call (Access (Var "Array") [ "isArray" ]) [ expr ])
+                And
+                (checksFromPattern expr pat)
+
+        Pat.Spread _ ->
+            JSTrue
+
+        Pat.Type type_ pat ->
+            Binop
+                (Binop
+                    (Binop (Unop Typeof expr) Eq (String type_))
+                    Or
+                    (Binop (Access expr [ "constructor", "name" ]) Eq (String type_))
+                )
+                And
+                (checksFromPattern expr pat)
+
+        Pat.Var _ ->
+            JSTrue
+
+
+assignmentsFromPattern : Expression -> Pat -> List Statement
+assignmentsFromPattern expr pattern =
+    case pattern of
+        Pat.Any ->
+            []
+
+        Pat.Literal (Lit.Array elements) ->
+            elements
+                |> List.indexedMap (\i el -> assignmentsFromPattern (Index expr <| Number <| Basics.toFloat i) el)
+                |> List.concat
+
+        Pat.Literal (Lit.Enum _ args) ->
+            assignmentsFromPattern expr <| Pat.Literal <| Lit.Array <| Pat.Any :: args
+
+        Pat.Literal (Lit.Number _) ->
+            []
+
+        Pat.Literal (Lit.Record fields) ->
+            fields
+                |> List.concatMap (\( k, v ) -> assignmentsFromPattern (Access expr [ k ]) v)
+
+        Pat.Literal (Lit.String _) ->
+            []
+
+        Pat.Spread name ->
+            []
+
+        Pat.Type _ pat ->
+            assignmentsFromPattern expr pat
+
+        Pat.Var name ->
+            [ Const name expr ]
+
+
+
+-- QUERIES ---------------------------------------------------------------------
+
+
+{-| Used for determining when to wrap subexpressions in parentheses. Uses precedence
+numbers from: <https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Operator_Precedence>
+-}
+precedence : Expression -> Int
+precedence expr =
+    case expr of
+        Access _ _ ->
+            17
+
+        Index _ _ ->
+            17
+
+        Unop New _ ->
+            17
+
+        Call _ _ ->
+            17
+
+        Unop Pos _ ->
+            14
+
+        Unop Neg _ ->
+            14
+
+        Unop Typeof _ ->
+            14
+
+        Binop _ Mul _ ->
+            12
+
+        Binop _ Div _ ->
+            12
+
+        Binop _ Mod _ ->
+            12
+
+        Binop _ Add _ ->
+            11
+
+        Binop _ Sub _ ->
+            11
+
+        Binop _ Lt _ ->
+            9
+
+        Binop _ Lte _ ->
+            9
+
+        Binop _ Gt _ ->
+            9
+
+        Binop _ Gte _ ->
+            9
+
+        Binop _ In _ ->
+            9
+
+        Binop _ Instanceof _ ->
+            9
+
+        Binop _ Eq _ ->
+            8
+
+        Binop _ Neq _ ->
+            8
+
+        Binop _ And _ ->
+            4
+
+        Binop _ Or _ ->
+            3
+
+        Binop _ Comma _ ->
+            1
+
+        -- The way we check if a current expression should be wrapped in parentheses,
+        -- we look at the expression's precedence and compare it to the current
+        -- precedence level. If it is lower, it get's wrapped.
+        --
+        -- Besides operators, other kinds of expression don't really need to deal
+        -- with this so we say they have infinite precedence and never wrap.
+        _ ->
+            Util.Math.infinite
+
+
+{-| Turn a single statement into a list of statements. For blocks this just
+extracts the inner statements, for all others this produces a singleton list.
+-}
+statements : Statement -> List Statement
+statements stmt =
+    case stmt of
         Block stmts ->
-            Json.taggedEncoder "Block"
-                []
-                [ Json.Encode.list encode stmts
-                ]
+            stmts
 
-        Binary binop lhs rhs ->
-            Json.taggedEncoder "Binary"
-                []
-                [ encodeBinop binop
-                , encode lhs
-                , encode rhs
-                ]
+        _ ->
+            [ stmt ]
 
-        Bool b ->
-            Json.taggedEncoder "Bool" [] [ Json.Encode.bool b ]
 
-        Call fun args ->
-            Json.taggedEncoder "Call"
-                []
-                [ encode fun
-                , Json.Encode.list encode args
-                ]
+{-| -}
+isSimpleExpression : Expression -> Bool
+isSimpleExpression expr =
+    case expr of
+        Access _ _ ->
+            True
 
-        Const name expr ->
-            Json.taggedEncoder "Const"
-                []
-                [ Json.Encode.string name
-                , encode expr
-                ]
+        Array _ ->
+            False
 
-        For init cond incr body ->
-            Json.taggedEncoder "For"
-                []
-                [ encode init
-                , encode cond
-                , encode incr
-                , encode body
-                ]
+        Assign _ _ ->
+            False
 
-        Function name args body ->
-            Json.taggedEncoder "Function"
-                []
-                [ Maybe.withDefault Json.Encode.null <| Maybe.map Json.Encode.string name
-                , Json.Encode.list Json.Encode.string args
-                , encode body
-                ]
+        Binop _ _ _ ->
+            False
 
-        If cond true false ->
-            Json.taggedEncoder "If"
-                []
-                [ encode cond
-                , encode true
-                , Maybe.withDefault Json.Encode.null <| Maybe.map encode false
-                ]
+        Call _ _ ->
+            False
 
-        Index expr access ->
-            Json.taggedEncoder "Index"
-                []
-                [ encode expr
-                , encode access
-                ]
+        Function _ _ ->
+            False
 
-        Instanceof expr class ->
-            Json.taggedEncoder "Instanceof"
-                []
-                [ encode expr
-                , encode class
-                ]
+        JSFalse ->
+            True
 
-        Number n ->
-            Json.taggedEncoder "Number"
-                []
-                [ Json.Encode.float n
-                ]
+        IIFE _ ->
+            False
 
-        String s ->
-            Json.taggedEncoder "String"
-                []
-                [ Json.Encode.string s
-                ]
+        Index _ _ ->
+            True
 
-        Ternary cond true false ->
-            Json.taggedEncoder "Ternary"
-                []
-                [ encode cond
-                , encode true
-                , encode false
-                ]
+        Null ->
+            True
 
-        Throw message ->
-            Json.taggedEncoder "Throw"
-                []
-                [ encode message
-                ]
+        Number _ ->
+            True
 
-        Typeof expr type_ ->
-            Json.taggedEncoder "Typeof"
-                []
-                [ encode expr
-                , Json.Encode.string type_
-                ]
+        Object _ ->
+            False
 
-        Unary unop expr ->
-            Json.taggedEncoder "Unary"
-                []
-                [ encodeUnop unop
-                , encode expr
-                ]
+        Spread _ ->
+            False
 
-        While cond body ->
-            Json.taggedEncoder "While"
-                []
-                [ encode cond
-                , encode body
-                ]
+        String _ ->
+            True
 
-        Return value ->
-            Json.taggedEncoder "Return"
-                []
-                [ Maybe.withDefault Json.Encode.null <| Maybe.map encode value
-                ]
+        Ternary _ _ _ ->
+            False
+
+        JSTrue ->
+            True
 
         Undefined ->
-            Json.taggedEncoder "Undefined" [] []
+            True
 
-        Var name ->
-            Json.taggedEncoder "Var"
-                []
-                [ Json.Encode.string name
-                ]
+        Unop _ _ ->
+            False
 
-        Array elements ->
-            Json.taggedEncoder "Array"
-                []
-                [ Json.Encode.list encode elements
-                ]
-
-        Object fields ->
-            Json.taggedEncoder "Object"
-                []
-                [ Json.Encode.list
-                    (\( name, expr ) ->
-                        Json.Encode.list Basics.identity
-                            [ Json.Encode.string name, encode expr ]
-                    )
-                    fields
-                ]
+        Var _ ->
+            True
 
 
-encodeUnop : Unop -> Json.Encode.Value
-encodeUnop unop =
-    Json.Encode.string <|
-        case unop of
-            Neg ->
-                "-"
 
-            New ->
-                "new"
-
-            Not ->
-                "!"
-
-            Pos ->
-                "+"
+-- MANIPULATIONS ---------------------------------------------------------------
 
 
-encodeBinop : Binop -> Json.Encode.Value
-encodeBinop binop =
-    Json.Encode.string <|
-        case binop of
-            Add ->
-                "+"
+{-| Flatten nested blocks where possible. This means if we produce an ast like:
 
-            And ->
-                "&&"
+    { const x = 1;
+        { const y = 2;
+            { return x + y }
+        }
+    }
 
-            Div ->
-                "/"
+it will flatten simply to:
 
-            Eq ->
-                "=="
+    { const x = 1;
+      const y = 2;
+      return x + y
+    }
 
-            Gt ->
-                ">"
-
-            Gte ->
-                ">="
-
-            Lt ->
-                "<"
-
-            Lte ->
-                "<="
-
-            Mod ->
-                "%"
-
-            Mul ->
-                "*"
-
-            Neq ->
-                "!="
-
-            Or ->
-                "||"
-
-            Pow ->
-                "**"
-
-            Sub ->
-                "-"
-
-
-decoder : Json.Decode.Decoder Ast
-decoder =
+-}
+flatten : Statement -> Statement
+flatten stmt =
     let
-        lazyDecoder =
-            Json.Decode.lazy <| \_ -> decoder
+        go s =
+            case s of
+                Block stmts ->
+                    List.concatMap go stmts
+
+                _ ->
+                    [ s ]
     in
-    Json.taggedDecoder
-        (\ast ->
-            case ast of
-                "Access" ->
-                    Json.Decode.map2 Access
-                        (Json.Decode.index 1 <| lazyDecoder)
-                        (Json.Decode.index 2 <| Json.Decode.string)
+    case stmt of
+        Block stmts ->
+            Block <| List.concatMap go stmts
 
-                "Block" ->
-                    Json.Decode.map Block
-                        (Json.Decode.index 1 <| Json.Decode.list lazyDecoder)
-
-                "Binary" ->
-                    Json.Decode.map3 Binary
-                        (Json.Decode.index 1 <| binopDecoder)
-                        (Json.Decode.index 2 <| lazyDecoder)
-                        (Json.Decode.index 3 <| lazyDecoder)
-
-                "Bool" ->
-                    Json.Decode.map Bool
-                        (Json.Decode.index 1 <| Json.Decode.bool)
-
-                "Call" ->
-                    Json.Decode.map2 Call
-                        (Json.Decode.index 1 <| lazyDecoder)
-                        (Json.Decode.index 2 <| Json.Decode.list lazyDecoder)
-
-                "Const" ->
-                    Json.Decode.map2 Const
-                        (Json.Decode.index 1 <| Json.Decode.string)
-                        (Json.Decode.index 2 <| lazyDecoder)
-
-                "For" ->
-                    Json.Decode.map4 For
-                        (Json.Decode.index 1 <| lazyDecoder)
-                        (Json.Decode.index 2 <| lazyDecoder)
-                        (Json.Decode.index 3 <| lazyDecoder)
-                        (Json.Decode.index 4 <| lazyDecoder)
-
-                "Function" ->
-                    Json.Decode.map3 Function
-                        (Json.Decode.index 1 <| Json.Decode.nullable Json.Decode.string)
-                        (Json.Decode.index 2 <| Json.Decode.list Json.Decode.string)
-                        (Json.Decode.index 3 <| lazyDecoder)
-
-                "If" ->
-                    Json.Decode.map3 If
-                        (Json.Decode.index 1 <| lazyDecoder)
-                        (Json.Decode.index 2 <| lazyDecoder)
-                        (Json.Decode.index 3 <| Json.Decode.nullable lazyDecoder)
-
-                "Index" ->
-                    Json.Decode.map2 Index
-                        (Json.Decode.index 1 <| lazyDecoder)
-                        (Json.Decode.index 2 <| lazyDecoder)
-
-                "Instanceof" ->
-                    Json.Decode.map2 Instanceof
-                        (Json.Decode.index 1 <| lazyDecoder)
-                        (Json.Decode.index 2 <| lazyDecoder)
-
-                "Number" ->
-                    Json.Decode.map Number
-                        (Json.Decode.index 1 <| Json.Decode.float)
-
-                "String" ->
-                    Json.Decode.map String
-                        (Json.Decode.index 1 <| Json.Decode.string)
-
-                "Ternary" ->
-                    Json.Decode.map3 Ternary
-                        (Json.Decode.index 1 <| lazyDecoder)
-                        (Json.Decode.index 2 <| lazyDecoder)
-                        (Json.Decode.index 3 <| lazyDecoder)
-
-                "Throw" ->
-                    Json.Decode.map Throw
-                        (Json.Decode.index 1 <| lazyDecoder)
-
-                "Typeof" ->
-                    Json.Decode.map2 Typeof
-                        (Json.Decode.index 1 <| lazyDecoder)
-                        (Json.Decode.index 2 <| Json.Decode.string)
-
-                "Unary" ->
-                    Json.Decode.map2 Unary
-                        (Json.Decode.index 1 <| unopDecoder)
-                        (Json.Decode.index 2 <| lazyDecoder)
-
-                "Var" ->
-                    Json.Decode.map Var
-                        (Json.Decode.index 1 <| Json.Decode.string)
-
-                "Array" ->
-                    Json.Decode.map Array
-                        (Json.Decode.index 1 <| Json.Decode.list lazyDecoder)
-
-                "Object" ->
-                    Json.Decode.map Object
-                        (Json.Decode.index 1 <|
-                            Json.Decode.list
-                                (Json.Decode.map2 Tuple.pair
-                                    (Json.Decode.index 0 <| Json.Decode.string)
-                                    (Json.Decode.index 1 <| lazyDecoder)
-                                )
-                        )
-
-                _ ->
-                    Json.Decode.fail <| "Unknown AST tag: " ++ ast
-        )
+        _ ->
+            stmt
 
 
-unopDecoder : Json.Decode.Decoder Unop
-unopDecoder =
-    Json.taggedDecoder
-        (\unop ->
-            case unop of
-                "-" ->
-                    Json.Decode.succeed Neg
+return : Statement -> Statement
+return stmt =
+    case stmt of
+        Block stmts ->
+            Block <| returnLast stmts
 
-                "new" ->
-                    Json.Decode.succeed New
+        Break ->
+            Break
 
-                "!" ->
-                    Json.Decode.succeed Not
+        Comment str ->
+            Comment str
 
-                "+" ->
-                    Json.Decode.succeed Pos
+        Const _ expr ->
+            Return expr
 
-                _ ->
-                    Json.Decode.fail <| "Unknown unop: " ++ unop
-        )
+        Continue ->
+            Continue
+
+        Expr expr ->
+            Return expr
+
+        FunctionDeclaration _ args body ->
+            Return <| Function args body
+
+        ForIn _ _ _ ->
+            Block [ stmt, Return Undefined ]
+
+        If cond then_ else_ ->
+            If cond (return then_) (Maybe.map return else_)
+
+        Return expr ->
+            Return expr
+
+        Throw error ->
+            Throw error
+
+        While _ _ ->
+            Block [ stmt, Return Undefined ]
 
 
-binopDecoder : Json.Decode.Decoder Binop
-binopDecoder =
-    Json.taggedDecoder
-        (\binop ->
-            case binop of
-                "+" ->
-                    Json.Decode.succeed Add
+{-| Modifies the last statement in a list to be a return statement.
+-}
+returnLast : List Statement -> List Statement
+returnLast stmts =
+    case List.reverse stmts of
+        stmt :: rest ->
+            List.reverse <| return stmt :: rest
 
-                "&&" ->
-                    Json.Decode.succeed And
+        [] ->
+            []
 
-                "/" ->
-                    Json.Decode.succeed Div
 
-                "==" ->
-                    Json.Decode.succeed Eq
 
-                ">" ->
-                    Json.Decode.succeed Gt
+-- CONVERSIONS -----------------------------------------------------------------
 
-                ">=" ->
-                    Json.Decode.succeed Gte
 
-                "<" ->
-                    Json.Decode.succeed Lt
+{-| Convert arbitrary statements to an expression by wrapping them in an IIFE if
+necessary.
+-}
+asExpression : Statement -> Expression
+asExpression stmt =
+    case stmt of
+        Const _ expr ->
+            expr
 
-                "<=" ->
-                    Json.Decode.succeed Lte
+        Expr expr ->
+            expr
 
-                "%" ->
-                    Json.Decode.succeed Mod
+        FunctionDeclaration _ args body ->
+            Function args body
 
-                "*" ->
-                    Json.Decode.succeed Mul
+        Return expr ->
+            expr
 
-                "!=" ->
-                    Json.Decode.succeed Neq
+        _ ->
+            IIFE stmt
 
-                "||" ->
-                    Json.Decode.succeed Or
 
-                "**" ->
-                    Json.Decode.succeed Pow
 
-                "-" ->
-                    Json.Decode.succeed Sub
-
-                _ ->
-                    Json.Decode.fail <| "Unknown binop: " ++ binop
-        )
+-- UTILS -----------------------------------------------------------------------
