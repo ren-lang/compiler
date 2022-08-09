@@ -102,7 +102,6 @@ toString env =
             [ "{"
             , Dict.toList env
                 |> List.map (\( v, t ) -> String.join " " [ v, ":", Type.toString t ])
-                |> List.intersperse ","
-                |> String.join " "
+                |> String.join ", "
             , "}"
             ]
