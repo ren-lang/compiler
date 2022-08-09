@@ -1,9 +1,10 @@
 module Ren.Ast.Expr exposing
-    ( Expr(..)
+    ( Expr(..), Meta
     , meta
     , references, shadows
     , transform, transformMeta, desugar
     , fold, foldWith, foldWithMeta
+    , toJson
     , ParseContext, parser
     , encode, decoder
     )
@@ -13,7 +14,7 @@ module Ren.Ast.Expr exposing
 
 ## Types
 
-@docs Expr
+@docs Expr, Meta
 
 
 ## Constants
@@ -36,6 +37,8 @@ module Ren.Ast.Expr exposing
 
 ## Conversions
 
+@docs toJson
+
 
 ## Parsing
 
@@ -57,7 +60,7 @@ import Dict exposing (Dict)
 import Json.Decode
 import Json.Encode
 import Ren.Ast.Expr.Lit as Lit exposing (Lit)
-import Ren.Ast.Expr.Meta as Meta exposing (Meta)
+import Ren.Ast.Expr.Meta as Meta
 import Ren.Ast.Expr.Op as Op exposing (Op)
 import Ren.Ast.Expr.Pat as Pat exposing (Pat)
 import Ren.Ast.Type as Type exposing (Type)
@@ -90,6 +93,10 @@ type Expr
     | Scoped Meta (List String) String
     | Where Meta Expr (List ( Pat, Maybe Expr, Expr ))
     | Var Meta String
+
+
+type alias Meta =
+    Meta.Meta
 
 
 type alias ParseContext =
@@ -449,9 +456,11 @@ desugar expr =
     let
         transformations =
             [ replacePlaceholders
+            , uncallEnums
             ]
 
-        applyN old =
+        --
+        applyMany old =
             let
                 new =
                     List.foldl (<|) old transformations
@@ -460,9 +469,9 @@ desugar expr =
                 old
 
             else
-                applyN new
+                applyMany new
     in
-    transform applyN expr
+    transform applyMany expr
 
 
 replacePlaceholders : Expr -> Expr
@@ -611,6 +620,17 @@ replacePlaceholders expr =
                 Where metadata (replace 0 expr_) cases
 
         Var _ _ ->
+            expr
+
+
+uncallEnums : Expr -> Expr
+uncallEnums expr =
+    case expr of
+        Call callMeta (Lit enumMeta (Lit.Enum tag args)) moreArgs ->
+            Lit { enumMeta | span = Span.merge callMeta.span enumMeta.span, tipe = Type.Hole } <|
+                Lit.Enum tag (args ++ moreArgs)
+
+        _ ->
             expr
 
 
