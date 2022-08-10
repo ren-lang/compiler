@@ -66,8 +66,8 @@ andCatch f step =
                 ( next, Ok a )
 
 
-bind : Eval ctx e a -> (a -> Eval ctx e b) -> Eval ctx e b
-bind step f =
+do : Eval ctx e a -> (a -> Eval ctx e b) -> Eval ctx e b
+do step f =
     andThen f step
 
 
