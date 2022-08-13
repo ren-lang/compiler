@@ -8,6 +8,7 @@ import Json.Decode
 import Json.Encode
 import Ren.Ast.Decl.Meta as Meta
 import Ren.Ast.Expr as Expr exposing (Expr)
+import Ren.Ast.Type as Type
 import Ren.Control.Parser as Parser exposing (Parser)
 import Ren.Data.Token as Token
 import Util.Json as Json
@@ -118,14 +119,30 @@ parser =
         |> Parser.andThen
             (\pub ->
                 Parser.oneOf
-                    [ Parser.succeed (local Meta.default pub)
+                    [ Parser.succeed (\name_ t expr -> local (Meta.setType t Meta.default) pub name_ expr)
                         |> Parser.drop (Parser.keyword "" Token.Let)
                         |> Parser.keep (Parser.identifier "" Token.Lower)
+                        |> Parser.keep
+                            (Parser.oneOf
+                                [ Parser.succeed Basics.identity
+                                    |> Parser.drop (Parser.symbol "" Token.Colon)
+                                    |> Parser.keep (Type.parser { inArgPosition = False })
+                                , Parser.succeed Type.Any
+                                ]
+                            )
                         |> Parser.drop (Parser.symbol "" Token.Equal)
                         |> Parser.keep (Parser.map Expr.desugar <| Expr.parser { inArgPosition = False })
-                    , Parser.succeed (external Meta.default pub)
+                    , Parser.succeed (\name_ t extName -> external (Meta.setType t Meta.default) pub name_ extName)
                         |> Parser.drop (Parser.keyword "" Token.Ext)
                         |> Parser.keep (Parser.identifier "" Token.Lower)
+                        |> Parser.keep
+                            (Parser.oneOf
+                                [ Parser.succeed Basics.identity
+                                    |> Parser.drop (Parser.symbol "" Token.Colon)
+                                    |> Parser.keep (Type.parser { inArgPosition = False })
+                                , Parser.succeed Type.Any
+                                ]
+                            )
                         |> Parser.drop (Parser.symbol "" Token.Equal)
                         |> Parser.keep (Parser.string "")
                     ]
