@@ -36,6 +36,7 @@ import Ren.Data.Span as Span exposing (Span)
 {-| -}
 type alias Meta =
     { tipe : Type
+    , inferred : Bool
     , span : Span
     , comment : List String
     }
@@ -49,6 +50,7 @@ type alias Meta =
 default : Meta
 default =
     { tipe = Type.Hole
+    , inferred = False
     , span = Span.from ( 1, 1 ) ( 1, 1 )
     , comment = []
     }
@@ -62,6 +64,7 @@ default =
 new : Span -> Meta
 new span =
     { tipe = Type.Hole
+    , inferred = False
     , span = span
     , comment = []
     }
@@ -88,6 +91,11 @@ setComments comments meta =
     { meta | comment = comments }
 
 
+setType : Type -> Meta -> Meta
+setType tipe meta =
+    { meta | tipe = tipe }
+
+
 
 -- JSON ------------------------------------------------------------------------
 
@@ -96,6 +104,7 @@ setComments comments meta =
 encode : Meta -> List ( String, Json.Encode.Value )
 encode meta =
     [ ( "type", Type.encode meta.tipe )
+    , ( "inferred", Json.Encode.bool meta.inferred )
     , ( "span", Span.encode meta.span )
     , ( "comment", Json.Encode.list Json.Encode.string meta.comment )
     ]
@@ -104,7 +113,8 @@ encode meta =
 {-| -}
 decoder : Json.Decode.Decoder Meta
 decoder =
-    Json.Decode.map3 Meta
+    Json.Decode.map4 Meta
         (Json.Decode.field "type" <| Type.decoder)
+        (Json.Decode.field "inferred" <| Json.Decode.bool)
         (Json.Decode.field "span" <| Span.decoder)
         (Json.Decode.field "comment" <| Json.Decode.list Json.Decode.string)
