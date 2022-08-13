@@ -136,26 +136,6 @@ free t =
             Set.singleton v
 
 
-arg : Type -> Type
-arg t =
-    case t of
-        Fun t1 _ ->
-            t1
-
-        _ ->
-            t
-
-
-return : Type -> Type
-return t =
-    case t of
-        Fun _ t2 ->
-            t2
-
-        _ ->
-            t
-
-
 isAny : Type -> Bool
 isAny t =
     case t of
@@ -369,8 +349,22 @@ toJson =
 parser : ParseContext -> Parser () String Type
 parser context =
     Pratt.expression
-        { oneOf = []
-        , andThenOneOf = []
+        { oneOf =
+            List.concat
+                [ List.map Pratt.literal
+                    [ anyParser
+                    , recParser
+                    ]
+                , List.map (Parser.andThen (appParser context) >> Pratt.literal)
+                    [ parenthesisedParser
+                    , constructorParser
+                    , holeParser
+                    , sumParser context
+                    ]
+                ]
+        , andThenOneOf =
+            [ Pratt.infixRight 1 (Parser.symbol "" Token.Arrow) Fun
+            ]
         , spaces = Parser.succeed ()
         }
 
@@ -387,6 +381,134 @@ anyParser : Parser () String Type
 anyParser =
     Parser.succeed Any
         |> Parser.drop (Parser.symbol "" <| Token.Star)
+
+
+appParser : ParseContext -> Type -> Parser () String Type
+appParser { inArgPosition } con =
+    if inArgPosition then
+        Parser.succeed con
+
+    else
+        Parser.many
+            (\args ->
+                [ Parser.succeed (\arg -> arg :: args)
+                    |> Parser.keep (Parser.lazy <| \_ -> parser { inArgPosition = False })
+                    |> Parser.map Parser.Continue
+                , Parser.succeed (List.reverse args)
+                    |> Parser.map Parser.Break
+                ]
+            )
+            |> Parser.map
+                (\args ->
+                    if List.isEmpty args then
+                        con
+
+                    else
+                        App con args
+                )
+
+
+constructorParser : Parser () String Type
+constructorParser =
+    Parser.succeed Con
+        |> Parser.keep (Parser.identifier "" Token.Upper)
+
+
+holeParser : Parser () String Type
+holeParser =
+    Parser.succeed Hole
+        |> Parser.drop (Parser.symbol "" <| Token.Question)
+
+
+recParser : Parser () String Type
+recParser =
+    let
+        field =
+            Parser.succeed (\k t -> ( k, [ t ] ))
+                |> Parser.keep (Parser.identifier "" Token.Lower)
+                |> Parser.drop (Parser.symbol "" <| Token.Colon)
+                |> Parser.keep (Parser.lazy <| \_ -> parser { inArgPosition = False })
+
+        fields =
+            Parser.many
+                (\fs ->
+                    [ Parser.succeed (\f -> f :: fs)
+                        |> Parser.drop (Parser.symbol "" Token.Comma)
+                        |> Parser.keep field
+                        |> Parser.map Parser.Continue
+                    , Parser.succeed (\_ -> List.reverse fs)
+                        |> Parser.keep (Parser.symbol "" <| Token.Brace Token.Right)
+                        |> Parser.map Parser.Break
+                    ]
+                )
+    in
+    Parser.succeed (Dict.fromList >> Rec)
+        |> Parser.drop (Parser.symbol "" <| Token.Brace Token.Left)
+        |> Parser.keep
+            (Parser.oneOf
+                [ Parser.succeed (::)
+                    |> Parser.keep field
+                    |> Parser.keep fields
+                , Parser.succeed []
+                    |> Parser.drop (Parser.symbol "" <| Token.Brace Token.Right)
+                ]
+            )
+
+
+sumParser : ParseContext -> Parser () String Type
+sumParser ({ inArgPosition } as context) =
+    if inArgPosition then
+        Parser.succeed (List.singleton >> Dict.fromList >> Sum)
+            |> Parser.keep (variantParser { inArgPosition = False })
+
+    else
+        Parser.succeed (\x xs -> Sum <| Dict.fromList (x :: xs))
+            |> Parser.keep (variantParser { inArgPosition = False })
+            |> Parser.keep
+                (Parser.many
+                    (\variants ->
+                        [ Parser.succeed (\v -> v :: variants)
+                            |> Parser.drop (Parser.symbol "" Token.Bar)
+                            |> Parser.keep (variantParser { inArgPosition = False })
+                            |> Parser.map Parser.Continue
+                        , Parser.succeed variants
+                            |> Parser.map Parser.Break
+                        ]
+                    )
+                )
+
+
+variantParser : ParseContext -> Parser () String ( String, List Type )
+variantParser { inArgPosition } =
+    let
+        args =
+            Parser.many
+                (\xs ->
+                    [ Parser.succeed (\x -> x :: xs)
+                        |> Parser.keep (Parser.lazy <| \_ -> parser { inArgPosition = False })
+                        |> Parser.map Parser.Continue
+                    , Parser.succeed (List.reverse xs)
+                        |> Parser.map Parser.Break
+                    ]
+                )
+    in
+    Parser.succeed Basics.identity
+        |> Parser.drop (Parser.symbol "" <| Token.Hash)
+        |> Parser.keep (Parser.identifier "" Token.Lower)
+        |> Parser.andThen
+            (\con ->
+                if inArgPosition then
+                    Parser.succeed ( con, [] )
+
+                else
+                    Parser.map (Tuple.pair con) args
+            )
+
+
+varParser : Parser () String Type
+varParser =
+    Parser.succeed Var
+        |> Parser.keep (Parser.identifier "" Token.Lower)
 
 
 
