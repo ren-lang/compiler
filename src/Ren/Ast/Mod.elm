@@ -65,6 +65,11 @@ importsExternal path (Mod _ imps _) =
     List.any (\imp -> Import.isExternal imp && imp.path == path) imps
 
 
+declarations : Mod -> List Decl
+declarations (Mod _ _ decls) =
+    decls
+
+
 declares : String -> Mod -> Bool
 declares name (Mod _ _ decls) =
     List.any (\dec -> Decl.name dec == name) decls
@@ -97,6 +102,11 @@ exportsExternal name (Mod _ _ decls) =
 
 
 -- MANIPULATIONS ---------------------------------------------------------------
+
+
+transformMeta : (Meta -> Meta) -> Mod -> Mod
+transformMeta f (Mod metadata imps decls) =
+    Mod (f metadata) imps decls
 
 
 addImport : Import -> Mod -> Mod
@@ -143,7 +153,7 @@ addDecl dec (Mod metadata imps decls) =
 
 addDecls : List Decl -> Mod -> Mod
 addDecls decls mod =
-    List.foldl addDecl mod decls
+    List.foldr addDecl mod decls
 
 
 
