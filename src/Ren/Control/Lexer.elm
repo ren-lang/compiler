@@ -75,8 +75,8 @@ token =
             , string
             , keyword
             , comment
-            , operator
             , symbol
+            , operator
             , identifier
             , Parser.chompIf (Basics.always True)
                 |> Parser.getChompedString
