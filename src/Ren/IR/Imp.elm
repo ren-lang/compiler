@@ -287,7 +287,7 @@ fromExpr =
     Expr.fold
         { access = \stmt key -> Expr <| Access (asExpression stmt) [ key ]
         , annotated = \stmt _ -> stmt
-        , binop = \op lhs rhs -> fromOperator op (asExpression lhs) (asExpression rhs)
+        , binop = \op lhs rhs -> fromOperator op lhs rhs
         , call = \fun args -> Expr <| Call (asExpression fun) (List.map asExpression args)
         , if_ = \cond then_ else_ -> Expr <| Ternary (asExpression cond) (asExpression then_) (asExpression <| else_)
         , lambda =
@@ -373,7 +373,7 @@ fromExpr =
                     Lit.String s ->
                         Expr <| String s
         , placeholder = Throw "bad placeholder"
-        , scoped = \scope name -> Expr <| Var <| String.join "$" scope ++ name
+        , scoped = \scope name -> Expr <| Var <| String.join "$" scope ++ "." ++ name
         , where_ =
             \stmt cases ->
                 Block <|
@@ -386,64 +386,59 @@ fromExpr =
         }
 
 
-fromOperator : Op -> Expression -> Expression -> Statement
+fromOperator : Op -> Statement -> Statement -> Statement
 fromOperator op lhs rhs =
     case op of
         Op.Add ->
-            Expr <| Binop lhs Add rhs
+            Expr <| Binop (asExpression lhs) Add (asExpression rhs)
 
         Op.And ->
-            Expr <| Binop lhs And rhs
+            Expr <| Binop (asExpression lhs) And (asExpression rhs)
 
         Op.Concat ->
-            Expr <| Array [ Spread lhs, Spread rhs ]
+            Expr <| Array [ Spread (asExpression lhs), Spread (asExpression rhs) ]
 
         Op.Cons ->
-            Expr <| Array [ lhs, Spread rhs ]
+            Expr <| Array [ asExpression lhs, Spread (asExpression rhs) ]
 
         Op.Div ->
-            Expr <| Binop lhs Div rhs
+            Expr <| Binop (asExpression lhs) Div (asExpression rhs)
 
         Op.Eq ->
-            Expr <| Call (Var "$eq") [ lhs, rhs ]
+            Expr <| Call (Var "$eq") [ asExpression lhs, asExpression rhs ]
 
         Op.Gte ->
-            Expr <| Binop lhs Gte rhs
+            Expr <| Binop (asExpression lhs) Gte (asExpression rhs)
 
         Op.Gt ->
-            Expr <| Binop lhs Gt rhs
+            Expr <| Binop (asExpression lhs) Gt (asExpression rhs)
 
         Op.Lte ->
-            Expr <| Binop lhs Lte rhs
+            Expr <| Binop (asExpression lhs) Lte (asExpression rhs)
 
         Op.Lt ->
-            Expr <| Binop lhs Lt rhs
+            Expr <| Binop (asExpression lhs) Lt (asExpression rhs)
 
         Op.Mod ->
-            Expr <| Binop lhs Mod rhs
+            Expr <| Binop (asExpression lhs) Mod (asExpression rhs)
 
         Op.Mul ->
-            Expr <| Binop lhs Mul rhs
+            Expr <| Binop (asExpression lhs) Mul (asExpression rhs)
 
         Op.Neq ->
-            Expr <| Unop Not <| Call (Var "$eq") [ lhs, rhs ]
+            Expr <| Unop Not <| Call (Var "$eq") [ asExpression lhs, asExpression rhs ]
 
         Op.Or ->
-            Expr <| Binop lhs Or rhs
+            Expr <| Binop (asExpression lhs) Or (asExpression rhs)
 
         Op.Pipe ->
-            Block
-                [ Const "$pipe" lhs
-                , case rhs of
-                    Call fun args ->
-                        Expr <| Call fun (args ++ [ lhs ])
+            Expr <| Call (asExpression rhs) [ asExpression lhs ]
 
-                    _ ->
-                        Expr <| Call rhs [ lhs ]
-                ]
+        Op.Seq ->
+            Block [ lhs, rhs ]
 
         Op.Sub ->
-            Expr <| Binop lhs Sub rhs
+            Expr <| Binop (asExpression lhs) Sub (asExpression rhs)
 
 
 checksFromPattern : Expression -> Pat -> Expression
