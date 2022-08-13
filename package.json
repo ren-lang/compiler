@@ -1,11 +1,13 @@
 {
     "name": "@ren-lang/compiler",
     "bin": {
-        "ren": "./bin/cli.js"
+        "ren": "./bin/ren.js"
     },
     "version": "0.0.1",
     "description": "The compiler for Ren: a dynamically typed, functional scripting language.",
     "scripts": {
+        "switch:lib": "cat elm.package.json > elm.json",
+        "switch:app": "cat elm.application.json > elm.json",
         "build": "./scripts/build.js --production",
         "build:dev": "./scripts/build.js",
         "watch": "./scripts/build.js -w",
