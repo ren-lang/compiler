@@ -683,7 +683,7 @@ operatorParsers =
     in
     List.map operatorParser
         [ -- Left associativity
-          ( Pratt.infixLeft, 1, Op.Pipe )
+          ( Pratt.infixLeft, 2, Op.Pipe )
         , ( Pratt.infixLeft, 4, Op.Eq )
         , ( Pratt.infixLeft, 4, Op.Gt )
         , ( Pratt.infixLeft, 4, Op.Gte )
@@ -696,6 +696,7 @@ operatorParsers =
         , ( Pratt.infixLeft, 7, Op.Mul )
 
         -- Right associativity
+        , ( Pratt.infixRight, 1, Op.Seq )
         , ( Pratt.infixRight, 2, Op.Or )
         , ( Pratt.infixRight, 3, Op.And )
         , ( Pratt.infixRight, 5, Op.Concat )
@@ -832,8 +833,8 @@ letParser parsers =
         |> Parser.drop (Parser.keyword "" Token.Let)
         |> Parser.keep (Pat.parser { inArgPosition = True, includeSpread = False })
         |> Parser.drop (Parser.symbol "" Token.Equal)
-        |> Parser.keep (Pratt.subExpression 0 parsers)
-        |> Parser.drop (Parser.symbol "" Token.Semicolon)
+        |> Parser.keep (Pratt.subExpression 1 parsers)
+        |> Parser.drop (Parser.operator "" Op.Seq)
         |> Parser.keep (Pratt.subExpression 0 parsers)
         |> Parser.backtrackable
         |> withParseMetadata
