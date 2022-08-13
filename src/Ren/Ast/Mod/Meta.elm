@@ -19,6 +19,30 @@ type alias Meta =
 
 
 
+-- MANIPULATIONS ---------------------------------------------------------------
+
+
+setName : String -> Meta -> Meta
+setName name meta =
+    { meta | name = name }
+
+
+setPath : String -> Meta -> Meta
+setPath path meta =
+    { meta | path = path }
+
+
+setPkgPath : String -> Meta -> Meta
+setPkgPath pkgPath meta =
+    { meta | pkgPath = pkgPath }
+
+
+usesFFI : Bool -> Meta -> Meta
+usesFFI b meta =
+    { meta | usesFFI = b }
+
+
+
 -- JSON ------------------------------------------------------------------------
 
 
