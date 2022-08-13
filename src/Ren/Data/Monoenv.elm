@@ -3,9 +3,12 @@ module Ren.Data.Monoenv exposing (..)
 -- IMPORTS ---------------------------------------------------------------------
 
 import Dict exposing (Dict)
+import Json.Decode
+import Json.Encode
 import Ren.Ast.Type as Type exposing (Type)
 import Ren.Data.Subst exposing (Subst)
 import Set exposing (Set)
+import Util.Json
 
 
 
@@ -105,3 +108,26 @@ toString env =
                 |> String.join ", "
             , "}"
             ]
+
+
+
+-- JSON ------------------------------------------------------------------------
+
+
+encode : Monoenv -> Json.Encode.Value
+encode env =
+    Util.Json.taggedEncoder "Monoenv"
+        []
+        [ Json.Encode.dict Basics.identity Type.encode env ]
+
+
+decoder : Json.Decode.Decoder Monoenv
+decoder =
+    Util.Json.taggedDecoder
+        (\tag ->
+            if tag == "Monoenv" then
+                Json.Decode.index 1 <| Json.Decode.dict Type.decoder
+
+            else
+                Json.Decode.fail <| "expected Monoenv, got " ++ tag
+        )

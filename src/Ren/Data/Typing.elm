@@ -9,6 +9,7 @@ import Ren.Ast.Type as Type exposing (Type)
 import Ren.Data.Monoenv as Monoenv exposing (Monoenv)
 import Ren.Data.Subst exposing (Subst)
 import Set exposing (Set)
+import Util.Json
 
 
 
@@ -98,13 +99,34 @@ toString : Typing -> String
 toString ( env_, t ) =
     String.join " " [ Monoenv.toString env_, "⊢", Type.toString t ]
 
+
 toJson : Typing -> String
 toJson =
     encode >> Json.Encode.encode 4
+
+
 
 -- JSON ------------------------------------------------------------------------
 
 
 encode : Typing -> Json.Encode.Value
-encode =
-    Debug.todo ""
+encode ( env_, t ) =
+    Util.Json.taggedEncoder "Typing"
+        []
+        [ Monoenv.encode env_
+        , Type.encode t
+        ]
+
+
+decoder : Json.Decode.Decoder Typing
+decoder =
+    Util.Json.taggedDecoder
+        (\tag ->
+            if tag == "Typing" then
+                Json.Decode.map2 Tuple.pair
+                    (Json.Decode.index 1 <| Monoenv.decoder)
+                    (Json.Decode.index 2 <| Type.decoder)
+
+            else
+                Json.Decode.fail <| "Unexpected tag: " ++ tag
+        )
