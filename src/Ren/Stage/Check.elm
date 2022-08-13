@@ -9,7 +9,7 @@ import Ren.Ast.Expr.Lit as Lit exposing (Lit)
 import Ren.Ast.Expr.Op as Op exposing (Op)
 import Ren.Ast.Expr.Pat as Pat exposing (Pat)
 import Ren.Ast.Type as Type exposing (Type)
-import Ren.Control.Eval as Eval exposing (Eval, bind, succeed, throw)
+import Ren.Control.Eval as Eval exposing (Eval, do, succeed, throw)
 import Ren.Control.Eval.Context as Context
 import Ren.Data.Monoenv as Monoenv exposing (Monoenv)
 import Ren.Data.Polyenv as Polyenv exposing (Polyenv)
@@ -25,15 +25,24 @@ import Util.Maybe as Maybe
 --
 
 
-decl : Decl -> Result String Decl
-decl declaration =
+decl : Polyenv -> Dict String Type -> Decl -> Result String Decl
+decl env types declaration =
     case declaration of
         Decl.Let meta pub name expression ->
             if meta.tipe == Type.Any then
                 Ok declaration
 
+            else if meta.tipe == Type.Hole then
+                init env types
+                    |> inferDecl meta.tipe (Expr.desugar expression)
+                    |> Tuple.second
+                    |> Result.map (\typing -> Decl.Let { meta | tipe = Type.simplify <| Typing.type_ typing, inferred = True } pub name expression)
+
             else
-                Debug.todo ""
+                init env types
+                    |> inferDecl meta.tipe (Expr.desugar expression)
+                    |> Tuple.second
+                    |> Result.map (\typing -> Decl.Let { meta | tipe = Typing.type_ typing } pub name expression)
 
         Decl.Ext _ _ _ _ ->
             Ok declaration
@@ -41,24 +50,8 @@ decl declaration =
 
 expr : Polyenv -> Dict String Type -> Expr -> Result String ( Expr, Typing )
 expr env types expression =
-    let
-        infer =
-            Expr.fold
-                { access = access
-                , annotated = annotated
-                , binop = binop
-                , call = call
-                , if_ = if_
-                , lambda = lambda
-                , let_ = let_
-                , literal = literal
-                , placeholder = Eval.map Typing.poly next
-                , scoped = scoped
-                , where_ = where_
-                , var = var
-                }
-    in
-    infer expression (init env types)
+    init env types
+        |> inferExpr (Expr.desugar expression)
         |> Tuple.second
         |> Result.map (Tuple.pair expression)
 
@@ -133,14 +126,41 @@ init polyenv types =
 -- INFERENCE -------------------------------------------------------------------
 
 
+inferDecl : Type -> Expr -> Infer Typing
+inferDecl expected expression =
+    do (inferExpr expression) <| \( exprEnv, exprT ) ->
+    do (instantiate <| Typing.poly expected) <| \( expectedEnv, expectedT ) ->
+    unify [ exprEnv, expectedEnv ] [ exprT, expectedT ]
+
+
+inferExpr : Expr -> Infer Typing
+inferExpr =
+    Expr.fold
+        { access = access
+        , annotated = annotated
+        , binop = binop
+        , call = call
+        , if_ = if_
+        , lambda = lambda
+        , let_ = let_
+        , literal = literal
+        , placeholder = Eval.map Typing.poly next
+        , scoped = scoped
+        , where_ = where_
+        , var = var
+        }
+
+
 access : Infer Typing -> String -> Infer Typing
-access inferExpr key =
-    call (instantiate <| Typing.poly <| Type.access key) [ inferExpr ]
+access inferExpr_ key =
+    call (instantiate <| Typing.poly <| Type.access key) [ inferExpr_ ]
 
 
 annotated : Infer Typing -> Type -> Infer Typing
-annotated inferExpr _ =
-    inferExpr
+annotated inferExpr_ expected =
+    do inferExpr_ <| \a ->
+    do (instantiate <| Typing.poly expected) <| \b ->
+    unifyTypings [ a, b ]
 
 
 binop : Op -> Infer Typing -> Infer Typing -> Infer Typing
@@ -152,9 +172,9 @@ call : Infer Typing -> List (Infer Typing) -> Infer Typing
 call inferFun inferArgs =
     let
         go inferA inferF =
-            bind inferF <| \( funEnv, funT ) ->
-            bind inferA <| \( argEnv, argT ) ->
-            bind next <| \a ->
+            do inferF <| \( funEnv, funT ) ->
+            do inferA <| \( argEnv, argT ) ->
+            do next <| \a ->
             case funT of
                 Type.Fun expectedArgType expectedReturnType ->
                     -- These coercions are necessary to "lift" up row types. We're
@@ -163,20 +183,24 @@ call inferFun inferArgs =
                     --
                     --   * Pass records with more fields than required into functions
                     --   * Pass enums with fewer fields than required into functions
-                    bind (coerce expectedArgType argT) <| \x ->
-                    bind (unify [ funEnv, argEnv ] [ Type.Fun x expectedReturnType, Type.Fun argT a ]) <| \( env, t ) ->
-                    case t of
-                        Type.Fun _ r ->
-                            bind Context.get <| \{ subst } ->
-                            succeed <| Typing.substitute subst ( env, r )
-
-                        _ ->
-                            bind next <| \b ->
-                            bind Context.get <| \{ subst } ->
-                            succeed <| Typing.substitute subst ( env, b )
+                    --
+                    do (coerce expectedArgType argT) <| \x ->
+                    unifyCall [ funEnv, argEnv ] [ Type.Fun x expectedReturnType, Type.Fun argT a ]
 
                 _ ->
-                    throw <| "Expected function type, got " ++ Debug.toString funT
+                    unifyCall [ funEnv, argEnv ] [ funT, Type.Fun argT a ]
+
+        unifyCall envs ts =
+            do (unify envs ts) <| \( env, t ) ->
+            case t of
+                Type.Fun _ r ->
+                    do Context.get <| \{ subst } ->
+                    succeed <| Typing.substitute subst ( env, r )
+
+                _ ->
+                    do next <| \a ->
+                    do Context.get <| \{ subst } ->
+                    succeed <| Typing.substitute subst ( env, a )
     in
     List.foldl go inferFun inferArgs
 
@@ -193,17 +217,17 @@ lambda patterns inferBody =
             inferBody
 
         pattern :: rest ->
-            bind (pat pattern) <| \( patEnv, patT ) ->
-            bind (lambda rest inferBody) <| \( bodyEnv, bodyT ) ->
-            bind next <| \a ->
-            bind next <| \b ->
-            bind (unify [ patEnv, bodyEnv ] [ Type.Fun patT a, Type.Fun b bodyT ]) <| \( env, t ) ->
+            do (pat pattern) <| \( patEnv, patT ) ->
+            do (lambda rest inferBody) <| \( bodyEnv, bodyT ) ->
+            do next <| \a ->
+            do next <| \b ->
+            do (unify [ patEnv, bodyEnv ] [ Type.Fun patT a, Type.Fun b bodyT ]) <| \( env, t ) ->
             succeed <| Typing.from (Set.foldl Monoenv.remove env <| Pat.bindings pattern) t
 
 
 let_ : Pat -> Infer Typing -> Infer Typing -> Infer Typing
-let_ pattern inferExpr inferBody =
-    Debug.todo ""
+let_ pattern inferExpr_ inferBody =
+    where_ inferExpr_ [ ( pattern, Nothing, inferBody ) ]
 
 
 literal : Lit (Infer Typing) -> Infer Typing
@@ -215,13 +239,13 @@ literal lit =
                 |> Eval.map (\( env, t ) -> ( env, Type.arr t ))
 
         Lit.Enum tag inferArgs ->
-            bind (Eval.sequence inferArgs) <| \args ->
+            do (Eval.sequence inferArgs) <| \args ->
             let
                 ( envs, tN ) =
                     List.unzip args
             in
-            bind (unifyEnvs envs) <| \env ->
-            bind Context.get <| \{ subst } ->
+            do (unifyEnvs envs) <| \env ->
+            do Context.get <| \{ subst } ->
             succeed <| Typing.from env <| Type.sum [ ( tag, List.map (Type.substitute subst) tN ) ]
 
         Lit.Number _ ->
@@ -232,13 +256,13 @@ literal lit =
                 ( keys, inferFields ) =
                     List.unzip inferKeysAndFields
             in
-            bind (Eval.sequence inferFields) <| \fields ->
+            do (Eval.sequence inferFields) <| \fields ->
             let
                 ( envs, tN ) =
                     List.unzip fields
             in
-            bind (unifyEnvs envs) <| \env ->
-            bind Context.get <| \{ subst } ->
+            do (unifyEnvs envs) <| \env ->
+            do Context.get <| \{ subst } ->
             succeed <| Typing.from env <| Type.rec <| List.map2 (\k t -> ( k, Type.substitute subst t )) keys tN
 
         Lit.String _ ->
@@ -251,8 +275,24 @@ scoped scope name =
 
 
 where_ : Infer Typing -> List ( Pat, Maybe (Infer Typing), Infer Typing ) -> Infer Typing
-where_ inferExpr inferCases =
-    Debug.todo ""
+where_ inferExpr_ inferCases =
+    let
+        case_ ( pattern, maybeInferGuard, inferBody ) =
+            do (Maybe.withDefault (succeed <| Typing.poly Type.bool) maybeInferGuard) <| \( guardEnv, guardT ) ->
+            do (unify [ guardEnv ] [ guardT, Type.bool ]) <| \_ ->
+            lambda [ pattern ] inferBody
+    in
+    do (Eval.traverse case_ inferCases) <| \cases ->
+    do (unifyTypings cases) <| \( caseEnv, caseT ) ->
+    do inferExpr_ <| \( exprEnv, exprT ) ->
+    do next <| \a ->
+    do (unify [ exprEnv, caseEnv ] [ Type.Fun exprT a, caseT ]) <| \( env, t ) ->
+    case t of
+        Type.Fun _ r ->
+            succeed <| Typing.from env r
+
+        _ ->
+            throw <| "[Where] Expected function type, got " ++ Type.toString t
 
 
 var : String -> Infer Typing
@@ -268,7 +308,7 @@ pat : Pat -> Infer Typing
 pat pattern =
     case pattern of
         Pat.Any ->
-            bind next <| \a ->
+            do next <| \a ->
             succeed <| Typing.poly a
 
         Pat.Literal (Lit.Array elements) ->
@@ -277,13 +317,13 @@ pat pattern =
                 |> Eval.map (Typing.updateType Type.arr)
 
         Pat.Literal (Lit.Enum tag args) ->
-            bind (Eval.traverse pat args) <| \args_ ->
+            do (Eval.traverse pat args) <| \args_ ->
             let
                 ( envs, tN ) =
                     List.unzip args_
             in
-            bind (unifyEnvs envs) <| \env ->
-            bind Context.get <| \{ subst } ->
+            do (unifyEnvs envs) <| \env ->
+            do Context.get <| \{ subst } ->
             succeed <| Typing.from env <| Type.sum [ ( tag, List.map (Type.substitute subst) tN ) ]
 
         Pat.Literal (Lit.Number _) ->
@@ -294,28 +334,28 @@ pat pattern =
                 ( keys, pats ) =
                     List.unzip fields
             in
-            bind (Eval.traverse pat pats) <| \typings ->
+            do (Eval.traverse pat pats) <| \typings ->
             let
                 ( envs, tN ) =
                     List.unzip typings
             in
-            bind (unifyEnvs envs) <| \env ->
-            bind Context.get <| \{ subst } ->
+            do (unifyEnvs envs) <| \env ->
+            do Context.get <| \{ subst } ->
             succeed <| Typing.from env <| Type.rec <| List.map2 (\k t -> ( k, Type.substitute subst t )) keys tN
 
         Pat.Literal (Lit.String _) ->
             succeed <| Typing.poly Type.str
 
         Pat.Spread name ->
-            bind next <| \a ->
+            do next <| \a ->
             succeed <| Typing.mono name <| Type.arr a
 
         Pat.Type _ p ->
-            bind (pat p) <| \typing ->
+            do (pat p) <| \typing ->
             succeed <| Typing.from (Typing.env typing) Type.Any
 
         Pat.Var name ->
-            bind next <| \a ->
+            do next <| \a ->
             succeed <| Typing.mono name a
 
 
@@ -325,10 +365,10 @@ pat pattern =
 
 unify : List Monoenv -> List Type -> Infer Typing
 unify envs tN =
-    bind next <| \a ->
-    bind (monoeqs envs) <| \eqs ->
-    bind (mgu <| eqs ++ List.map (Tuple.pair a) tN) <| \s ->
-    bind (Context.update (\ctx -> { ctx | subst = s })) <| \_ ->
+    do next <| \a ->
+    do (monoeqs envs) <| \eqs ->
+    do (mgu <| eqs ++ List.map (Tuple.pair a) tN) <| \s ->
+    do (Context.update (\ctx -> { ctx | subst = s })) <| \_ ->
     succeed <| Typing.from (List.foldl (Monoenv.merge s) Monoenv.empty envs) (Type.substitute s a)
 
 
@@ -385,13 +425,13 @@ coerce gotT expectedT =
             throw "type mismatch"
 
         ( Type.App t1 u1, Type.App t2 u2 ) ->
-            bind (coerce t1 t2) <| \t ->
-            bind (Eval.sequence <| List.map2 coerce u1 u2) <| \u ->
+            do (coerce t1 t2) <| \t ->
+            do (Eval.sequence <| List.map2 coerce u1 u2) <| \u ->
             succeed <| Type.App t u
 
         ( Type.Fun t1 r1, Type.Fun t2 r2 ) ->
-            bind (coerce t1 t2) <| \t ->
-            bind (coerce r1 r2) <| \r ->
+            do (coerce t1 t2) <| \t ->
+            do (coerce r1 r2) <| \r ->
             succeed <| Type.Fun t r
 
         -- A record with more rows can always be used in place of a record with
@@ -401,15 +441,17 @@ coerce gotT expectedT =
         --
         -- we should be able to call it with:
         --
-        --   foo { name : "Hayleigh", is_cool : #true }
+        --   foo : { name : "Hayleigh", is_cool : #true }
         --
+        -- so this essentially returns a new record with the extra fields filled
+        -- in with fresh type variables.
         ( Type.Rec gotRow, Type.Rec expectedRow ) ->
-            -- First check the sum type is smaller (aka a possible subtype) of
-            -- the expected sum type:
+            -- First check the rec type is smaller (aka a possible subtype) of
+            -- the expected rec type:
             --
             --   Dict.size gotRow < Dict.size expectedRow
             --
-            -- Then check that all the rows in the sum type are contained in the
+            -- Then check that all the rows in the rec type are contained in the
             -- expected sum type:
             --
             --   List.all (containsField expectedRow) (Dict.keys gotRow)
@@ -471,7 +513,7 @@ mgu eqs =
                 throw "type mismatch"
 
         ( Type.Con c1, Type.Con c2 ) :: rest ->
-            bind Eval.context <| \{ types } ->
+            do Eval.context <| \{ types } ->
             if c1 == c2 && Dict.member c1 types && Dict.member c2 types then
                 mgu rest
 
@@ -541,7 +583,7 @@ mgu eqs =
 
 fresh : String -> Infer Type
 fresh name =
-    Eval.bind next <| \a ->
+    Eval.do next <| \a ->
     if a == Type.var name then
         fresh name
 
@@ -551,8 +593,8 @@ fresh name =
 
 next : Infer Type
 next =
-    bind Context.get <| \{ count } ->
-    bind (Context.update (\ctx -> { ctx | count = count + 1 })) <| \_ ->
+    do Context.get <| \{ count } ->
+    do (Context.update (\ctx -> { ctx | count = count + 1 })) <| \_ ->
     succeed <| Type.var <| Type.fresh count
 
 
@@ -560,8 +602,8 @@ instantiate : Typing -> Infer Typing
 instantiate typing =
     Set.foldl
         (\v inst ->
-            bind inst <| \t ->
-            bind (fresh v) <| \a ->
+            do inst <| \t ->
+            do (fresh v) <| \a ->
             succeed <| Typing.substitute (Subst.singleton v a) t
         )
         (succeed typing)
@@ -570,7 +612,7 @@ instantiate typing =
 
 lookupPolyenv : String -> Infer Typing
 lookupPolyenv v =
-    bind Context.get <| \{ polyenv } ->
+    do Context.get <| \{ polyenv } ->
     case Polyenv.lookup v polyenv of
         Just typing ->
             instantiate typing
