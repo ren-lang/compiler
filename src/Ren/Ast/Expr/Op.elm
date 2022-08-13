@@ -43,7 +43,7 @@ import Util.Triple as Triple
 
 type Op
     = Add --    +
-    | And --    and
+    | And --    &&
     | Concat -- ++
     | Cons --   ::
     | Div --    /
@@ -55,8 +55,9 @@ type Op
     | Mod --    %
     | Mul --    *
     | Neq --    !=
-    | Or --     or
+    | Or --     ||
     | Pipe --   |>
+    | Seq --    ;
     | Sub --    -
 
 
@@ -82,7 +83,7 @@ symbols =
 allNamesAndSymbols : List ( Op, String, String )
 allNamesAndSymbols =
     [ ( Add, "add", "+" )
-    , ( And, "and", "and" )
+    , ( And, "and", "&&" )
     , ( Concat, "concat", "++" )
     , ( Cons, "cons", "::" )
     , ( Div, "div", "/" )
@@ -94,8 +95,9 @@ allNamesAndSymbols =
     , ( Mod, "mod", "%" )
     , ( Mul, "mul", "*" )
     , ( Neq, "neq", "!=" )
-    , ( Or, "or", "or" )
+    , ( Or, "or", "||" )
     , ( Pipe, "pipe", "|>" )
+    , ( Seq, "seq", ";" )
     , ( Sub, "sub", "-" )
     ]
 
