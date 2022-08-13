@@ -55,7 +55,9 @@ type Keyword
 
 {-| -}
 type Symbol
-    = At
+    = Arrow
+    | At
+    | Bar
     | Brace Direction
     | Bracket Direction
     | Colon
@@ -66,7 +68,6 @@ type Symbol
     | Paren Direction
     | Period
     | Question
-    | Semicolon
     | Star
     | Underscore
 
@@ -118,7 +119,7 @@ symbols =
             , [ "[", "]" ]
 
             --
-            , [ ":", ";" ]
+            , [ ":" ]
 
             --
             , [ ".", "," ]
@@ -127,7 +128,7 @@ symbols =
             , [ "=", "=>" ]
 
             --
-            , [ "@", "#", "_", "*", "?" ]
+            , [ "@", "#", "_", "*", "?", "->", "|" ]
             ]
 
 
@@ -225,9 +226,6 @@ symbol s =
 
         ":" ->
             Just <| Symbol Colon
-
-        ";" ->
-            Just <| Symbol Semicolon
 
         "." ->
             Just <| Symbol Period
@@ -462,8 +460,14 @@ encodeSymbol : Symbol -> Json.Encode.Value
 encodeSymbol sym =
     Json.Encode.string <|
         case sym of
+            Arrow ->
+                "->"
+
             At ->
                 "@"
+
+            Bar ->
+                "|"
 
             Colon ->
                 ":"
@@ -500,9 +504,6 @@ encodeSymbol sym =
 
             Period ->
                 "."
-
-            Semicolon ->
-                ";"
 
             Underscore ->
                 "_"
