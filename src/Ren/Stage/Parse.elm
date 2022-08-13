@@ -7,6 +7,7 @@ module Ren.Stage.Parse exposing (..)
 import Ren.Ast.Decl as Decl exposing (Decl)
 import Ren.Ast.Expr as Expr exposing (Expr)
 import Ren.Ast.Mod as Mod exposing (Mod)
+import Ren.Ast.Type as Type exposing (Type)
 import Ren.Control.Lexer as Lexer
 import Ren.Control.Parser as Parser
 import Ren.Data.Span exposing (Span)
@@ -25,6 +26,16 @@ mod input =
                 stream
                     |> Parser.run Mod.parser
                     |> Result.mapError (\_ -> "parser error")
+            )
+        |> Result.map
+            (\mod_ ->
+                Mod.transformMeta
+                    (\meta ->
+                        { meta
+                            | usesFFI = List.any Decl.isExternal (Mod.declarations mod_)
+                        }
+                    )
+                    mod_
             )
 
 
@@ -46,6 +57,17 @@ expr input =
             (\stream ->
                 stream
                     |> Parser.run (Expr.parser { inArgPosition = False })
+                    |> Result.mapError (\_ -> "parser error")
+            )
+
+
+type_ : String -> Result String Type
+type_ input =
+    Lexer.run input
+        |> Result.andThen
+            (\stream ->
+                stream
+                    |> Parser.run (Type.parser { inArgPosition = False })
                     |> Result.mapError (\_ -> "parser error")
             )
 
