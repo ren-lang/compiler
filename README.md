@@ -28,7 +28,7 @@ Writing CLIs and interfacing with things like the filesystem can be a bit awkwar
 
 ## Language Overview
 
-Ren is a gradually typed functional programming that compiles to JavaScript. The JavaScript community is slowly moving towards adopting more and more functional programming features and idioms. Keeping functions pure, avoiding side effects, embracing immutable data structures: these are common practices in the world of JavaScript today, but it can feel like you're working against the langauge a little bit at times.
+Ren is a gradually typed functional programming that compiles to JavaScript. The JavaScript community is slowly moving towards adopting more and more functional programming features and idioms. Keeping functions pure, avoiding side effects, embracing immutable data structures: these are common practices in the world of JavaScript today, but it can feel like you're working against the language a little bit at times.
 
 Ren is an attempt to tidy up JavaScript and shape it up into a productive, simple to use, and simple to understand programming language. It retains many of the features you might like from JavaScript, while removing many of the footguns and escape hatches. So let's see what we're dealing with:
 
