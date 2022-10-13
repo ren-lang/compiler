@@ -2,7 +2,6 @@ module Ren.Data.Typing exposing (..)
 
 -- IMPORTS ---------------------------------------------------------------------
 
-import Dict
 import Json.Decode
 import Json.Encode
 import Ren.Ast.Type as Type exposing (Type)

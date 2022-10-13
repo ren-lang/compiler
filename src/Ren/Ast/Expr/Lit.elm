@@ -78,16 +78,17 @@ arrayParser : Parsers a -> Parser () String (Lit a)
 arrayParser { itemParser } =
     let
         elements =
-            Parser.many
+            Parser.loop []
                 (\els ->
-                    [ Parser.succeed (\el -> el :: els)
-                        |> Parser.drop (Parser.symbol "" <| Token.Comma)
-                        |> Parser.keep itemParser
-                        |> Parser.map Parser.Continue
-                    , Parser.succeed (\_ -> List.reverse els)
-                        |> Parser.keep (Parser.symbol "" <| Token.Bracket Token.Right)
-                        |> Parser.map Parser.Break
-                    ]
+                    Parser.oneOf
+                        [ Parser.succeed (\el -> el :: els)
+                            |> Parser.drop (Parser.symbol "" <| Token.Comma)
+                            |> Parser.keep itemParser
+                            |> Parser.map Parser.Continue
+                        , Parser.succeed (\_ -> List.reverse els)
+                            |> Parser.keep (Parser.symbol "" <| Token.Bracket Token.Right)
+                            |> Parser.map Parser.Break
+                        ]
                 )
     in
     Parser.succeed Array
@@ -107,18 +108,10 @@ enumParser : ParseContext -> Parsers a -> Parser () String (Lit a)
 enumParser { inArgPosition } { wrapParser } =
     let
         args =
-            Parser.many
-                (\xs ->
-                    [ Parser.succeed (\x -> x :: xs)
-                        |> Parser.keep wrapParser
-                        |> Parser.map Parser.Continue
-                    , Parser.succeed (List.reverse xs)
-                        |> Parser.map Parser.Break
-                    ]
-                )
+            Parser.many wrapParser
     in
     Parser.succeed Enum
-        |> Parser.drop (Parser.symbol "" <| Token.Hash)
+        |> Parser.drop (Parser.symbol "" <| Token.Colon)
         |> Parser.keep (Parser.identifier "" Token.Lower)
         |> Parser.andThen
             (\con ->
@@ -152,16 +145,17 @@ recordParser { fromString, itemParser } =
                     )
 
         fields =
-            Parser.many
+            Parser.loop []
                 (\fs ->
-                    [ Parser.succeed (\f -> f :: fs)
-                        |> Parser.drop (Parser.symbol "" Token.Comma)
-                        |> Parser.keep field
-                        |> Parser.map Parser.Continue
-                    , Parser.succeed (\_ -> List.reverse fs)
-                        |> Parser.keep (Parser.symbol "" <| Token.Brace Token.Right)
-                        |> Parser.map Parser.Break
-                    ]
+                    Parser.oneOf
+                        [ Parser.succeed (\f -> f :: fs)
+                            |> Parser.drop (Parser.symbol "" Token.Comma)
+                            |> Parser.keep field
+                            |> Parser.map Parser.Continue
+                        , Parser.succeed (\_ -> List.reverse fs)
+                            |> Parser.keep (Parser.symbol "" <| Token.Brace Token.Right)
+                            |> Parser.map Parser.Break
+                        ]
                 )
     in
     Parser.succeed Record

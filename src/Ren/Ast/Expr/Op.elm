@@ -47,7 +47,7 @@ type Op
     | Concat -- ++
     | Cons --   ::
     | Div --    /
-    | Eq --     =
+    | Eq --     ==
     | Gte --    >=
     | Gt --     >
     | Lte --    <=

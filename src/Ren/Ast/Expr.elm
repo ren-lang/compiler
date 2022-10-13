@@ -66,7 +66,7 @@ import Ren.Ast.Expr.Pat as Pat exposing (Pat)
 import Ren.Ast.Type as Type exposing (Type)
 import Ren.Control.Parser as Parser exposing (Parser)
 import Ren.Control.Parser.Pratt as Pratt
-import Ren.Data.Span as Span
+import Ren.Data.Span as Span exposing (Span)
 import Ren.Data.Token as Token
 import Set exposing (Set)
 import Util.Dict as Dict
@@ -149,6 +149,11 @@ meta expr =
 
         Var metadata _ ->
             metadata
+
+
+span : Expr -> Span
+span =
+    meta >> .span
 
 
 references : Expr -> Dict ( List String, String ) (List Meta)
@@ -746,15 +751,9 @@ accessParser expr_ =
             |> Parser.keep (Parser.identifier "" Token.Lower)
             |> Parser.keep
                 (Parser.many
-                    (\ks ->
-                        [ Parser.succeed (\k -> k :: ks)
-                            |> Parser.drop (Parser.symbol "" Token.Period)
-                            |> Parser.keep (Parser.identifier "" Token.Lower)
-                            |> Parser.map Parser.Continue
-                        , Parser.succeed ()
-                            |> Parser.map (\_ -> List.reverse ks)
-                            |> Parser.map Parser.Break
-                        ]
+                    (Parser.succeed Basics.identity
+                        |> Parser.drop (Parser.symbol "" Token.Period)
+                        |> Parser.keep (Parser.identifier "" Token.Lower)
                     )
                 )
         , Parser.succeed expr_
@@ -775,18 +774,7 @@ callParser { inArgPosition } expr =
         Parser.oneOf
             [ Parser.succeed (\arg args -> Call Meta.default expr (arg :: args))
                 |> Parser.keep argParser
-                |> Parser.keep
-                    (Parser.many
-                        (\args ->
-                            [ Parser.succeed (\arg -> arg :: args)
-                                |> Parser.keep argParser
-                                |> Parser.map Parser.Continue
-                            , Parser.succeed ()
-                                |> Parser.map (\_ -> List.reverse args)
-                                |> Parser.map Parser.Break
-                            ]
-                        )
-                    )
+                |> Parser.keep (Parser.many argParser)
             , Parser.succeed expr
             ]
             |> withParseMetadata
@@ -1120,7 +1108,7 @@ withParseMetadata =
         addComments comments expr =
             transformMeta (\metadata -> List.foldr Meta.addComment metadata comments) expr
 
-        addSpan span expr =
-            transformMeta (\metadata -> Meta.setSpan span metadata) expr
+        addSpan span_ expr =
+            transformMeta (\metadata -> Meta.setSpan span_ metadata) expr
     in
     Parser.withComments "" addComments >> Parser.withSpan addSpan

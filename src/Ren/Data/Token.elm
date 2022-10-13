@@ -20,6 +20,7 @@ import Util.Json as Json
 {-| -}
 type Token
     = Comment String
+    | DocComment String
     | EOF
     | Identifier Case String
     | Keyword Keyword
@@ -50,6 +51,7 @@ type Keyword
     | Pkg
     | Pub
     | Then
+    | Type
     | Where
 
 
@@ -195,6 +197,9 @@ keyword s =
         "then" ->
             Just <| Keyword Then
 
+        "type" ->
+            Just <| Keyword Type
+
         "where" ->
             Just <| Keyword Where
 
@@ -253,6 +258,9 @@ symbol s =
 
         "?" ->
             Just <| Symbol Question
+
+        "|" ->
+            Just <| Symbol Bar
 
         _ ->
             Nothing
@@ -361,6 +369,11 @@ encode token =
                 []
                 [ Json.Encode.string comment ]
 
+        DocComment comment ->
+            Json.taggedEncoder "DocComment"
+                []
+                [ Json.Encode.string comment ]
+
         EOF ->
             Json.taggedEncoder "EOF" [] []
 
@@ -451,6 +464,9 @@ encodeKeyword kwd =
 
             Then ->
                 "Then"
+
+            Type ->
+                "Type"
 
             Where ->
                 "Where"

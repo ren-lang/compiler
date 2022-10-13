@@ -1,15 +1,21 @@
-module Ren.Stage.Emit.JavaScript exposing (..)
+module Ren.Queries.Emit exposing (..)
 
 -- IMPORTS ---------------------------------------------------------------------
 
+import Dict exposing (Dict)
 import Pretty
 import Ren.Ast.Decl as Decl exposing (Decl)
+import Ren.Ast.Decl.Ext exposing (Ext(..))
+import Ren.Ast.Decl.Imp as Imp exposing (Imp(..))
+import Ren.Ast.Decl.Let exposing (Let(..))
 import Ren.Ast.Expr as Expr exposing (Expr)
-import Ren.Ast.Mod as Mod exposing (Mod(..))
-import Ren.Ast.Mod.Import as Import exposing (Import)
+import Ren.Ast.Mod as Mod exposing (Mod)
 import Ren.Ast.Type as Type
+import Ren.Control.Query as Query exposing (Query)
 import Ren.IR.Imp as Imp
+import Ren.Queries.Parse as Parse
 import Util.Math as Math
+import Util.Pretty as Pretty
 
 
 
@@ -23,15 +29,15 @@ prelude =
         |> Pretty.pretty 80
 
 
-mod : Mod -> String
-mod m =
-    fromMod m
-        |> Pretty.pretty 80
+mod : String -> String -> String -> Query { env | modules : Dict String Mod } String
+mod pkgs name path =
+    Query.do (Parse.file path) <| \m ->
+    Query.succeed <| Pretty.pretty 80 <| fromMod pkgs name m
 
 
-decl : Decl -> String
-decl d =
-    fromDecl d
+decl : String -> Decl -> String
+decl pkgs d =
+    fromDecl pkgs d
         |> Pretty.pretty 80
 
 
@@ -47,8 +53,8 @@ expr e =
 --
 
 
-fromMod : Mod -> Pretty.Doc ()
-fromMod (Mod meta imports declarations) =
+fromMod : String -> String -> Mod -> Pretty.Doc ()
+fromMod pkgs name m =
     let
         preludeImport =
             concat
@@ -59,7 +65,7 @@ fromMod (Mod meta imports declarations) =
                 , Pretty.string "from"
                 , Pretty.space
                 , Pretty.char '\''
-                , Pretty.string <| "./" ++ meta.pkgPath ++ "/prelude.js"
+                , Pretty.string <| pkgs ++ "/prelude.js"
                 , Pretty.char '\''
                 ]
 
@@ -76,139 +82,126 @@ fromMod (Mod meta imports declarations) =
                 , Pretty.string "from"
                 , Pretty.space
                 , Pretty.char '\''
-                , Pretty.string <| "./" ++ meta.name ++ ".ffi.js"
+                , Pretty.string <| "./" ++ name ++ ".ffi.js"
                 , Pretty.char '\''
                 ]
     in
-    Pretty.join doubleline <|
-        [ imports
-            |> List.map (fromImport meta)
-            |> (::) (when meta.usesFFI ffiImport)
-            |> (::) preludeImport
-            |> Pretty.join Pretty.line
-        , declarations
-            |> List.map fromDecl
-            |> Pretty.join doubleline
+    Pretty.join Pretty.line <|
+        [ preludeImport
+        , when (Basics.not <| Dict.isEmpty m.externals) ffiImport
+        , Pretty.join Pretty.doubleline <| (List.map (List.map (fromDecl pkgs) >> Pretty.join Pretty.line) <| Mod.emittables m)
         ]
 
 
-fromImport : Mod.Meta -> Import -> Pretty.Doc ()
-fromImport meta imp =
+fromDecl : String -> Decl -> Pretty.Doc ()
+fromDecl pkgs d =
     let
-        path =
-            if Import.isPackage imp then
-                meta.pkgPath ++ imp.path ++ ".ren.js"
+        withDocs docs =
+            when (Basics.not <| List.isEmpty docs)
+                (List.map (String.replace "#" "//" >> Pretty.string) docs
+                    |> Pretty.join Pretty.line
+                )
 
-            else
-                imp.path ++ ".ren.js"
-    in
-    case ( imp.name, imp.unqualified ) of
-        ( [], [] ) ->
+        withType name t =
             concat
-                [ Pretty.string "import"
-                , Pretty.space
-                , Pretty.char '\''
-                , Pretty.string path
-                , Pretty.char '\''
+                [ Pretty.string "// "
+                , Pretty.string name
+                , Pretty.string " : "
+                , Pretty.string <| Type.toString t
+                ]
+    in
+    case d of
+        Decl.Let (Let meta pub name _ e) ->
+            case Imp.fromExpr <| Expr.desugar e of
+                Imp.Expr (Imp.Function args body) ->
+                    concat
+                        [ withDocs meta.docs
+                        , Pretty.line
+                        , Pretty.string "//"
+                        , Pretty.line
+                        , withType name meta.tipe
+                        , Pretty.line
+                        , when pub (Pretty.string "export")
+                        , when pub Pretty.space
+                        , fromStmt <| Imp.FunctionDeclaration name args body
+                        , Pretty.line
+                        ]
+
+                Imp.Expr expr_ ->
+                    concat
+                        [ withDocs meta.docs
+                        , Pretty.line
+                        , Pretty.string "//"
+                        , Pretty.line
+                        , withType name meta.tipe
+                        , Pretty.line
+                        , when pub (Pretty.string "export")
+                        , when pub Pretty.space
+                        , fromStmt <| Imp.Const name expr_
+                        , Pretty.line
+                        ]
+
+                stmt ->
+                    concat
+                        [ withDocs meta.docs
+                        , Pretty.line
+                        , Pretty.string "//"
+                        , Pretty.line
+                        , withType name meta.tipe
+                        , Pretty.line
+                        , when pub (Pretty.string "export")
+                        , when pub Pretty.space
+                        , fromStmt <| Imp.Const name <| Imp.asExpression <| Imp.return <| Imp.flatten stmt
+                        , Pretty.line
+                        ]
+
+        Decl.Ext (Ext meta pub name _ s) ->
+            concat
+                [ withDocs meta.docs
+                , Pretty.line
+                , Pretty.string "//"
+                , Pretty.line
+                , withType name meta.tipe
+                , Pretty.line
+                , when pub (Pretty.string "export")
+                , when pub Pretty.space
+                , fromStmt <| Imp.Const name <| Imp.Call (Imp.Var "$function") [ Imp.Access (Imp.Var "$FFI") [ s ] ]
+                , Pretty.line
                 ]
 
-        ( name, [] ) ->
+        Decl.Comment _ comments ->
+            List.map (String.replace "#" "//" >> Pretty.string) comments
+                |> Pretty.join Pretty.line
+                |> Pretty.a Pretty.line
+
+        Decl.Type _ ->
+            Pretty.empty
+
+        Decl.Imp (Imp _ path source name) ->
             concat
                 [ Pretty.string "import"
                 , Pretty.space
                 , Pretty.char '*'
                 , Pretty.space
-                , Pretty.string "as"
-                , Pretty.space
-                , Pretty.string <| String.join "$" name
-                , Pretty.space
-                , Pretty.string "from"
-                , Pretty.space
-                , Pretty.char '\''
-                , Pretty.string path
-                , Pretty.char '\''
-                ]
-
-        ( [], unqualified ) ->
-            concat
-                [ Pretty.string "import"
-                , Pretty.space
-                , Pretty.char '{'
-                , Pretty.join (Pretty.char ',') <| List.map Pretty.string unqualified
-                , Pretty.char '}'
-                , Pretty.space
-                , Pretty.string "from"
-                , Pretty.space
-                , Pretty.char '\''
-                , Pretty.string path
-                , Pretty.char '\''
-                ]
-
-        -- Because of the way Imp imports work, we'll need two separate
-        -- import statements if we want to qualify an entire module under a specific
-        -- name *and* introduce some unqualified bindings.
-        --
-        -- To save on duplication, we'll just call the `fromImport` again but
-        -- clear out the `unqualified` and `name` fields respectively to emit
-        -- just one import statement on each line.
-        ( _, _ ) ->
-            Pretty.join Pretty.line
-                [ fromImport meta { imp | unqualified = [] }
-                , fromImport meta { imp | name = [] }
-                ]
-
-
-fromDecl : Decl -> Pretty.Doc ()
-fromDecl d =
-    case d of
-        Decl.Let meta pub name e ->
-            case Imp.fromExpr <| Expr.desugar e of
-                Imp.Expr (Imp.Function args body) ->
-                    concat
-                        [ Pretty.string "// "
-                        , Pretty.string name
-                        , Pretty.string " : "
-                        , Pretty.string <| Type.toString meta.tipe
-                        , Pretty.line
-                        , when pub (Pretty.string "export")
-                        , when pub Pretty.space
-                        , fromStmt <| Imp.FunctionDeclaration name args body
+                , when (Basics.not <| List.isEmpty name)
+                    (concat
+                        [ Pretty.string "as"
+                        , Pretty.space
+                        , Pretty.string <| String.join "$" name
+                        , Pretty.space
+                        , Pretty.string "from"
+                        , Pretty.space
                         ]
+                    )
+                , Pretty.char '\''
+                , Pretty.string
+                    (if source == Imp.External then
+                        path
 
-                Imp.Expr expr_ ->
-                    concat
-                        [ Pretty.string "// "
-                        , Pretty.string name
-                        , Pretty.string " : "
-                        , Pretty.string <| Type.toString meta.tipe
-                        , Pretty.line
-                        , when pub (Pretty.string "export")
-                        , when pub Pretty.space
-                        , fromStmt <| Imp.Const name expr_
-                        ]
-
-                stmt ->
-                    concat
-                        [ Pretty.string "// "
-                        , Pretty.string name
-                        , Pretty.string " : "
-                        , Pretty.string <| Type.toString meta.tipe
-                        , Pretty.line
-                        , when pub (Pretty.string "export")
-                        , when pub Pretty.space
-                        , fromStmt <| Imp.Const name <| Imp.asExpression <| Imp.return <| Imp.flatten stmt
-                        ]
-
-        Decl.Ext meta pub name str ->
-            concat
-                [ Pretty.string "// "
-                , Pretty.string name
-                , Pretty.string " : "
-                , Pretty.string <| Type.toString meta.tipe
-                , Pretty.line
-                , when pub (Pretty.string "export")
-                , when pub Pretty.space
-                , fromStmt <| Imp.Const name <| Imp.Call (Imp.Var "$function") [ Imp.Access (Imp.Var "$FFI") [ str ] ]
+                     else
+                        pkgs ++ "/" ++ path ++ ".ren.js"
+                    )
+                , Pretty.char '\''
                 ]
 
 
@@ -244,6 +237,13 @@ fromStmt stmt =
 
         Imp.Expr e ->
             fromExpression e
+
+        Imp.Export s ->
+            concat
+                [ Pretty.string "export"
+                , Pretty.space
+                , fromStmt s
+                ]
 
         Imp.FunctionDeclaration name args body ->
             concat
@@ -584,7 +584,10 @@ block stmt =
                     fromStmt s
 
                 Imp.Expr _ ->
-                    concat [ fromStmt s ]
+                    fromStmt s
+
+                Imp.Export stmt_ ->
+                    fromStmt stmt_
 
                 Imp.FunctionDeclaration _ _ _ ->
                     concat [ Pretty.line, fromStmt s ]

@@ -48,7 +48,7 @@ access k =
 
 arr : Type -> Type
 arr a =
-    App (Con "Array") [ a ]
+    App (Con "Arr") [ a ]
 
 
 bool : Type
@@ -63,7 +63,7 @@ fun args ret =
 
 num : Type
 num =
-    Con "Number"
+    Con "Num"
 
 
 rec : List ( String, Type ) -> Type
@@ -73,17 +73,12 @@ rec rows =
 
 str : Type
 str =
-    Con "String"
+    Con "Str"
 
 
 sum : List ( String, List Type ) -> Type
 sum rows =
     Sum <| Dict.fromList rows
-
-
-undefined : Type
-undefined =
-    Sum <| Dict.singleton "undefined" []
 
 
 var : String -> Type
@@ -354,6 +349,7 @@ parser context =
                 [ List.map Pratt.literal
                     [ anyParser
                     , recParser
+                    , varParser
                     ]
                 , List.map (Parser.andThen (appParser context) >> Pratt.literal)
                     [ parenthesisedParser
@@ -389,15 +385,7 @@ appParser { inArgPosition } con =
         Parser.succeed con
 
     else
-        Parser.many
-            (\args ->
-                [ Parser.succeed (\arg -> arg :: args)
-                    |> Parser.keep (Parser.lazy <| \_ -> parser { inArgPosition = False })
-                    |> Parser.map Parser.Continue
-                , Parser.succeed (List.reverse args)
-                    |> Parser.map Parser.Break
-                ]
-            )
+        Parser.many (Parser.lazy <| \_ -> parser { inArgPosition = False })
             |> Parser.map
                 (\args ->
                     if List.isEmpty args then
@@ -430,16 +418,17 @@ recParser =
                 |> Parser.keep (Parser.lazy <| \_ -> parser { inArgPosition = False })
 
         fields =
-            Parser.many
+            Parser.loop []
                 (\fs ->
-                    [ Parser.succeed (\f -> f :: fs)
-                        |> Parser.drop (Parser.symbol "" Token.Comma)
-                        |> Parser.keep field
-                        |> Parser.map Parser.Continue
-                    , Parser.succeed (\_ -> List.reverse fs)
-                        |> Parser.keep (Parser.symbol "" <| Token.Brace Token.Right)
-                        |> Parser.map Parser.Break
-                    ]
+                    Parser.oneOf
+                        [ Parser.succeed (\f -> f :: fs)
+                            |> Parser.drop (Parser.symbol "" Token.Comma)
+                            |> Parser.keep field
+                            |> Parser.map Parser.Continue
+                        , Parser.succeed (\_ -> List.reverse fs)
+                            |> Parser.keep (Parser.symbol "" <| Token.Brace Token.Right)
+                            |> Parser.map Parser.Break
+                        ]
                 )
     in
     Parser.succeed (Dict.fromList >> Rec)
@@ -466,14 +455,9 @@ sumParser ({ inArgPosition } as context) =
             |> Parser.keep (variantParser { inArgPosition = False })
             |> Parser.keep
                 (Parser.many
-                    (\variants ->
-                        [ Parser.succeed (\v -> v :: variants)
-                            |> Parser.drop (Parser.symbol "" Token.Bar)
-                            |> Parser.keep (variantParser { inArgPosition = False })
-                            |> Parser.map Parser.Continue
-                        , Parser.succeed variants
-                            |> Parser.map Parser.Break
-                        ]
+                    (Parser.succeed Basics.identity
+                        |> Parser.drop (Parser.symbol "" Token.Bar)
+                        |> Parser.keep (variantParser { inArgPosition = False })
                     )
                 )
 
@@ -482,18 +466,10 @@ variantParser : ParseContext -> Parser () String ( String, List Type )
 variantParser { inArgPosition } =
     let
         args =
-            Parser.many
-                (\xs ->
-                    [ Parser.succeed (\x -> x :: xs)
-                        |> Parser.keep (Parser.lazy <| \_ -> parser { inArgPosition = False })
-                        |> Parser.map Parser.Continue
-                    , Parser.succeed (List.reverse xs)
-                        |> Parser.map Parser.Break
-                    ]
-                )
+            Parser.many (Parser.lazy <| \_ -> parser { inArgPosition = False })
     in
     Parser.succeed Basics.identity
-        |> Parser.drop (Parser.symbol "" <| Token.Hash)
+        |> Parser.drop (Parser.symbol "" <| Token.Colon)
         |> Parser.keep (Parser.identifier "" Token.Lower)
         |> Parser.andThen
             (\con ->

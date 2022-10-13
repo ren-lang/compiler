@@ -12,6 +12,8 @@ import Json.Encode
 -- TYPES -----------------------------------------------------------------------
 
 
+{-| A span represents a range or selection of text in a document.
+-}
 type alias Span =
     { start : Pos
     , end : Pos
@@ -26,6 +28,22 @@ type alias Pos =
 
 
 -- CONSTANTS -------------------------------------------------------------------
+
+
+empty : Span
+empty =
+    { start =
+        { line = 0
+        , column = 0
+        }
+    , end =
+        { line = 0
+        , column = 0
+        }
+    }
+
+
+
 -- CONSTRUCTORS ----------------------------------------------------------------
 
 
@@ -36,6 +54,28 @@ from ( x, y ) ( a, b ) =
 
 
 -- QUERIES ---------------------------------------------------------------------
+
+
+compare : Span -> Span -> Basics.Order
+compare a b =
+    let
+        compA =
+            ( toComparable a.start, toComparable a.end )
+
+        compB =
+            ( toComparable b.start, toComparable b.end )
+    in
+    if compA < compB then
+        Basics.LT
+
+    else if compB < compA then
+        Basics.GT
+
+    else
+        Basics.EQ
+
+
+
 -- MANIPULATIONS ---------------------------------------------------------------
 
 

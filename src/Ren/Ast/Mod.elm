@@ -1,230 +1,126 @@
 module Ren.Ast.Mod exposing (..)
 
-{-| -}
-
 -- IMPORTS ---------------------------------------------------------------------
 
-import Json.Decode
-import Json.Encode
+import Dict exposing (Dict)
 import Ren.Ast.Decl as Decl exposing (Decl)
-import Ren.Ast.Mod.Import as Import exposing (Import)
-import Ren.Ast.Mod.Meta as Meta
+import Ren.Ast.Decl.Ext as Ext exposing (Ext(..))
+import Ren.Ast.Decl.Imp as Imp exposing (Imp(..))
+import Ren.Ast.Decl.Let as Let exposing (Let(..))
+import Ren.Ast.Decl.Type as Type exposing (Type)
+import Ren.Compiler.FFI exposing (Error)
 import Ren.Control.Parser as Parser exposing (Parser)
-import Util.Json as Json
+import Ren.Data.Span as Span exposing (Span)
 import Util.List as List
+import Util.Maybe as Maybe
 
 
 
 -- TYPES -----------------------------------------------------------------------
 
 
-type Mod
-    = Mod Meta (List Import) (List Decl)
+type alias Mod =
+    { path : String
+
+    --
+    , imports : Dict String Imp
+    , types : Dict String Type
+    , externals : Dict String Ext
+    , bindings : Dict String Let
+    , comments : List ( Span, List String )
+    }
 
 
-type alias Meta =
-    Meta.Meta
 
-
-
--- CONSTANTS -------------------------------------------------------------------
 -- CONSTRUCTORS ----------------------------------------------------------------
 
 
-empty : Mod
-empty =
-    Mod { name = "", path = "", pkgPath = ".pkg/", usesFFI = False } [] []
+new : String -> List Decl -> Mod
+new path decls =
+    let
+        empty =
+            { path = path
+            , imports = Dict.empty
+            , types = Dict.empty
+            , externals = Dict.empty
+            , bindings = Dict.empty
+            , comments = []
+            }
+    in
+    List.foldr
+        (\decl mod ->
+            case decl of
+                Decl.Let binding ->
+                    { mod | bindings = Dict.insert (Let.name binding) binding mod.bindings }
+
+                Decl.Ext external ->
+                    { mod | externals = Dict.insert (Ext.name external) external mod.externals }
+
+                Decl.Imp imp ->
+                    { mod | imports = Dict.insert (Imp.path imp) imp mod.imports }
+
+                Decl.Type typ ->
+                    { mod | types = Dict.insert (Type.name typ) typ mod.types }
+
+                Decl.Comment span comment ->
+                    { mod | comments = ( span, comment ) :: mod.comments }
+        )
+        empty
+        decls
 
 
 
 -- QUERIES ---------------------------------------------------------------------
 
 
-meta : Mod -> Meta
-meta (Mod metadata _ _) =
-    metadata
+lookup : String -> Mod -> Maybe Decl
+lookup nameOrPath mod =
+    List.foldl Maybe.or Nothing <|
+        [ Maybe.map Decl.Imp <| Dict.get nameOrPath mod.imports
+        , Maybe.map Decl.Type <| Dict.get nameOrPath mod.types
+        , Maybe.map Decl.Ext <| Dict.get nameOrPath mod.externals
+        , Maybe.map Decl.Let <| Dict.get nameOrPath mod.bindings
+        ]
 
 
-imports : String -> Mod -> Bool
-imports path (Mod _ imps _) =
-    List.any (\imp -> imp.path == path) imps
-
-
-importsLocal : String -> Mod -> Bool
-importsLocal path (Mod _ imps _) =
-    List.any (\imp -> Import.isLocal imp && imp.path == path) imps
-
-
-importsPackage : String -> Mod -> Bool
-importsPackage path (Mod _ imps _) =
-    List.any (\imp -> Import.isPackage imp && imp.path == path) imps
-
-
-importsExternal : String -> Mod -> Bool
-importsExternal path (Mod _ imps _) =
-    List.any (\imp -> Import.isExternal imp && imp.path == path) imps
+emittables : Mod -> List (List Decl)
+emittables mod =
+    [ List.map Decl.Imp <| Dict.values mod.imports
+    , List.sortWith (\a b -> Span.compare (Decl.span a) (Decl.span b)) <|
+        List.concat
+            [ List.map Decl.Let <| Dict.values mod.bindings
+            , List.map Decl.Ext <| Dict.values mod.externals
+            ]
+    ]
 
 
 declarations : Mod -> List Decl
-declarations (Mod _ _ decls) =
-    decls
-
-
-declares : String -> Mod -> Bool
-declares name (Mod _ _ decls) =
-    List.any (\dec -> Decl.name dec == name) decls
-
-
-declaresLocal : String -> Mod -> Bool
-declaresLocal name (Mod _ _ decls) =
-    List.any (\dec -> Decl.isLocal dec && Decl.name dec == name) decls
-
-
-declaresExternal : String -> Mod -> Bool
-declaresExternal name (Mod _ _ decls) =
-    List.any (\dec -> Decl.isExternal dec && Decl.name dec == name) decls
-
-
-exports : String -> Mod -> Bool
-exports name (Mod _ _ decls) =
-    List.any (\dec -> Decl.isPublic dec && Decl.name dec == name) decls
-
-
-exportsLocal : String -> Mod -> Bool
-exportsLocal name (Mod _ _ decls) =
-    List.any (\dec -> Decl.isPublic dec && Decl.isLocal dec && Decl.name dec == name) decls
-
-
-exportsExternal : String -> Mod -> Bool
-exportsExternal name (Mod _ _ decls) =
-    List.any (\dec -> Decl.isPublic dec && Decl.isExternal dec && Decl.name dec == name) decls
+declarations mod =
+    List.sortWith (\a b -> Span.compare (Decl.span a) (Decl.span b)) <|
+        List.concat
+            [ List.map Decl.Imp <| Dict.values mod.imports
+            , List.map Decl.Type <| Dict.values mod.types
+            , List.map Decl.Let <| Dict.values mod.bindings
+            , List.map Decl.Ext <| Dict.values mod.externals
+            , List.map (\( span, comment ) -> Decl.Comment span comment) mod.comments
+            ]
 
 
 
 -- MANIPULATIONS ---------------------------------------------------------------
 
 
-transformMeta : (Meta -> Meta) -> Mod -> Mod
-transformMeta f (Mod metadata imps decls) =
-    Mod (f metadata) imps decls
-
-
-addImport : Import -> Mod -> Mod
-addImport imp (Mod metadata imps decls) =
-    let
-        -- Check if an import with the same path, source, and name already exists.
-        -- This means we can merge the incoming import with and existing one and
-        -- save importing a module twice.
-        sameImport { path, source, name } =
-            path == imp.path && source == imp.source && name == imp.name
-    in
-    Mod metadata
-        (if List.any (Import.alike imp) imps then
-            List.updateBy sameImport
-                (\{ unqualified } ->
-                    { imp
-                        | unqualified =
-                            List.concat [ imp.unqualified, unqualified ]
-                                |> List.uniques
-                    }
-                )
-                imps
-
-         else
-            imp :: imps
-        )
-        decls
-
-
-addImports : List Import -> Mod -> Mod
-addImports imps mod =
-    List.foldl addImport mod imps
-
-
-addDecl : Decl -> Mod -> Mod
-addDecl dec (Mod metadata imps decls) =
-    Mod metadata
-        imps
-        (decls
-            |> List.filter (Decl.name >> (/=) (Decl.name dec))
-            |> (::) dec
-        )
-
-
-addDecls : List Decl -> Mod -> Mod
-addDecls decls mod =
-    List.foldr addDecl mod decls
+updateBinding : String -> (Let -> Let) -> Mod -> Mod
+updateBinding name f mod =
+    { mod | bindings = Dict.update name (Maybe.map f) mod.bindings }
 
 
 
--- CONVERSIONS -----------------------------------------------------------------
+-- PARSING ---------------------------------------------------------------------
 
 
-toJson : Mod -> String
-toJson =
-    encode >> Json.Encode.encode 4
-
-
-
--- PARSERS ---------------------------------------------------------------------
-
-
-parser : Parser () String Mod
-parser =
-    Parser.succeed (\imps decls -> empty |> addImports imps |> addDecls decls)
-        |> Parser.keep
-            (Parser.many
-                (\imps ->
-                    [ Parser.succeed (\imp -> imp :: imps)
-                        |> Parser.keep Import.parser
-                        |> Parser.map Parser.Continue
-                    , Parser.succeed ()
-                        |> Parser.map (\_ -> List.reverse imps)
-                        |> Parser.map Parser.Break
-                    ]
-                )
-            )
-        |> Parser.keep
-            (Parser.many
-                (\decs ->
-                    [ Parser.succeed (\dec -> dec :: decs)
-                        |> Parser.keep Decl.parser
-                        |> Parser.map Parser.Continue
-                    , Parser.succeed ()
-                        |> Parser.map (\_ -> List.reverse decs)
-                        |> Parser.map Parser.Break
-                    ]
-                )
-            )
-
-
-
--- JSON ------------------------------------------------------------------------
-
-
-encode : Mod -> Json.Encode.Value
-encode (Mod metadata imps decls) =
-    Json.taggedEncoder "Mod"
-        (Meta.encode metadata)
-        [ Json.Encode.list Import.encode imps
-        , Json.Encode.list Decl.encode decls
-        ]
-
-
-decoder : Json.Decode.Decoder Mod
-decoder =
-    Json.taggedDecoder
-        (\key ->
-            if key == "Mod" then
-                Json.Decode.map3 Mod
-                    (Json.Decode.index 0 <| Meta.decoder)
-                    (Json.Decode.index 1 <| Json.Decode.list Import.decoder)
-                    (Json.Decode.index 2 <| Json.Decode.list Decl.decoder)
-
-            else
-                Json.Decode.fail <| "Unknown module: " ++ key
-        )
-
-
-
--- UTILS -----------------------------------------------------------------------
+parser : String -> Parser () Error Mod
+parser path =
+    Parser.succeed (new path)
+        |> Parser.keep (Parser.many Decl.parser)
+        |> Parser.drop (Parser.end "")

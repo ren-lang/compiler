@@ -37,8 +37,8 @@ export const FFI = global.XMLHttpRequest = class FFI {
         } catch (e) {
             this.status = 400
             this.statusText = e.toString()
-
-            this.response = [`[Error calling ${this.module}:${this.fn}]`, e].join('\n')
+            console.log(e)
+            this.response = [`[Error calling ${this.module}:${this.fn}]`, this.statusText].join('\n')
 
             this.listeners.error()
         }

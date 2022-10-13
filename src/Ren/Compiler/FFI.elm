@@ -71,7 +71,9 @@ call mod fn args decoder =
                                 |> Result.mapError Json.Decode.errorToString
 
                         _ ->
-                            Err <| "Error calling `" ++ mod ++ ":" ++ fn ++ "` with " ++ (Json.Encode.encode 0 <| Json.Encode.list Basics.identity args)
+                            ("Error calling `" ++ mod ++ ":" ++ fn ++ "` with ")
+                                ++ (Json.Encode.encode 0 <| Json.Encode.list Basics.identity args)
+                                |> Err
                 )
         , timeout = Nothing
         }

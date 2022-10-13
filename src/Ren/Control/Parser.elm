@@ -3,9 +3,9 @@ module Ren.Control.Parser exposing
     , Parser(..), DeadEnd, Loop(..)
     , succeed, commit, problem
     , any, token
-    , comment, keyword, symbol, operator, identifier, end
+    , comment, docComment, keyword, symbol, operator, identifier, end
     , number, string
-    , map, map2, andThen
+    , map, map2, andThen, do
     , keep, drop
     , withSpan, withComments
     , lazy, backtrackable
@@ -27,13 +27,13 @@ module Ren.Control.Parser exposing
 
 @docs succeed, commit, problem
 @docs any, token
-@docs comment, keyword, symbol, operator, identifier, end
+@docs comment, docComment, keyword, symbol, operator, identifier, end
 @docs number, string
 
 
 ## Manipulations
 
-@docs map, map2, andThen
+@docs map, map2, andThen, do
 @docs keep, drop
 @docs withSpan, withComments
 
@@ -51,6 +51,7 @@ module Ren.Control.Parser exposing
 
 import Array exposing (Array)
 import Ren.Ast.Expr.Op exposing (Op)
+import Ren.Data.Error as Error exposing (Error)
 import Ren.Data.Span as Span exposing (Span)
 import Ren.Data.Token as Token exposing (Token)
 import Util.Maybe as Maybe
@@ -61,7 +62,7 @@ import Util.Maybe as Maybe
 
 
 {-| -}
-run : Parser ctx e a -> List ( Token, Span ) -> Result (List (DeadEnd ctx e)) a
+run : Parser ctx Error a -> List ( Token, Span ) -> Result Error a
 run parser stream =
     let
         state =
@@ -75,7 +76,7 @@ run parser stream =
             Ok value
 
         Bad _ bag ->
-            Err (bagToList bag [])
+            Err <| Maybe.withDefault "" <| Maybe.map .error <| List.head <| bagToList bag []
 
 
 
@@ -207,6 +208,17 @@ comment error =
             Bad False <| bagFromState state error
 
 
+docComment : e -> Parser ctx e String
+docComment error =
+    Parser <| \state ->
+    case nextToken state of
+        Token.DocComment s ->
+            Good True s { state | offset = state.offset + 1 }
+
+        _ ->
+            Bad False <| bagFromState state error
+
+
 {-| -}
 keyword : e -> Token.Keyword -> Parser ctx e ()
 keyword error kwd =
@@ -322,6 +334,12 @@ andThen f parseA =
                     Good (c1 || c2) b finalState
 
 
+{-| -}
+do : Parser ctx e a -> (a -> Parser ctx e b) -> Parser ctx e b
+do parseA f =
+    andThen f parseA
+
+
 
 --
 
@@ -355,7 +373,7 @@ withSpan apply parser =
 withComments : e -> (List String -> a -> b) -> Parser ctx e a -> Parser ctx e b
 withComments e apply parser =
     succeed apply
-        |> keep (many <| \cs -> [ succeed (\c -> c :: cs) |> keep (comment e) |> map Continue, succeed (List.reverse cs) |> map Break ])
+        |> keep (many (comment e))
         |> keep parser
 
 
@@ -404,9 +422,17 @@ loop init f =
 
 
 {-| -}
-many : (List a -> List (Parser ctx e (Loop (List a) (List a)))) -> Parser ctx e (List a)
-many parsers =
-    loop [] <| \xs -> oneOf <| parsers xs
+many : Parser ctx e a -> Parser ctx e (List a)
+many parser =
+    loop [] <| \xs ->
+    oneOf
+        [ succeed (\x -> x :: xs)
+            |> keep parser
+            |> map Continue
+        , succeed xs
+            |> map List.reverse
+            |> map Break
+        ]
 
 
 {-| Just like [`Parser.oneOf`](Parser#oneOf)

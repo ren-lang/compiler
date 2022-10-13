@@ -26,6 +26,12 @@ collect tokens =
     let
         go tok ( acc, list ) =
             case ( tok, acc ) of
+                ( ( Token.DocComment a, s1 ), Just ( Token.DocComment b, s2 ) ) ->
+                    ( Just <| ( Token.DocComment <| a ++ "\n" ++ b, Span.merge s1 s2 ), list )
+
+                ( ( Token.DocComment a, s1 ), Just ( Token.Comment b, s2 ) ) ->
+                    ( Just <| ( Token.DocComment <| a ++ "\n" ++ b, Span.merge s1 s2 ), list )
+
                 ( ( Token.Comment a, s1 ), Just ( Token.Comment b, s2 ) ) ->
                     ( Just <| ( Token.Comment <| a ++ "\n" ++ b, Span.merge s1 s2 ), list )
 
@@ -33,6 +39,12 @@ collect tokens =
                     ( Just tok, b :: list )
 
                 ( ( Token.Comment _, _ ), Nothing ) ->
+                    ( Just tok, list )
+
+                ( ( Token.DocComment _, _ ), Just b ) ->
+                    ( Just tok, b :: list )
+
+                ( ( Token.DocComment _, _ ), Nothing ) ->
                     ( Just tok, list )
 
                 ( ( Token.Unknown a, s1 ), Just ( Token.Unknown b, s2 ) ) ->
@@ -74,6 +86,7 @@ token =
             [ number
             , string
             , keyword
+            , docComment
             , comment
             , symbol
             , operator
@@ -127,10 +140,19 @@ string =
 comment : Parser Token
 comment =
     Parser.succeed ()
-        |. Parser.token "//"
+        |. Parser.token "#"
         |. Parser.chompUntilEndOr "\n"
         |> Parser.getChompedString
         |> Parser.map Token.Comment
+
+
+docComment : Parser Token
+docComment =
+    Parser.succeed ()
+        |. Parser.token "#-"
+        |. Parser.chompUntilEndOr "\n"
+        |> Parser.getChompedString
+        |> Parser.map Token.DocComment
 
 
 keyword : Parser Token

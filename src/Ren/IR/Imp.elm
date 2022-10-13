@@ -23,6 +23,7 @@ type Statement
     | Const String Expression
     | Continue
     | Expr Expression
+    | Export Statement
     | FunctionDeclaration String (List String) (List Statement)
     | ForIn String Expression Statement
     | If Expression Statement (Maybe Statement)
@@ -122,62 +123,63 @@ prelude =
     --         return $function(f.bind(thisArg, ...args), thisArg)
     --     }
     -- }
-    , FunctionDeclaration "$function" [ "f" ] <|
-        [ If (Binop (Binop (Unop Typeof (Var "f")) Eq (String "object")) Or (Call (Access (Var "Array") [ "isArray" ]) [ Var "f" ]))
-            (ForIn "k" (Var "f") <|
-                Expr <|
-                    Assign (Index (Var "k") (Var "f")) (Call (Var "$function") [ Index (Var "k") (Var "f"), Var "f" ])
-            )
-            Nothing
-        , If (Binop (Unop Typeof (Var "f")) Neq (String "function"))
-            (Return (Var "f"))
-            Nothing
-        , Return <|
-            Function [ "...args" ] <|
-                [ If (Binop (Access (Var "args") [ "length" ]) Eq (Access (Var "f") [ "length" ]))
-                    (Return <| Call (Var "f") [ Spread <| Var "args" ])
-                    Nothing
-                , If (Binop (Access (Var "args") [ "length" ]) Gt (Access (Var "f") [ "length" ]))
-                    (Block
-                        [ Comment "This allows us to handle functions that have been explicitly curried,"
-                        , Comment "or higher-order functions that return other functions."
-                        , Comment ""
-                        , Comment "If you supply more arguments than the wrapped function's arity, fully"
-                        , Comment "call the function, wrap the result with $function, and then call *that*"
-                        , Comment "function with the remaining arguments."
-                        , Return <|
-                            Call
-                                (Call (Var "$function")
-                                    [ Call (Var "f")
-                                        [ Spread
-                                            (Call (Access (Var "args") [ "slice" ])
-                                                [ Number 0
-                                                , Access (Var "f") [ "length" ]
-                                                ]
-                                            )
+    , Export <|
+        FunctionDeclaration "$function" [ "f", "thisArg" ] <|
+            [ If (Binop (Binop (Unop Typeof (Var "f")) Eq (String "object")) Or (Call (Access (Var "Array") [ "isArray" ]) [ Var "f" ]))
+                (ForIn "k" (Var "f") <|
+                    Expr <|
+                        Assign (Index (Var "k") (Var "f")) (Call (Var "$function") [ Index (Var "k") (Var "f"), Var "f" ])
+                )
+                Nothing
+            , If (Binop (Unop Typeof (Var "f")) Neq (String "function"))
+                (Return (Var "f"))
+                Nothing
+            , Return <|
+                Function [ "...args" ] <|
+                    [ If (Binop (Access (Var "args") [ "length" ]) Eq (Access (Var "f") [ "length" ]))
+                        (Return <| Call (Var "f") [ Spread <| Var "args" ])
+                        Nothing
+                    , If (Binop (Access (Var "args") [ "length" ]) Gt (Access (Var "f") [ "length" ]))
+                        (Block
+                            [ Comment "This allows us to handle functions that have been explicitly curried,"
+                            , Comment "or higher-order functions that return other functions."
+                            , Comment ""
+                            , Comment "If you supply more arguments than the wrapped function's arity, fully"
+                            , Comment "call the function, wrap the result with $function, and then call *that*"
+                            , Comment "function with the remaining arguments."
+                            , Return <|
+                                Call
+                                    (Call (Var "$function")
+                                        [ Call (Var "f")
+                                            [ Spread
+                                                (Call (Access (Var "args") [ "slice" ])
+                                                    [ Number 0
+                                                    , Access (Var "f") [ "length" ]
+                                                    ]
+                                                )
+                                            ]
+                                        , Var "thisArg"
                                         ]
-                                    , Var "thisArg"
-                                    ]
-                                )
-                                [ Spread
-                                    (Call (Access (Var "args") [ "slice" ])
-                                        [ Access (Var "f") [ "length" ] ]
                                     )
-                                ]
-                        ]
-                    )
-                    Nothing
-                , Return <|
-                    Call
-                        (Var "$function")
-                        [ Call (Access (Var "f") [ "bind" ])
-                            [ Var "thisArg"
-                            , Spread (Var "args")
+                                    [ Spread
+                                        (Call (Access (Var "args") [ "slice" ])
+                                            [ Access (Var "f") [ "length" ] ]
+                                        )
+                                    ]
                             ]
-                        , Var "thisArg"
-                        ]
-                ]
-        ]
+                        )
+                        Nothing
+                    , Return <|
+                        Call
+                            (Var "$function")
+                            [ Call (Access (Var "f") [ "bind" ])
+                                [ Var "thisArg"
+                                , Spread (Var "args")
+                                ]
+                            , Var "thisArg"
+                            ]
+                    ]
+            ]
     , Comment "Ren uses structural equality to compare objects and arrays. This"
     , Comment "is different to equality in JavaScript that is purely referential."
     , Comment "We need this utility to use in place of the usual `==` operator."
@@ -215,45 +217,46 @@ prelude =
     --
     --         return true
     --     }
-    , FunctionDeclaration "$eq" [ "x", "y" ] <|
-        [ Const "eqs" <| Array [ Var "x", Var "y" ]
-        , While (Binop (Access (Var "eqs") [ "length" ]) Gt (Number 0)) <|
-            Block
-                [ Const "a" <| Call (Access (Var "values") [ "pop" ]) []
-                , Const "b" <| Call (Access (Var "values") [ "pop" ]) []
-                , If (Binop (Var "a") Eq (Var "b")) Continue Nothing
-                , If
-                    (List.foldl (\lhs rhs -> Binop lhs Or rhs)
-                        (Binop (Var "a") Eq Null)
-                        [ Binop (Var "a") Eq Undefined
-                        , Binop (Var "b") Eq Null
-                        , Binop (Var "b") Eq Undefined
-                        ]
-                    )
-                    (Return JSFalse)
-                    Nothing
-                , If
-                    (Binop (Binop (Unop Typeof (Var "a")) Eq (String "object")) Or (Binop (Unop Typeof (Var "b")) Eq (String "object")))
-                    (Block
-                        [ If (Binop (Call (Access (Var "a") [ "valueOf" ]) []) Eq (Call (Access (Var "b") [ "valueOf" ]) [])) Continue Nothing
-                        , If (Binop (Access (Var "a") [ "constructor" ]) Neq (Access (Var "b") [ "constructor" ])) (Return JSFalse) Nothing
-                        , If (Binop (Access (Var "a") [ "constructor" ]) Eq (Var "Date"))
-                            (If (Unop Not (Binop (Binop (Var "a") Gt (Var "b")) Or (Binop (Var "a") Lt (Var "b"))))
-                                Continue
-                                (Just <| Return JSFalse)
-                            )
-                            Nothing
-                        , ForIn "k" (Var "a") <|
-                            Expr <|
-                                Call (Access (Var "values") [ "push" ]) [ Index (Var "a") (Var "k"), Index (Var "b") (Var "k") ]
-                        , Continue
-                        ]
-                    )
-                    Nothing
-                , Return JSFalse
-                ]
-        , Return JSTrue
-        ]
+    , Export <|
+        FunctionDeclaration "$eq" [ "x", "y" ] <|
+            [ Const "eqs" <| Array [ Var "x", Var "y" ]
+            , While (Binop (Access (Var "eqs") [ "length" ]) Gt (Number 0)) <|
+                Block
+                    [ Const "a" <| Call (Access (Var "eqs") [ "pop" ]) []
+                    , Const "b" <| Call (Access (Var "eqs") [ "pop" ]) []
+                    , If (Binop (Var "a") Eq (Var "b")) Continue Nothing
+                    , If
+                        (List.foldl (\lhs rhs -> Binop lhs Or rhs)
+                            (Binop (Var "a") Eq Null)
+                            [ Binop (Var "a") Eq Undefined
+                            , Binop (Var "b") Eq Null
+                            , Binop (Var "b") Eq Undefined
+                            ]
+                        )
+                        (Return JSFalse)
+                        Nothing
+                    , If
+                        (Binop (Binop (Unop Typeof (Var "a")) Eq (String "object")) Or (Binop (Unop Typeof (Var "b")) Eq (String "object")))
+                        (Block
+                            [ If (Binop (Call (Access (Var "a") [ "valueOf" ]) []) Eq (Call (Access (Var "b") [ "valueOf" ]) [])) Continue Nothing
+                            , If (Binop (Access (Var "a") [ "constructor" ]) Neq (Access (Var "b") [ "constructor" ])) (Return JSFalse) Nothing
+                            , If (Binop (Access (Var "a") [ "constructor" ]) Eq (Var "Date"))
+                                (If (Unop Not (Binop (Binop (Var "a") Gt (Var "b")) Or (Binop (Var "a") Lt (Var "b"))))
+                                    Continue
+                                    (Just <| Return JSFalse)
+                                )
+                                Nothing
+                            , ForIn "k" (Var "a") <|
+                                Expr <|
+                                    Call (Access (Var "eqs") [ "push" ]) [ Index (Var "a") (Var "k"), Index (Var "b") (Var "k") ]
+                            , Continue
+                            ]
+                        )
+                        Nothing
+                    , Return JSFalse
+                    ]
+            , Return JSTrue
+            ]
     ]
 
 
@@ -540,7 +543,7 @@ assignmentsFromPattern expr pattern =
         Pat.Literal (Lit.String _) ->
             []
 
-        Pat.Spread name ->
+        Pat.Spread _ ->
             []
 
         Pat.Type _ pat ->
@@ -773,6 +776,9 @@ return stmt =
 
         Expr expr ->
             Return expr
+
+        Export s ->
+            return s
 
         FunctionDeclaration _ args body ->
             Return <| Function args body
