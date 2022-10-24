@@ -35,6 +35,7 @@
         "gitly": "^2.2.1"
     },
     "devDependencies": {
+        "elm": "^0.19.1-5",
         "elm-doc-preview": "^1.0.7",
         "elm-test": "*",
         "esbuild": "^0.14.49",
