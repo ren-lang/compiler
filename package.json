@@ -12,7 +12,8 @@
         "build:dev": "./scripts/build.js",
         "watch": "./scripts/build.js -w",
         "link": "npm link",
-        "unlink": "npm unlink ren"
+        "unlink": "npm unlink ren",
+        "test": "elm-test"
     },
     "repository": {
         "type": "git",
@@ -37,7 +38,7 @@
     "devDependencies": {
         "elm": "^0.19.1-5",
         "elm-doc-preview": "^1.0.7",
-        "elm-test": "*",
+        "elm-test": "0.19.1-revision9",
         "esbuild": "^0.14.49",
         "esbuild-plugin-elm": "^0.0.11-1"
     }
