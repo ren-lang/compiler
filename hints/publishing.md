@@ -4,6 +4,7 @@ If you've made some changes to the compiler and are ready to publish a new versi
 of the package, follow the steps below:
 
 ```bash
+npm run switch:lib
 elm bump
 git add elm.json
 git commit -m ":bookmark: Bump compiler version to <new package version>"
@@ -16,6 +17,13 @@ elm publish
 ---
 
 ## Breakdown
+
+```bash
+npm run switch:lib
+```
+
+* We have two different elm configurations: one for the compiler package and one
+for the CLI. We switch between them using `switch:lib` and `switch:app` npm scripts.
 
 ```bash
 elm bump

@@ -1,0 +1,204 @@
+# This module provides a rough reference of Ren's syntax. It should include all
+# the core language constructs and demonstrate how to use them.
+
+# We've already seen our first bit of Ren: comments! Ren uses the hash symbol for
+# comments so that we get shebang support for free. There are only single-line
+# comments in Ren, but we will see later that doc comments have a very slightly
+# different syntax.
+
+# IMPORTS ----------------------------------------------------------------------
+
+# Ren has three types of imports: relative/project imports, package imports, and
+# external imports.
+
+# Project imports are how you import other Ren code from the same project. Import
+# paths are always relative from the current module, but the file extension is
+# optional:
+import "./foo" as Foo
+# This is a *qualified* import. All public bindings from the module are now
+# available under the `Foo` namespace. Namespaces in Ren can be one or more
+# CapitalCase words separated by *periods*.
+import "./foo/bar" as Foo.Bar
+# This allows us to naturally create module hierarchies without having to worry
+# about explicit organisation in the file system.
+
+# Package imports allow us to import modules from other Ren packages. These paths
+# are never relative, and instead always begin the name of the package author and
+# the name of the package itself:
+import pkg "ren/std/num" as Num
+# Besides qualifying an import, we can also import specific bindings from that
+# module:
+import pkg "ren/std/num" exposing { from_str }
+# Unlike other languages, Ren does not have any syntax for importing an entire
+# module unqualified. You must always be explicit about what names you are 
+# exposing.
+
+# The final type of import is external imports. These are imports that are not
+# part of the Ren ecosystem, and instead could be external JavaScript files or
+# packages.
+import ext "react" as React
+# The Ren compiler will never attempt to compile or resolve external imports,
+# instead they are generated as-is in the JavaScript output. This can be useful
+# in tandem with bundlers and other tooling that allow assets besides JavaScript
+# to be imported in a module:
+import ext "./css/styles.css"
+
+# DECLARATIONS -----------------------------------------------------------------
+
+# Ren modules are made up of a series of declarations. Either local `let` bindings,
+# external ffi bindings, or type definitions.
+let x = 1
+
+# To make a binding accessible to other modules in the project, we use the `pub`
+# modifier:
+pub let y = 2
+
+# Functions are first-class expressions in Ren, and so don't need any special
+# syntax to declare them:
+pub let double = fun x => x * 2
+
+# We saw how earlier the `ext` modifier could be used to import external JavaScript
+# modules. Ren has special handling for ffi code that you may want to associate
+# with a particular Ren module.
+ext query_selector = "query_selector"
+
+# The string provided in the declaration is used as the symbol to import from the
+# ffi module, meaning the name used in Ren can be decoupled from the name of the
+# JavaScript export.
+#
+# The above declaration will translate to an import of a JavaScript module named
+# "<ren-module-name>.ffi.js". In this case that would be "syntax.ffi.js". The
+# emitted JavaScript will look something like:
+#
+# ```js
+# import { $eq, $function } from '../.ren/pkg/prelude.js'
+# import * as $FFI from './syntax.ffi.js'
+#
+# const query_selector = $function($FFI.query_selector)
+# ```
+#
+# The automatic `$function` wrapper is a Ren utility that allows us to partially
+# apply functions. 
+
+# A note on naming:
+# Ren imposes strict naming rules for namespaces, bindings, and types. Namespaces
+# and types must be CapitalCase and may include digits. Bindings must be snake_case
+# but may also include digits.
+#
+# Although this may seem like a petty restriction at first, we adopt the same
+# mentality as languages like Go, Elm, or Gleam and heavily prioritise a single
+# consistent experience for all users across many codebases.
+
+# Declarations can be given type annotations. For `let` bindings this opts-in to
+# type checking for that declaration:
+let x : Num = 1
+let y : Str = 2 # This is a compile-time error!
+
+# Type checking can be *explicitly* disabled by annotating a declaration with the
+# "any" type `*`.
+let z : * = 1 / "hello" # Who knows what will happen at run-time.
+
+# If you want to opt-in to type checking but aren't sure what the type of a given
+# declaration is (or you're lazy and don't want to type it out), you can use the
+# `?` type to ask Ren to infer it for you. If you have formatter enabled, this
+# will be replaced by the inferred type when it is run.
+let pls_help_me : ? = fun f => 
+  List.map f [ 1, 2, 3 ]
+
+# Providing a type annotation for an external declaration is one of the few places
+# where you can *assert* the type of something to the compiler. We can't go and
+# check if your annotation is correct here so we just have to take your word for
+# it!
+ext listen : Str -> (:undefined -> *) = "listen"
+
+# ❓ You might wonder how to give the type of a value coming from an external
+# important. You can't! This is by design: we want to encourage intentional apis
+# written specifically for Ren. Pulling in entire external packages and modules  
+# should be seen as a last resort and a quick-and-dirty approach to getting things
+# done.
+
+# Records and sum types can be aliased and given a name using type declarations:
+type RenProgrammer = {
+  name: Str,
+  is_awesome: :true
+}
+
+type CoolLanguages =
+  | :elm
+  | :javascript
+  | :ren
+
+# Types can have type parameters, and parameterised types can also be aliased:
+type List a =
+  | :nil
+  | :cons a (List a)
+
+type Stream = List Str
+
+# Finally, we can create abstract types. Abstract types are unique to the module
+# they are defined in, and cannot be constructed directly. Instead, we can use
+# ffi code to construct them.
+#
+# Abstract types just provide a name for the type and nothing else!
+type Document
+
+# Pattern Matching -------------------------------------------------------------
+
+# As you might have come to expect from a functional programming language, Ren
+# has pattern matching!
+let simpe_match = fun n =>
+  where n
+    is { foo: 1, bar: y } =>
+      y
+
+    is [ x, y, z ] if x > z =>
+      y
+
+    is @Num x =>
+      x
+
+    is _ => 
+      0
+
+# Pattern matching is a powerful feature of Ren, and is used extensively in good
+# Ren code! Above we can see how pattern matching can be used to match on the
+# shape of a record, on the elements of an array, and on the type of a value.
+#
+# Guards allow us to lift conditional logic into pattern matching for a flatter
+# style.
+
+# ❗️ The above works because `simple_match` is dynamically typed. If you have
+# opted into static type checks the compiler will ensure all branches have the
+# same pattern and return type.
+
+# Operators --------------------------------------------------------------------
+
+# Ren likely has fewer operators than other languages you might be used to,
+# instead favoring explicit function calls and heavier use of the pipe opeartor.
+#
+# Let's see what's available:
+let operators = {
+  add   : x + y,
+  and   : x && y,
+  concat: x ++ y,
+  div   : x / y,
+  eq    : x == y,
+  gt    : x > y,
+  gte   : x >= y,
+  lt    : x < y,
+  lte   : x <= y,
+  mod   : x % y,
+  mul   : x * y,
+  neq   : x != y,
+  or    : x || y,
+  pipe  : x |> foo |> bar |> baz,
+  seq   : (
+    print x;
+    print y;
+    x + y
+  ),
+  sub   : x - y
+}
+
+# ❗️ Ren doesn't have prefix and postfix operators, so we don't have to worry
+# about those!

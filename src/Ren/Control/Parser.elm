@@ -51,7 +51,7 @@ module Ren.Control.Parser exposing
 
 import Array exposing (Array)
 import Ren.Ast.Expr.Op exposing (Op)
-import Ren.Data.Error as Error exposing (Error)
+import Ren.Data.Error exposing (Error)
 import Ren.Data.Span as Span exposing (Span)
 import Ren.Data.Token as Token exposing (Token)
 import Util.Maybe as Maybe

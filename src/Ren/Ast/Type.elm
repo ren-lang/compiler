@@ -445,7 +445,7 @@ recParser =
 
 
 sumParser : ParseContext -> Parser () String Type
-sumParser ({ inArgPosition } as context) =
+sumParser { inArgPosition } =
     if inArgPosition then
         Parser.succeed (List.singleton >> Dict.fromList >> Sum)
             |> Parser.keep (variantParser { inArgPosition = False })

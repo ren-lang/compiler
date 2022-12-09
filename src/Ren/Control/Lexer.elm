@@ -88,8 +88,8 @@ token =
             , keyword
             , docComment
             , comment
-            , symbol
             , operator
+            , symbol
             , identifier
             , Parser.chompIf (Basics.always True)
                 |> Parser.getChompedString
@@ -183,7 +183,7 @@ identifier =
             }
         , Parser.variable
             { start = \c -> Char.isLower c
-            , inner = \c -> Char.isLower c || Char.isDigit c || c == '_'
+            , inner = \c -> Char.isAlphaNum c || c == '_'
             , reserved = Token.keywords
             }
         ]

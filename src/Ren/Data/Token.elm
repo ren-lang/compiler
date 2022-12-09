@@ -5,7 +5,6 @@ module Ren.Data.Token exposing (..)
 -- IMPORTS ---------------------------------------------------------------------
 --
 
-import Json.Decode
 import Json.Encode
 import Ren.Ast.Expr.Op as Op exposing (Op)
 import Set exposing (Set)
@@ -316,7 +315,7 @@ isLowerIdentifier s =
             Char.isLower c
 
         isValidInner c =
-            Char.isLower c || Char.isDigit c || c == '_'
+            Char.isAlpha c || c == '_'
     in
     case String.uncons s of
         Just ( char, "" ) ->

@@ -195,11 +195,14 @@ fromDecl pkgs d =
                     )
                 , Pretty.char '\''
                 , Pretty.string
-                    (if source == Imp.External then
-                        path
+                    (if source == Imp.Package then
+                        pkgs ++ "/" ++ path ++ ".ren.js"
+
+                     else if source == Imp.Relative then
+                        path ++ ".ren.js"
 
                      else
-                        pkgs ++ "/" ++ path ++ ".ren.js"
+                        path
                     )
                 , Pretty.char '\''
                 ]
@@ -369,6 +372,13 @@ fromExpression e =
                 , Pretty.string "=>"
                 , Pretty.space
                 , case body of
+                    [ Imp.Expr ((Imp.Object _) as expr_) ] ->
+                        concat
+                            [ Pretty.char '('
+                            , fromExpression expr_
+                            , Pretty.char ')'
+                            ]
+
                     [ Imp.Expr expr_ ] ->
                         fromExpression expr_
 

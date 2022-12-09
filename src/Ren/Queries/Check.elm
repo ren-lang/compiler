@@ -517,7 +517,7 @@ mgu eqs =
         ( Type.Any, Type.Any ) :: rest ->
             mgu rest
 
-        ( (Type.App t1 u1) as x, (Type.App t2 u2) as y ) :: rest ->
+        ( Type.App t1 u1, Type.App t2 u2 ) :: rest ->
             if List.length u1 == List.length u2 then
                 mgu <| ( t1, t2 ) :: List.map2 Tuple.pair u1 u2 ++ rest
 
