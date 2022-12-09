@@ -1,0 +1,18 @@
+# Erlang bits
+
+*.beam
+*.ez
+build
+erl_crash.dump
+
+# Node bits
+
+node_modules/
+
+# Editor bits
+
+.vscode/
+
+# MacOS garbage
+
+.DS_Store
