@@ -1,3 +1,8 @@
+// IMPORTS ---------------------------------------------------------------------
+
+import gleam/int
+import gleam/string
+
 // TYPES -----------------------------------------------------------------------
 
 ///
@@ -25,6 +30,23 @@ pub fn app(fun: Expr, args: List(Expr)) -> Expr {
   case args {
     [] -> fun
     [arg, ..rest] -> app(App(fun, arg), rest)
+  }
+}
+
+pub fn lam(args: List(String), body: Expr) -> Expr {
+  case args {
+    [] -> body
+    [arg, ..rest] -> Lam(arg, lam(rest, body))
+  }
+}
+
+pub fn var(name: String) -> Expr {
+  assert Ok(first) = string.first(name)
+
+  // This matching is intentionally not exhaustive: we want the program to crash
+  // if an unexpected string was passed in.
+  case <<first:utf8>> {
+    <<code:int>> if code > 96 && code < 123 -> Var(name)
   }
 }
 
@@ -84,4 +106,26 @@ pub fn seq(lhs: Expr, rhs: Expr) -> Expr {
 
 pub fn sub(lhs: Expr, rhs: Expr) -> Expr {
   app(Var("-"), [lhs, rhs])
+}
+
+// CONSTRUCTORS: LITERALS ------------------------------------------------------
+
+pub fn arr(items: List(Expr)) -> Expr {
+  Lit(Array(items))
+}
+
+pub fn num(value: Float) -> Expr {
+  Lit(Num(value))
+}
+
+pub fn int(value: Int) -> Expr {
+  num(int.to_float(value))
+}
+
+pub fn rec(items: List(#(String, Expr))) -> Expr {
+  Lit(Record(items))
+}
+
+pub fn str(value: String) -> Expr {
+  Lit(Str(value))
 }
