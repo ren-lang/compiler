@@ -28,23 +28,20 @@ pub fn file(path: String) -> Query(Mod(Expr), env) {
 
 ///
 ///
-pub fn mod(input: String) -> Query(Mod(Expr), env) {
-  lex.run(input)
-  |> query.then(run(_, parse_mod()))
+pub fn mod(input: List(Token)) -> Query(Mod(Expr), env) {
+  run(input, parse_mod())
 }
 
 ///
 ///
-pub fn dec(input: String) -> Query(Dec(Expr), env) {
-  lex.run(input)
-  |> query.then(run(_, parse_dec()))
+pub fn dec(input: List(Token)) -> Query(Dec(Expr), env) {
+  run(input, parse_dec())
 }
 
 ///
 ///
-pub fn expr(input: String) -> Query(Expr, env) {
-  lex.run(input)
-  |> query.then(run(_, parse_expr()))
+pub fn expr(input: List(Token)) -> Query(Expr, env) {
+  run(input, parse_expr())
 }
 
 fn run(tokens: List(Token), parser: Parser(a, Error)) -> Query(a, env) {
