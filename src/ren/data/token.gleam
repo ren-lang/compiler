@@ -59,6 +59,7 @@ pub type Literal {
 ///
 pub type Symbol {
   Arrow
+  At
   Colon
   Comma
   Dot
@@ -131,6 +132,8 @@ pub const then: Token = Keyword(Then)
 pub const type_: Token = Keyword(Type)
 
 pub const arrow: Token = Symbol(Arrow)
+
+pub const at = Symbol(At)
 
 pub const colon: Token = Symbol(Colon)
 
@@ -309,6 +312,7 @@ pub fn to_string(token: Token) {
     Operator(Sub) -> "-"
 
     Symbol(Arrow) -> "->"
+    Symbol(At) -> "@"
     Symbol(Colon) -> ":"
     Symbol(Comma) -> ","
     Symbol(Dot) -> "."

@@ -158,6 +158,7 @@ fn match_token(stack: List(String), follow: String) -> Option(Token) {
     // SYMBOLS -----------------------------------------------------------------
     [">", "-"] -> Some(token.arrow)
     ["→"] -> Some(token.arrow)
+    ["@"] -> Some(token.at)
     [":"] -> Some(token.colon)
     [","] -> Some(token.comma)
     ["."] if follow != "." -> Some(token.dot)
