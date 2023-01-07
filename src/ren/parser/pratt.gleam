@@ -5,23 +5,23 @@ import ren/parser.{Break, Continue, Parser, do}
 
 // TYPES -----------------------------------------------------------------------
 
-pub opaque type Parsers(a, e) {
+pub opaque type Parsers(a) {
   Parsers(
-    one_of: List(fn(Parsers(a, e)) -> Parser(a, e)),
-    then: List(fn(Parsers(a, e)) -> #(Int, fn(a) -> Parser(a, e))),
+    one_of: List(fn(Parsers(a)) -> Parser(a)),
+    then: List(fn(Parsers(a)) -> #(Int, fn(a) -> Parser(a))),
   )
 }
 
 // CONSTRUCTORS ----------------------------------------------------------------
 
 pub fn expr(
-  one_of one_of: List(fn(Parsers(a, e)) -> Parser(a, e)),
-  then then: List(fn(Parsers(a, e)) -> #(Int, fn(a) -> Parser(a, e))),
-) -> Parser(a, e) {
+  one_of one_of: List(fn(Parsers(a)) -> Parser(a)),
+  then then: List(fn(Parsers(a)) -> #(Int, fn(a) -> Parser(a))),
+) -> Parser(a) {
   subexpr(0, Parsers(one_of, then))
 }
 
-pub fn subexpr(precedence: Int, parsers: Parsers(a, e)) -> Parser(a, e) {
+pub fn subexpr(precedence: Int, parsers: Parsers(a)) -> Parser(a) {
   let parse_expr = fn() {
     parsers.one_of
     |> list.map(fn(parser) { parser(parsers) })
@@ -38,8 +38,8 @@ pub fn subexpr(precedence: Int, parsers: Parsers(a, e)) -> Parser(a, e) {
   ])
 }
 
-fn operator(precedence: Int, expr: a, parsers: Parsers(a, e)) -> Parser(a, e) {
-  let parse_operator = fn(operator: #(Int, fn(a) -> Parser(a, e))) {
+fn operator(precedence: Int, expr: a, parsers: Parsers(a)) -> Parser(a) {
+  let parse_operator = fn(operator: #(Int, fn(a) -> Parser(a))) {
     case operator.0 > precedence {
       True -> Ok(operator.1(expr))
       False -> Error(Nil)
@@ -53,20 +53,20 @@ fn operator(precedence: Int, expr: a, parsers: Parsers(a, e)) -> Parser(a, e) {
 
 //
 
-pub fn literal(parser: Parser(a, e), _: Parsers(a, e)) -> Parser(a, e) {
+pub fn literal(parser: Parser(a), _: Parsers(a)) -> Parser(a) {
   parser
 }
 
-pub fn constant(parser: Parser(a, e), val: b, _: Parsers(b, e)) -> Parser(b, e) {
+pub fn constant(parser: Parser(a), val: b, _: Parsers(b)) -> Parser(b) {
   parser.map(parser, fn(_) { val })
 }
 
 pub fn prefix(
   precedence: Int,
-  operator: Parser(b, e),
+  operator: Parser(b),
   apply: fn(a) -> a,
-  parsers: Parsers(a, e),
-) -> Parser(a, e) {
+  parsers: Parsers(a),
+) -> Parser(a) {
   use _ <- do(operator)
   use expr <- do(subexpr(precedence, parsers))
   parser.return(apply(expr))
@@ -76,25 +76,25 @@ pub fn prefix(
 
 pub fn infixl(
   precedence: Int,
-  operator: Parser(b, e),
+  operator: Parser(b),
   apply: fn(a, a) -> a,
-) -> fn(Parsers(a, e)) -> #(Int, fn(a) -> Parser(a, e)) {
+) -> fn(Parsers(a)) -> #(Int, fn(a) -> Parser(a)) {
   make_infix(#(precedence, precedence), operator, apply)
 }
 
 pub fn infixr(
   precedence: Int,
-  operator: Parser(b, e),
+  operator: Parser(b),
   apply: fn(a, a) -> a,
-) -> fn(Parsers(a, e)) -> #(Int, fn(a) -> Parser(a, e)) {
+) -> fn(Parsers(a)) -> #(Int, fn(a) -> Parser(a)) {
   make_infix(#(precedence, precedence - 1), operator, apply)
 }
 
 pub fn postfix(
   precedence: Int,
-  operator: Parser(b, e),
+  operator: Parser(b),
   apply: fn(a) -> a,
-) -> fn(Parsers(a, e)) -> #(Int, fn(a) -> Parser(a, e)) {
+) -> fn(Parsers(a)) -> #(Int, fn(a) -> Parser(a)) {
   fn(_) {
     #(
       precedence,
@@ -110,10 +110,10 @@ pub fn postfix(
 
 fn make_infix(
   precedence: #(Int, Int),
-  operator: Parser(b, e),
+  operator: Parser(b),
   apply: fn(a, a) -> a,
-) -> fn(Parsers(a, e)) -> #(Int, fn(a) -> Parser(a, e)) {
-  fn(parsers: Parsers(a, e)) {
+) -> fn(Parsers(a)) -> #(Int, fn(a) -> Parser(a)) {
+  fn(parsers: Parsers(a)) {
     #(
       precedence.0,
       fn(lhs) {

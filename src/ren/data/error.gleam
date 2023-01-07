@@ -8,9 +8,18 @@ import ren/data/token.{Token}
 ///
 pub type Error {
   InternalError(String)
-  ParseError(String)
+  MultipleErrors(List(Error))
+  ParseError(ParseError)
 }
 
 pub type ParseError {
-  UnexpectedToken(Token, expected: Token)
+  Expected(Token, got: Token)
+  // Expecting specific token types
+  ExpectedLowerIdentifier(got: Token)
+  ExpectedNumber(got: Token)
+  ExpectedString(got: Token)
+  ExpectedUpperIdentifier(got: Token)
+  UnexpectedEOF
+  //
+  InternalParseError(String)
 }
