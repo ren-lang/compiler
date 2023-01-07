@@ -2,6 +2,7 @@
 
 import gleam/int
 import gleam/string
+import util
 
 // TYPES -----------------------------------------------------------------------
 
@@ -43,10 +44,9 @@ pub fn lam(args: List(String), body: Expr) -> Expr {
 pub fn var(name: String) -> Expr {
   assert Ok(first) = string.first(name)
 
-  // This matching is intentionally not exhaustive: we want the program to crash
-  // if an unexpected string was passed in.
   case <<first:utf8>> {
     <<code:int>> if code > 96 && code < 123 -> Var(name)
+    _ -> util.crash("Cannot construct variable from string `" <> name <> "`")
   }
 }
 
