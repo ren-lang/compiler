@@ -18,7 +18,7 @@
 
 import gleam/bit_string
 import gleam/list
-import gleam/option.{Option}
+import gleam/option.{None, Option, Some}
 import gleam/set.{Set}
 import ren/t/subst.{Subst}
 
@@ -98,6 +98,7 @@ pub type Type {
 pub type Row {
   Empty
   Extend(String, Type, Row)
+  RowVariable(String)
 }
 
 // CONSTANTS -------------------------------------------------------------------
@@ -238,6 +239,7 @@ fn free_in_row(r: Row) -> Set(String) {
   case r {
     Empty -> set.new()
     Extend(_, t, r) -> set.union(free(t), free_in_row(r))
+    RowVariable(v) -> set.from_list([v])
   }
 }
 
@@ -271,6 +273,13 @@ fn substitute_in_row(r: Row, subst: Subst(Type)) -> Row {
     Empty -> r
     Extend(l, t, r) ->
       Extend(l, substitute(t, subst), substitute_in_row(r, subst))
+    RowVariable(v) ->
+      case subst.lookup(subst, v) {
+        None -> r
+        Some(Record(row)) -> row
+        Some(Variant(row)) -> row
+        _ -> r
+      }
   }
 }
 
@@ -309,9 +318,10 @@ pub fn extend(row: Row, label: String, t: Type) -> Row {
 ///
 pub fn select(row: Row, label: String) -> Option(Type) {
   case row {
-    Extend(l, t, _) if label == l -> option.Some(t)
+    Extend(l, t, _) if label == l -> Some(t)
     Extend(_, _, r) -> select(r, label)
-    Empty -> option.None
+    Empty -> None
+    RowVariable(_) -> None
   }
 }
 
@@ -328,6 +338,7 @@ pub fn remove(row: Row, label: String) -> Row {
     Extend(l, _, r) if label == l -> r
     Extend(l, t, r) -> Extend(l, t, remove(r, label))
     Empty -> row
+    RowVariable(_) -> row
   }
 }
 
@@ -348,5 +359,6 @@ pub fn update(row: Row, label: String, t1: Type) -> Row {
     Extend(l, _, r) if label == l -> Extend(l, t1, r)
     Extend(l, t2, r) -> Extend(l, t2, update(r, label, t1))
     Empty -> row
+    RowVariable(_) -> row
   }
 }
