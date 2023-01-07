@@ -14,12 +14,13 @@ pub type Error {
 
 pub type ParseError {
   Expected(Token, got: Token)
-  // Expecting specific token types
   ExpectedLowerIdentifier(got: Token)
   ExpectedNumber(got: Token)
   ExpectedString(got: Token)
   ExpectedUpperIdentifier(got: Token)
+  //
   UnexpectedEOF
+  UnexpectedInput
   //
   InternalParseError(String)
 }
