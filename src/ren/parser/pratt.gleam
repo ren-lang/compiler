@@ -53,23 +53,24 @@ fn operator(precedence: Int, expr: a, parsers: Parsers(a)) -> Parser(a) {
 
 //
 
-pub fn literal(parser: Parser(a), _: Parsers(a)) -> Parser(a) {
-  parser
+pub fn literal(parser: Parser(a)) -> fn(Parsers(a)) -> Parser(a) {
+  fn(_) { parser }
 }
 
-pub fn constant(parser: Parser(a), val: b, _: Parsers(b)) -> Parser(b) {
-  parser.map(parser, fn(_) { val })
+pub fn constant(parser: Parser(a), val: b) -> fn(Parsers(a)) -> Parser(b) {
+  fn(_) { parser.map(parser, fn(_) { val }) }
 }
 
 pub fn prefix(
   precedence: Int,
   operator: Parser(b),
-  apply: fn(a) -> a,
+  apply: fn(a) -> Parser(a),
   parsers: Parsers(a),
 ) -> Parser(a) {
   use _ <- do(operator)
   use expr <- do(subexpr(precedence, parsers))
-  parser.return(apply(expr))
+
+  apply(expr)
 }
 
 //
@@ -77,7 +78,7 @@ pub fn prefix(
 pub fn infixl(
   precedence: Int,
   operator: Parser(b),
-  apply: fn(a, a) -> a,
+  apply: fn(a, a) -> Parser(a),
 ) -> fn(Parsers(a)) -> #(Int, fn(a) -> Parser(a)) {
   make_infix(#(precedence, precedence), operator, apply)
 }
@@ -85,7 +86,7 @@ pub fn infixl(
 pub fn infixr(
   precedence: Int,
   operator: Parser(b),
-  apply: fn(a, a) -> a,
+  apply: fn(a, a) -> Parser(a),
 ) -> fn(Parsers(a)) -> #(Int, fn(a) -> Parser(a)) {
   make_infix(#(precedence, precedence - 1), operator, apply)
 }
@@ -93,14 +94,15 @@ pub fn infixr(
 pub fn postfix(
   precedence: Int,
   operator: Parser(b),
-  apply: fn(a) -> a,
+  apply: fn(a) -> Parser(a),
 ) -> fn(Parsers(a)) -> #(Int, fn(a) -> Parser(a)) {
   fn(_) {
     #(
       precedence,
       fn(lhs) {
         use _ <- do(operator)
-        parser.return(apply(lhs))
+
+        apply(lhs)
       },
     )
   }
@@ -111,7 +113,7 @@ pub fn postfix(
 fn make_infix(
   precedence: #(Int, Int),
   operator: Parser(b),
-  apply: fn(a, a) -> a,
+  apply: fn(a, a) -> Parser(a),
 ) -> fn(Parsers(a)) -> #(Int, fn(a) -> Parser(a)) {
   fn(parsers: Parsers(a)) {
     #(
@@ -119,7 +121,8 @@ fn make_infix(
       fn(lhs) {
         use _ <- do(operator)
         use rhs <- do(subexpr(precedence.1, parsers))
-        parser.return(apply(lhs, rhs))
+
+        apply(lhs, rhs)
       },
     )
   }
