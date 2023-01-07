@@ -173,7 +173,6 @@ fn match_token(stack: List(String), follow: String) -> Option(Token) {
     ["}"] -> Some(token.rbrace)
     ["]"] -> Some(token.rbracket)
     [")"] -> Some(token.rparen)
-    [";"] -> Some(token.semicolon)
     ["_"] -> Some(token.underscore)
 
     // OPERATORS ---------------------------------------------------------------
@@ -197,6 +196,7 @@ fn match_token(stack: List(String), follow: String) -> Option(Token) {
     [">"] -> None
     ["=", ">"] -> Some(token.gte)
     [">", "|"] -> Some(token.pipe)
+    [";"] -> Some(token.seq)
 
     // EVERYTHING ELSE ---------------------------------------------------------
     [_, ..] if follow_alpha ->

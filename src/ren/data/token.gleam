@@ -72,7 +72,6 @@ pub type Symbol {
   RBrace
   RBracket
   RParen
-  Semicolon
   Underscore
 }
 
@@ -93,6 +92,7 @@ pub type Operator {
   Or
   Pipe
   Pow
+  Seq
   Sub
 }
 
@@ -158,8 +158,6 @@ pub const rbracket: Token = Symbol(RBracket)
 
 pub const rparen: Token = Symbol(RParen)
 
-pub const semicolon: Token = Symbol(Semicolon)
-
 pub const underscore: Token = Symbol(Underscore)
 
 pub const add: Token = Operator(Add)
@@ -191,6 +189,8 @@ pub const gt: Token = Operator(Gt)
 pub const gte: Token = Operator(Gte)
 
 pub const pipe: Token = Operator(Pipe)
+
+pub const seq: Token = Operator(Seq)
 
 // CONSTRUCTORS ----------------------------------------------------------------
 
@@ -305,6 +305,7 @@ pub fn to_string(token: Token) {
     Operator(Or) -> "|"
     Operator(Pipe) -> "|>"
     Operator(Pow) -> "^"
+    Operator(Seq) -> ";"
     Operator(Sub) -> "-"
 
     Symbol(Arrow) -> "->"
@@ -321,7 +322,6 @@ pub fn to_string(token: Token) {
     Symbol(RBrace) -> "}"
     Symbol(RBracket) -> "]"
     Symbol(RParen) -> ")"
-    Symbol(Semicolon) -> ";"
     Symbol(Underscore) -> "_"
 
     Unknown(char) -> char

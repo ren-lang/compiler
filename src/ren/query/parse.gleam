@@ -159,7 +159,7 @@ fn parse_expr() -> Parser(Expr) {
       pratt.infixl(7, operator(token.Mul), expr.mul),
       pratt.infixl(7, operator(token.Div), expr.div),
       //
-      pratt.infixr(1, symbol(token.Semicolon), expr.seq),
+      pratt.infixr(1, operator(token.Seq), expr.seq),
       pratt.infixr(2, operator(token.Or), expr.or),
       pratt.infixr(3, operator(token.And), expr.and),
     ],
@@ -200,7 +200,7 @@ fn parse_let_expr(parsers: pratt.Parsers(Expr)) -> Parser(Expr) {
   use name <- do(lower_identifier())
   use _ <- do(symbol(token.Equals))
   use value <- do(pratt.subexpr(0, parsers))
-  use _ <- do(symbol(token.Semicolon))
+  use _ <- do(operator(token.Seq))
   use body <- do(pratt.subexpr(0, parsers))
 
   return(expr.Let(name, value, body))

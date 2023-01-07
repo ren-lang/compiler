@@ -254,7 +254,7 @@ pub fn lex_symbol_test() {
   |> should.equal(Ok([token.rparen, token.EOF]))
 
   run_lexer(";")
-  |> should.equal(Ok([token.semicolon, token.EOF]))
+  |> should.equal(Ok([token.seq, token.EOF]))
 
   run_lexer("_")
   |> should.equal(Ok([token.underscore, token.EOF]))
