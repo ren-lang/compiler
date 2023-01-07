@@ -2,6 +2,7 @@
 
 import gleam/list
 import gleam/map.{Map}
+import gleam/option.{None, Option, Some}
 import ren/data/error.{Error, ParseError}
 import ren/data/token.{Token}
 
@@ -304,6 +305,12 @@ fn do_one_of(state: State, bag: Bag, parsers: List(Parser(a))) -> Step(a) {
         Good(_, _, _) as step -> step
       }
   }
+}
+
+///
+///
+pub fn optional(parser: Parser(a)) -> Parser(Option(a)) {
+  one_of([map(parser, Some), return(None)])
 }
 
 ///
