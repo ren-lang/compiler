@@ -2,10 +2,9 @@
 
 import gleeunit/should
 import ren/ast/expr
-import ren/ast/mod
-import ren/data/token
 import ren/query
 import ren/query/parse
+import ren/query/lex
 
 // TESTS -----------------------------------------------------------------------
 
@@ -22,29 +21,50 @@ pub fn parse_dec_test() {
 }
 
 pub fn parse_expr_test() {
-  let input = [
-    token.num(1.0),
-    token.add,
-    token.num(2.0),
-    token.mul,
-    token.num(3.0),
-    token.EOF,
-  ]
-  let expected = expr.add(expr.num(1.0), expr.mul(expr.num(2.0), expr.num(3.0)))
+  let input = "x y z"
+  let expected = expr.call(expr.Var("x"), [expr.Var("y"), expr.Var("z")])
 
   run_parser(input, parse.expr)
   |> should.equal(Ok(expected))
 
-  let input = [
-    token.fun,
-    token.lower("x"),
-    token.lower("y"),
-    token.arrow,
-    token.lower("x"),
-    token.add,
-    token.lower("y"),
-  ]
-  let expected = expr.lam(["x", "y"], expr.add(expr.var("x"), expr.var("y")))
+  let input = "let x = 1 + 2"
+  let expected =
+    expr.Let(expr.Bind("x"), expr.add(expr.num(1.0), expr.num(2.0)))
+
+  run_parser(input, parse.expr)
+  |> should.equal(Ok(expected))
+
+  let input = "fun x y -> x + y"
+  let expected =
+    expr.Fun(
+      [expr.Bind("x"), expr.Bind("y")],
+      expr.add(expr.Var("x"), expr.Var("y")),
+    )
+
+  run_parser(input, parse.expr)
+  |> should.equal(Ok(expected))
+
+  let input = "fun [x, y] z -> x + y"
+  let expected =
+    expr.Fun(
+      [expr.Value(expr.Array([expr.Bind("x"), expr.Bind("y")])), expr.Bind("z")],
+      expr.add(expr.Var("x"), expr.Var("y")),
+    )
+
+  run_parser(input, parse.expr)
+  |> should.equal(Ok(expected))
+
+  let input = "fun (:ok [x]) as result -> x + y"
+  let expected =
+    expr.Fun(
+      [
+        expr.Alias(
+          expr.Value(expr.Enum("ok", [expr.Value(expr.Array([expr.Bind("x")]))])),
+          "result",
+        ),
+      ],
+      expr.add(expr.Var("x"), expr.Var("y")),
+    )
 
   run_parser(input, parse.expr)
   |> should.equal(Ok(expected))
@@ -56,7 +76,7 @@ pub fn parse_expr_test() {
 // parser in we can use the same util to run expr/dec/mod parsers without changing
 // anything.
 //
-fn run_parser(input, parser) {
+fn run_parser(input, parse) {
   let test_provider =
     query.Provider(
       read: fn(_) { Ok("") },
@@ -66,6 +86,7 @@ fn run_parser(input, parser) {
       log: fn(_) { Nil },
     )
 
-  parser(input)
+  lex.run(input)
+  |> query.then(parse)
   |> query.run(test_provider, Nil)
 }
