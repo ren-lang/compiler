@@ -1,21 +1,21 @@
 // IMPORTS ---------------------------------------------------------------------
 
 // 
-import control/parser.{
+import gleam/function
+import gleam/list
+import ren/ast/expr.{Expr}
+import ren/ast/mod.{Dec, Mod}
+import ren/data/error.{Error, InternalError}
+import ren/data/token.{Token}
+import ren/parser.{
   Break, Continue, Parser, do, end, keyword, loop, lower_identifier, many, map,
   number, one_of, operator, or, replace, return, string, symbol, then_replace,
   throw,
 }
-import control/parser/pratt
-import gleam/list
-import gleam/function
-import ren/ast/expr.{Expr}
-import ren/ast/mod.{Dec, Mod}
-import ren/data/token.{Token}
-import ren/data/error.{Error, InternalError}
-import ren/t.{Type}
+import ren/parser/pratt
 import ren/query.{Query}
 import ren/query/lex
+import ren/t.{Type}
 
 // QUERIES ---------------------------------------------------------------------
 

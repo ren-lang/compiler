@@ -1,7 +1,7 @@
 // IMPORTS ---------------------------------------------------------------------
 
 import gleam/list
-import control/parser.{Break, Continue, Parser, do}
+import ren/parser.{Break, Continue, Parser, do}
 
 // TYPES -----------------------------------------------------------------------
 
