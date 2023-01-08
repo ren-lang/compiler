@@ -88,8 +88,8 @@ pub fn lex_identifier_test() {
   |> should.equal(Ok([token.lower("foo"), token.lower("bar"), token.EOF]))
 
   // The lexer should not eagerly consume keywords as identifiers.
-  run_lexer("cassette")
-  |> should.equal(Ok([token.lower("cassette"), token.EOF]))
+  run_lexer("switcher")
+  |> should.equal(Ok([token.lower("switcher"), token.EOF]))
 }
 
 /// ...but not at the start
