@@ -76,6 +76,15 @@ pub fn join(docs: List(Document), sep: Document) -> Document {
 
 // COMBINATORS -----------------------------------------------------------------
 
+pub fn when(doc: fn() -> Document, cond: Bool) -> Document {
+  case cond {
+    True -> doc()
+    False -> Empty
+  }
+}
+
+//
+
 pub fn surround(left: Document, right: Document, doc: Document) -> Document {
   join([left, doc, right], Empty)
 }
@@ -94,6 +103,24 @@ pub fn parens(doc: Document) -> Document {
 
 pub fn indent(doc: Document) -> Document {
   nest(doc, 2)
+}
+
+pub fn quotes(doc: Document) -> Document {
+  surround(text("\""), text("\""), doc)
+}
+
+//
+
+pub fn space() -> Document {
+  text(" ")
+}
+
+pub fn newline() -> Document {
+  text("\n")
+}
+
+pub fn doubleline() -> Document {
+  text("\n\n")
 }
 
 // QUERIES ---------------------------------------------------------------------
