@@ -18,7 +18,7 @@ import ren/parser/pratt
 import ren/query.{Query}
 import ren/query/lex
 import ren/t.{Type}
-import util
+import ren/util/debug
 
 // QUERIES ---------------------------------------------------------------------
 
@@ -126,7 +126,7 @@ fn parse_let_dec() -> Parser(Dec(Expr)) {
 }
 
 fn parse_ext() -> Parser(Dec(Expr)) {
-  util.crash(
+  debug.crash(
     "parse.gleam",
     128,
     "External declarations are not yet implemented.",
@@ -134,11 +134,11 @@ fn parse_ext() -> Parser(Dec(Expr)) {
 }
 
 fn parse_typ_dec() -> Parser(Dec(Expr)) {
-  util.crash("parse.gleam", 136, "Type declarations are not yet implemented.")
+  debug.crash("parse.gleam", 136, "Type declarations are not yet implemented.")
 }
 
 fn parse_annotation() -> Parser(Type) {
-  util.crash("parse.gleam", 140, "Type annotations are not yet implemented.")
+  debug.crash("parse.gleam", 140, "Type annotations are not yet implemented.")
 }
 
 fn parse_exposed() -> Parser(Bool) {
