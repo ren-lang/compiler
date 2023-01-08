@@ -35,5 +35,7 @@ fn constrain(message: String) -> String {
     }
   }
 
-  string.join(lines, "\n")
+  lines
+  |> list.reverse
+  |> string.join("\n")
 }
