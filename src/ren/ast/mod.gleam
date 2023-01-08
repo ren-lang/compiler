@@ -1,5 +1,6 @@
 // IMPORTS ---------------------------------------------------------------------
 
+import gleam/list
 import ren/t.{Type}
 
 // TYPES -----------------------------------------------------------------------
@@ -60,4 +61,42 @@ pub type Src {
   External
   Package
   Project
+}
+
+// QUERIES ---------------------------------------------------------------------
+
+pub fn imports(mod: Mod(expr)) -> List(Dec(expr)) {
+  use dec <- list.filter(mod)
+
+  case dec {
+    Imp(_, _, _) -> True
+    _ -> False
+  }
+}
+
+pub fn bindings(mod: Mod(expr)) -> List(Dec(expr)) {
+  use dec <- list.filter(mod)
+
+  case dec {
+    Let(_, _, _, _) -> True
+    _ -> False
+  }
+}
+
+pub fn externals(mod: Mod(expr)) -> List(Dec(expr)) {
+  use dec <- list.filter(mod)
+
+  case dec {
+    Ext(_, _, _, _) -> True
+    _ -> False
+  }
+}
+
+pub fn types(mod: Mod(expr)) -> List(Dec(expr)) {
+  use dec <- list.filter(mod)
+
+  case dec {
+    Typ(_, _, _, _) -> True
+    _ -> False
+  }
 }
