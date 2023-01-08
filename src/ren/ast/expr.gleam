@@ -1,6 +1,8 @@
 // IMPORTS ---------------------------------------------------------------------
 
 import gleam/option.{None, Option, Some}
+import ren/ast/pat.{Pat}
+import ren/ast/lit.{Array, Enum, Lit, Number, Record, String}
 
 // TYPES -----------------------------------------------------------------------
 
@@ -9,10 +11,10 @@ import gleam/option.{None, Option, Some}
 pub type Expr {
   Binop(Operator, Expr, Expr)
   Call(Expr, Expr)
-  Fun(List(Pattern), Expr)
+  Fun(List(Pat), Expr)
   If(Expr, Expr, Expr)
-  Let(Pattern, Expr)
-  Lit(Literal(Expr))
+  Let(Pat, Expr)
+  Literal(Lit(Expr))
   Placeholder
   Switch(Expr, List(Case))
   Var(String)
@@ -41,28 +43,8 @@ pub type Operator {
 
 ///
 ///
-pub type Literal(e) {
-  Array(List(e))
-  Enum(String, List(e))
-  Number(Float)
-  Record(List(#(String, e)))
-  String(String)
-}
-
-///
-///
-pub type Pattern {
-  Alias(Pattern, String)
-  Bind(String)
-  Value(Literal(Pattern))
-  Wildcard
-  Typeof(String, Pattern)
-}
-
-///
-///
 pub type Case =
-  #(Pattern, Option(Expr), Expr)
+  #(Pat, Option(Expr), Expr)
 
 // CONSTANTS -------------------------------------------------------------------
 // CONSTRUCTORS ----------------------------------------------------------------
@@ -177,31 +159,31 @@ pub fn seq(lhs: Expr, rhs: Expr) -> Expr {
 ///
 ///
 pub fn arr(elements: List(Expr)) -> Expr {
-  Lit(Array(elements))
+  Literal(Array(elements))
 }
 
 ///
 ///
 pub fn enum(name: String, args: List(Expr)) -> Expr {
-  Lit(Enum(name, args))
+  Literal(Enum(name, args))
 }
 
 ///
 ///
 pub fn num(value: Float) -> Expr {
-  Lit(Number(value))
+  Literal(Number(value))
 }
 
 ///
 ///
 pub fn rec(fields: List(#(String, Expr))) -> Expr {
-  Lit(Record(fields))
+  Literal(Record(fields))
 }
 
 ///
 ///
 pub fn str(value: String) -> Expr {
-  Lit(String(value))
+  Literal(String(value))
 }
 // QUERIES ---------------------------------------------------------------------
 // MANIPULATIONS ---------------------------------------------------------------

@@ -2,6 +2,8 @@
 
 import gleeunit/should
 import ren/ast/expr
+import ren/ast/pat
+import ren/ast/lit
 import ren/query
 import ren/query/parse
 import ren/query/lex
@@ -28,8 +30,7 @@ pub fn parse_expr_test() {
   |> should.equal(Ok(expected))
 
   let input = "let x = 1 + 2"
-  let expected =
-    expr.Let(expr.Bind("x"), expr.add(expr.num(1.0), expr.num(2.0)))
+  let expected = expr.Let(pat.Bind("x"), expr.add(expr.num(1.0), expr.num(2.0)))
 
   run_parser(input, parse.expr)
   |> should.equal(Ok(expected))
@@ -37,7 +38,7 @@ pub fn parse_expr_test() {
   let input = "fun x y -> x + y"
   let expected =
     expr.Fun(
-      [expr.Bind("x"), expr.Bind("y")],
+      [pat.Bind("x"), pat.Bind("y")],
       expr.add(expr.Var("x"), expr.Var("y")),
     )
 
@@ -47,7 +48,7 @@ pub fn parse_expr_test() {
   let input = "fun [x, y] z -> x + y"
   let expected =
     expr.Fun(
-      [expr.Value(expr.Array([expr.Bind("x"), expr.Bind("y")])), expr.Bind("z")],
+      [pat.Value(lit.Array([pat.Bind("x"), pat.Bind("y")])), pat.Bind("z")],
       expr.add(expr.Var("x"), expr.Var("y")),
     )
 
@@ -58,8 +59,8 @@ pub fn parse_expr_test() {
   let expected =
     expr.Fun(
       [
-        expr.Alias(
-          expr.Value(expr.Enum("ok", [expr.Value(expr.Array([expr.Bind("x")]))])),
+        pat.Alias(
+          pat.Value(lit.Enum("ok", [pat.Value(lit.Array([pat.Bind("x")]))])),
           "result",
         ),
       ],
