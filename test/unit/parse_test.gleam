@@ -24,13 +24,13 @@ pub fn parse_dec_test() {
 
 pub fn parse_expr_test() {
   let input = "x y z"
-  let expected = expr.call(expr.Var("x"), [expr.Var("y"), expr.Var("z")])
+  let expected = expr.Call(expr.Var("x"), [expr.Var("y"), expr.Var("z")])
 
   run_parser(input, parse.expr)
   |> should.equal(Ok(expected))
 
   let input = "let x = 1 + 2"
-  let expected = expr.Let(pat.Bind("x"), expr.add(expr.num(1.0), expr.num(2.0)))
+  let expected = expr.Let(pat.Bind("x"), expr.add(expr.int(1), expr.int(2)))
 
   run_parser(input, parse.expr)
   |> should.equal(Ok(expected))
@@ -48,19 +48,19 @@ pub fn parse_expr_test() {
   let input = "fun [x, y] z -> x + y"
   let expected =
     expr.Fun(
-      [pat.Value(lit.Array([pat.Bind("x"), pat.Bind("y")])), pat.Bind("z")],
+      [pat.Value(lit.Arr([pat.Bind("x"), pat.Bind("y")])), pat.Bind("z")],
       expr.add(expr.Var("x"), expr.Var("y")),
     )
 
   run_parser(input, parse.expr)
   |> should.equal(Ok(expected))
 
-  let input = "fun (:ok [x]) as result -> x + y"
+  let input = "fun (#ok [x]) as result -> x + y"
   let expected =
     expr.Fun(
       [
         pat.Alias(
-          pat.Value(lit.Enum("ok", [pat.Value(lit.Array([pat.Bind("x")]))])),
+          pat.Value(lit.Con("ok", [pat.Value(lit.Arr([pat.Bind("x")]))])),
           "result",
         ),
       ],
