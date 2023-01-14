@@ -143,6 +143,8 @@ fn match_token(stack: List(String), follow: String) -> Option(Token) {
     ["e", "s", "l", "e"] if is_keyword -> Some(token.else)
     ["t", "c", "e", "p", "x", "e"] if is_keyword -> Some(token.expect)
     ["t", "x", "e"] if is_keyword -> Some(token.ext)
+    ["l", "l", "a", "r", "o", "f"] if is_keyword -> Some(token.forall)
+    ["∀"] -> Some(token.forall)
     ["n", "u", "f"] if is_keyword -> Some(token.fun)
     ["λ"] -> Some(token.fun)
     ["f", "i"] if is_keyword -> Some(token.if_)

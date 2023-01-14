@@ -29,6 +29,7 @@ pub type Keyword {
   Else
   Expect
   Ext
+  Forall
   Fun
   If
   Import
@@ -111,6 +112,8 @@ pub const else: Token = Keyword(Else)
 pub const expect: Token = Keyword(Expect)
 
 pub const ext: Token = Keyword(Ext)
+
+pub const forall: Token = Keyword(Forall)
 
 pub const fun: Token = Keyword(Fun)
 
@@ -283,6 +286,7 @@ pub fn to_string(token: Token) {
     Keyword(Else) -> "else"
     Keyword(Expect) -> "expect"
     Keyword(Ext) -> "ext"
+    Keyword(Forall) -> "forall"
     Keyword(Fun) -> "fun"
     Keyword(If) -> "if"
     Keyword(Import) -> "import"
