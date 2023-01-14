@@ -39,3 +39,11 @@ fn constrain(message: String) -> String {
   |> list.reverse
   |> string.join("\n")
 }
+
+/// Like Gleam's `io.debug` function but with a custom message and information
+/// about where the log was called from.
+///
+pub fn log(value: a, module: String, line: Int, message: String) -> a {
+  io.println("[" <> module <> "]:" <> int.to_string(line) <> " " <> message)
+  io.debug(value)
+}
