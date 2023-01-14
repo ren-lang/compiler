@@ -130,17 +130,17 @@ fn parse_let_dec() -> Parser(Dec(Expr)) {
 fn parse_ext() -> Parser(Dec(Expr)) {
   debug.crash(
     "parse.gleam",
-    128,
+    133,
     "External declarations are not yet implemented.",
   )
 }
 
 fn parse_typ_dec() -> Parser(Dec(Expr)) {
-  debug.crash("parse.gleam", 136, "Type declarations are not yet implemented.")
+  debug.crash("parse.gleam", 139, "Type declarations are not yet implemented.")
 }
 
 fn parse_annotation() -> Parser(Type) {
-  debug.crash("parse.gleam", 140, "Type annotations are not yet implemented.")
+  debug.crash("parse.gleam", 143, "Type annotations are not yet implemented.")
 }
 
 fn parse_exposed() -> Parser(Bool) {
