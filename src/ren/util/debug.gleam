@@ -7,11 +7,15 @@ import gleam/string
 
 // UTILS -----------------------------------------------------------------------
 
-/// Intentionally crash the program with some message. 
+/// Intentionally crash the program with some message along with information
+/// about where the crash was called from.
 ///
 pub fn crash(module: String, line: Int, message: String) -> a {
   io.println("[" <> module <> "]:" <> int.to_string(line) <> " FATAL ERROR")
-  io.println(constrain(message))
+  io.println(fit_to_width(message, 80))
+  io.println("")
+  io.println("This is probably a bug. Please report it by opening an issue at:")
+  io.println("https://github.com/ren-lang/compiler/issues/new")
 
   assert False = True
 
@@ -21,7 +25,7 @@ pub fn crash(module: String, line: Int, message: String) -> a {
   crash(module, line, message)
 }
 
-fn constrain(message: String) -> String {
+fn fit_to_width(message: String, max_width: Int) -> String {
   let #(_, lines) = {
     use acc, word <- list.fold(string.split(message, " "), #(0, []))
     let #(w, lines) = acc
@@ -30,7 +34,7 @@ fn constrain(message: String) -> String {
 
     case lines {
       [] -> #(w, [word])
-      [line, ..lines] if w < 80 -> #(w, [line <> " " <> word, ..lines])
+      [line, ..lines] if w < max_width -> #(w, [line <> " " <> word, ..lines])
       lines -> #(l, [word, ..lines])
     }
   }
