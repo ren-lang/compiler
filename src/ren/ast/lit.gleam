@@ -4,11 +4,12 @@
 ///
 ///
 pub type Lit(e) {
-  Array(List(e))
-  Enum(String, List(e))
-  Number(Float)
-  Record(List(#(String, e)))
-  String(String)
+  Arr(List(e))
+  Con(String, List(e))
+  Int(Int)
+  Num(Float)
+  Obj(List(#(String, e)))
+  Str(String)
 }
 // CONSTANTS -------------------------------------------------------------------
 // CONSTRUCTORS ----------------------------------------------------------------
