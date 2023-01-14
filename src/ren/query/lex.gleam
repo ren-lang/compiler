@@ -167,6 +167,7 @@ fn match_token(stack: List(String), follow: String) -> Option(Token) {
     ["/", "/"] -> Some(token.double_slash)
     ["="] if follow != "=" -> Some(token.equals)
     ["="] -> None
+    ["#"] -> Some(token.hash)
     ["{"] -> Some(token.lbrace)
     ["["] -> Some(token.lbracket)
     ["("] -> Some(token.lparen)

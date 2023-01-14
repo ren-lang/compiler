@@ -1,11 +1,12 @@
 // IMPORTS ---------------------------------------------------------------------
 
-// 
+import gleam/float
+import gleam/int
 import gleam/list
-import ren/ast/expr.{
-  Call, Case, Expr, Fun, If, Let, Literal, Placeholder, Switch, Var,
-}
-import ren/ast/lit.{Array, Enum, Lit, Number, Record, String}
+import gleam/option.{Option}
+import ren/ast/expr.{Call,
+  Expr, Fun, If, Let, Literal, Placeholder, Switch, Var}
+import ren/ast/lit.{Arr, Con, Int, Lit, Num, Obj, Str}
 import ren/ast/pat.{Alias, Bind, Pat, Typeof, Value, Wildcard}
 import ren/ast/mod.{Dec, Mod}
 import ren/data/error.{UnexpectedInput}
@@ -152,6 +153,12 @@ fn parse_exposed() -> Parser(Bool) {
 
 fn parse_expr() -> Parser(Expr) {
   let binop = fn(op) { fn(lhs, rhs) { return(op(lhs, rhs)) } }
+  let call = fn(fun, arg) {
+    case fun {
+      Call(f, args) -> return(Call(f, list.append(args, [arg])))
+      _ -> return(Call(fun, [arg]))
+    }
+  }
 
   pratt.expr(
     one_of: [
@@ -177,11 +184,12 @@ fn parse_expr() -> Parser(Expr) {
       pratt.infixl(6, operator(token.Sub), binop(expr.sub)),
       pratt.infixl(7, operator(token.Mul), binop(expr.mul)),
       pratt.infixl(7, operator(token.Div), binop(expr.div)),
+      pratt.infixl(10, return(Nil), call),
       // Right associative operators.
       pratt.infixr(1, operator(token.Seq), binop(expr.seq)),
+      pratt.postfix(1, operator(token.Seq), return),
       pratt.infixr(2, operator(token.Or), binop(expr.or)),
       pratt.infixr(3, operator(token.And), binop(expr.and)),
-      pratt.infixr(10, return(Nil), binop(Call)),
     ],
   )
 }
@@ -242,7 +250,9 @@ fn parse_switch(parsers: pratt.Parsers(Expr)) -> Parser(Expr) {
   return(Switch(expr, cases))
 }
 
-fn parse_case(parsers: pratt.Parsers(Expr)) -> Parser(Case) {
+fn parse_case(
+  parsers: pratt.Parsers(Expr),
+) -> Parser(#(Pat, Option(Expr), Expr)) {
   use _ <- do(keyword(token.Case))
   use pat <- do(parse_pattern())
   use guard <- do(optional(parse_guard(parsers)))
@@ -271,7 +281,7 @@ fn parse_array(parsers: pratt.Parsers(a)) -> Parser(Lit(a)) {
   use elements <- do(or(parse_array_elements(parsers), return([])))
   use _ <- do(symbol(token.RBracket))
 
-  return(Array(elements))
+  return(Arr(elements))
 }
 
 fn parse_array_elements(parsers: pratt.Parsers(a)) -> Parser(List(a)) {
@@ -289,21 +299,26 @@ fn parse_array_elements(parsers: pratt.Parsers(a)) -> Parser(List(a)) {
   ])
 }
 
-/// ❗️ The `Enum` parser will always succeed with a simple enum with no arguments.
-/// For example `:foo 1 2` will be parsed as `Enum("foo", []). We do this because
-/// we handle the parsing of the arguments in the `parse_call` parser as a special
-/// case of function application.
-///
+// ❗️ The `Enum` parser will always succeed with a simple enum with no arguments.
+// For example `:foo 1 2` will be parsed as `Enum("foo", []). We do this because
+// we handle the parsing of the arguments in the `parse_call` parser as a special
+// case of function application.
+//
 fn parse_enum() -> Parser(Lit(a)) {
-  use _ <- do(symbol(token.Colon))
+  use _ <- do(symbol(token.Hash))
   use name <- do(lower_identifier())
 
-  return(Enum(name, []))
+  return(Con(name, []))
 }
 
 fn parse_num() -> Parser(Lit(a)) {
-  number()
-  |> map(Number)
+  use n <- do(number())
+  let i = float.round(n)
+
+  case int.to_float(i) == n {
+    True -> return(Int(i))
+    False -> return(Num(n))
+  }
 }
 
 fn parse_record(parsers: pratt.Parsers(a)) -> Parser(Lit(a)) {
@@ -311,7 +326,7 @@ fn parse_record(parsers: pratt.Parsers(a)) -> Parser(Lit(a)) {
   use fields <- do(or(parse_record_fields(parsers), return([])))
   use _ <- do(symbol(token.RBrace))
 
-  return(Record(fields))
+  return(Obj(fields))
 }
 
 fn parse_record_fields(parsers: pratt.Parsers(a)) -> Parser(List(#(String, a))) {
@@ -339,7 +354,7 @@ fn parse_record_field(parsers: pratt.Parsers(a)) -> Parser(#(String, a)) {
 
 fn parse_str() -> Parser(Lit(a)) {
   string()
-  |> map(String)
+  |> map(Str)
 }
 
 // PATTERN PARSERS ------------------------------------------------------------
@@ -386,8 +401,7 @@ fn parse_value(parsers: pratt.Parsers(Pat)) -> Parser(Pat) {
 
 fn parse_enum_pattern(lhs: Pat, rhs: Pat) -> Parser(Pat) {
   case lhs {
-    Value(Enum(name, args)) ->
-      return(Value(Enum(name, list.append(args, [rhs]))))
+    Value(Con(name, args)) -> return(Value(Con(name, list.append(args, [rhs]))))
     _ -> throw(UnexpectedInput)
   }
 }

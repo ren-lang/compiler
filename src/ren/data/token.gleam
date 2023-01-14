@@ -66,6 +66,7 @@ pub type Symbol {
   DoubleDot
   DoubleSlash
   Equals
+  Hash
   LBrace
   LBracket
   LParen
@@ -146,6 +147,8 @@ pub const double_dot: Token = Symbol(DoubleDot)
 pub const double_slash: Token = Symbol(DoubleSlash)
 
 pub const equals: Token = Symbol(Equals)
+
+pub const hash: Token = Symbol(Hash)
 
 pub const lbrace: Token = Symbol(LBrace)
 
@@ -319,6 +322,7 @@ pub fn to_string(token: Token) {
     Symbol(DoubleDot) -> ".."
     Symbol(DoubleSlash) -> "//"
     Symbol(Equals) -> "="
+    Symbol(Hash) -> "#"
     Symbol(LBrace) -> "{"
     Symbol(LBracket) -> "["
     Symbol(LParen) -> "("
