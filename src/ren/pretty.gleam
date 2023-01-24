@@ -1,187 +1,337 @@
 // IMPORTS ---------------------------------------------------------------------
 
+import gleam/list
+import gleam/option.{None, Option, Some}
 import gleam/string
-import gleam/string_builder.{StringBuilder}
+import gleam/io
+import gleam/float
 
 // TYPES -----------------------------------------------------------------------
 
-///
-///
-pub opaque type Document {
-  Break
-  Concat(Document, Document)
+pub type Document {
+  Column(fn(Int) -> Document)
+  Concat(fn() -> Document, fn() -> Document)
   Empty
-  Group(Document)
-  Nest(Int, Document)
+  Line(String, String)
+  Nest(Int, fn() -> Document)
+  Nesting(fn(Int) -> Document)
   Text(String)
+  Union(Document, Document)
 }
 
-type SimpleDocument {
+type Simple {
   SEmpty
-  SText(String, SimpleDocument)
-  SLine(Int, SimpleDocument)
+  SText(String, fn() -> Simple)
+  SLine(Int, String, fn() -> Simple)
 }
 
-type Mode {
-  Flat
-  Split
-}
+// CONSTANTS: SYMBOLS ----------------------------------------------------------
 
-// BASIC COMBINATORS -----------------------------------------------------------
+pub const ampersand: Document = Text("&")
 
-pub fn empty() -> Document {
-  Empty
-}
+pub const arrow: Document = Text("->")
 
-pub fn text(str: String) -> Document {
-  Text(str)
-}
+pub const asterisk: Document = Text("*")
 
-pub fn nest(doc: Document, indent: Int) -> Document {
-  Nest(indent, doc)
-}
+pub const at: Document = Text("@")
 
-pub fn group(doc: Document) -> Document {
-  Group(doc)
-}
+pub const backslash: Document = Text("\\")
 
-pub fn break() -> Document {
-  Break
+pub const backtick: Document = Text("`")
+
+pub const caret: Document = Text("^")
+
+pub const colon: Document = Text(":")
+
+pub const comma: Document = Text(",")
+
+pub const dollar: Document = Text("$")
+
+pub const dot: Document = Text(".")
+
+pub const doublequote: Document = Text("\"")
+
+pub const equals: Document = Text("=")
+
+pub const exclamation: Document = Text("!")
+
+pub const fatarrow: Document = Text("=>")
+
+pub const forwardslash: Document = Text("/")
+
+pub const hash: Document = Text("#")
+
+pub const lbrace: Document = Text("{")
+
+pub const lbracket: Document = Text("[")
+
+pub const lcaret: Document = Text("<")
+
+pub const lparen: Document = Text("(")
+
+pub const minus: Document = Text("-")
+
+pub const percent: Document = Text("%")
+
+pub const pipe: Document = Text("|")
+
+pub const plus: Document = Text("+")
+
+pub const question: Document = Text("?")
+
+pub const rbrace: Document = Text("}")
+
+pub const rbracket: Document = Text("]")
+
+pub const rcaret: Document = Text(">")
+
+pub const rparen: Document = Text(")")
+
+pub const semi: Document = Text(";")
+
+pub const singlequote: Document = Text("'")
+
+pub const space: Document = Text(" ")
+
+pub const tilde: Document = Text("~")
+
+pub const underscore: Document = Text("_")
+
+// CONSTRUCTORS ----------------------------------------------------------------
+
+pub fn append(a: Document, b: Document) -> Document {
+  Concat(fn() { b }, fn() { a })
 }
 
 pub fn concat(docs: List(Document)) -> Document {
-  join(docs, Break)
-}
-
-pub fn concat_group(docs: List(Document)) -> Document {
-  concat(docs)
-  |> group
-}
-
-pub fn append(left: Document, right: Document) -> Document {
-  case left, right {
-    Empty, _ -> right
-    _, Empty -> left
-    _, _ -> Concat(left, Concat(Break, right))
-  }
-}
-
-pub fn join(docs: List(Document), sep: Document) -> Document {
   case docs {
-    [x, y, ..z] -> Concat(x, Concat(sep, join([y, ..z], sep)))
-    [x] -> x
-    [] -> Empty
+    [] -> empty
+    [doc] -> doc
+    [Empty, ..rest] -> concat(rest)
+    [doc, ..rest] -> append(doc, concat(rest))
   }
+}
+
+pub fn column(f: fn(Int) -> Document) -> Document {
+  Column(f)
+}
+
+pub const empty: Document = Empty
+
+pub fn group(doc: Document) -> Document {
+  Union(flatten(doc), doc)
+}
+
+pub fn nest(doc: Document, i: Int) -> Document {
+  Nest(i, fn() { doc })
+}
+
+pub fn nesting(f: fn(Int) -> Document) -> Document {
+  Nesting(f)
+}
+
+pub const newline: Document = Line(" ", "")
+
+pub fn doubleline() -> Document {
+  append(newline, newline)
+}
+
+pub fn text(text: String) -> Document {
+  Text(text)
+}
+
+pub fn number(num: Float) -> Document {
+  text(float.to_string(num))
+}
+
+pub const tightline: Document = Line("", "")
+
+pub fn softline() -> Document {
+  group(newline)
 }
 
 // COMBINATORS -----------------------------------------------------------------
 
-pub fn when(doc: fn() -> Document, cond: Bool) -> Document {
-  case cond {
-    True -> doc()
-    False -> Empty
-  }
+pub fn surround(doc: Document, left: Document, right: Document) -> Document {
+  left
+  |> append(doc)
+  |> append(right)
 }
 
-//
-
-pub fn surround(left: Document, right: Document, doc: Document) -> Document {
-  join([left, doc, right], Empty)
+pub fn singlequotes(doc: Document) -> Document {
+  surround(doc, singlequote, singlequote)
 }
 
-pub fn brackets(doc: Document) -> Document {
-  surround(text("["), text("]"), doc)
-}
-
-pub fn braces(doc: Document) -> Document {
-  surround(text("{"), text("}"), doc)
+pub fn doublequotes(doc: Document) -> Document {
+  surround(doc, doublequote, doublequote)
 }
 
 pub fn parens(doc: Document) -> Document {
-  surround(text("("), text(")"), doc)
+  surround(doc, lparen, rparen)
 }
 
-pub fn indent(doc: Document) -> Document {
-  nest(doc, 2)
+pub fn brackets(doc: Document) -> Document {
+  surround(doc, lbracket, rbracket)
 }
 
-pub fn quotes(doc: Document) -> Document {
-  surround(text("\""), text("\""), doc)
+pub fn braces(doc: Document) -> Document {
+  surround(doc, lbrace, rbrace)
 }
 
 //
 
-pub fn space() -> Document {
-  text(" ")
+pub fn join(docs: List(Document), separator: Document) -> Document {
+  case docs {
+    [] -> empty
+    [doc] -> doc
+    [Empty, ..rest] -> join(rest, separator)
+    [doc, ..rest] -> {
+      use acc, cur <- list.fold(rest, doc)
+      case cur {
+        Empty -> acc
+        _ -> append(append(acc, separator), cur)
+      }
+    }
+  }
 }
 
-pub fn newline() -> Document {
-  text("\n")
+pub fn lines(docs: List(Document)) -> Document {
+  join(docs, newline)
 }
 
-pub fn doubleline() -> Document {
-  text("\n\n")
+pub fn doublelines(docs: List(Document)) -> Document {
+  join(docs, append(newline, newline))
+}
+
+pub fn softlines(docs: List(Document)) -> Document {
+  join(docs, softline())
+}
+
+pub fn words(docs: List(Document)) -> Document {
+  join(docs, space)
+}
+
+//
+
+pub fn align(doc: Document) -> Document {
+  use col <- column
+  use indent <- nesting
+
+  nest(doc, col - indent)
+}
+
+pub fn hang(doc: Document, i: Int) -> Document {
+  doc
+  |> nest(i)
+  |> align
+}
+
+pub fn indent(doc: Document, i: Int) -> Document {
+  let spaces = text(string.repeat(" ", i))
+
+  spaces
+  |> append(doc)
+  |> hang(i)
+}
+
+//
+
+pub fn optional(value: Option(a), f: fn(a) -> Document) -> Document {
+  case value {
+    None -> empty
+    Some(v) -> f(v)
+  }
+}
+
+pub fn when(condition: Bool, f: fn() -> Document) -> Document {
+  case condition {
+    True -> f()
+    False -> empty
+  }
 }
 
 // QUERIES ---------------------------------------------------------------------
 
-fn fits(docs: List(#(Int, Mode, Document)), w: Int) -> Bool {
-  case docs {
-    _ if w < 0 -> False
-    [] -> True
-    [#(_, _, Empty), ..z] -> fits(z, w)
-    [#(i, m, Concat(x, y)), ..z] -> fits([#(i, m, x), #(i, m, y), ..z], w)
-    [#(i, m, Nest(j, x)), ..z] -> fits([#(i + j, m, x), ..z], w)
-    [#(_, _, Text(s)), ..z] -> fits(z, w - string.length(s))
-    [#(_, Flat, Break), ..z] -> fits(z, w - 1)
-    [#(_, Split, Break), ..] -> True
-    [#(i, _, Group(x)), ..z] -> fits([#(i, Flat, x), ..z], w)
+fn fits(doc: Simple, width: Int) -> Bool {
+  case doc {
+    _ if width < 0 -> False
+    SEmpty -> True
+    SText(text, thunk) -> fits(thunk(), width - string.length(text))
+    SLine(_, _, _) -> True
+  }
+}
+
+fn choose(doc: Simple, thunk: fn() -> Simple, w: Int, k: Int) -> Simple {
+  case fits(doc, w - k) {
+    True -> doc
+    False -> thunk()
   }
 }
 
 // MANIPULATIONS ---------------------------------------------------------------
-
-fn format(docs: List(#(Int, Mode, Document)), w: Int, k: Int) -> SimpleDocument {
-  case docs {
-    [] -> SEmpty
-    [#(_, _, Empty), ..z] -> format(z, w, k)
-    [#(i, m, Concat(x, y)), ..z] -> format([#(i, m, x), #(i, m, y), ..z], w, k)
-    [#(i, m, Nest(j, x)), ..z] -> format([#(i + j, m, x), ..z], w, k)
-    [#(_, _, Text(s)), ..z] -> SText(s, format(z, w, k + string.length(s)))
-    [#(_, Flat, Break), ..z] -> SText(" ", format(z, w, k + 1))
-    [#(i, Split, Break), ..z] -> SLine(i, format(z, w, i))
-    [#(i, _, Group(x)), ..z] ->
-      case fits([#(i, Flat, x), ..z], w - k) {
-        True -> format([#(i, Flat, x), ..z], w, k)
-        False -> format([#(i, Split, x), ..z], w, k)
-      }
-  }
-}
-
 // CONVERSIONS -----------------------------------------------------------------
 
-pub fn print(doc: Document, width: Int) {
-  let doc = format([#(0, Flat, Group(doc))], width, 0)
-  let str = to_string(doc)
-
-  str <> "\n"
+pub fn print(doc: Document, w: Int) -> String {
+  [#(doc, 0)]
+  |> simplify(w, 0)
+  |> layout
 }
 
-fn to_string(doc: SimpleDocument) -> String {
-  to_string_builder(doc)
-  |> string_builder.to_string()
-}
-
-fn to_string_builder(doc: SimpleDocument) -> StringBuilder {
-  case doc {
-    SEmpty -> string_builder.new()
-    SText(str, doc) ->
-      to_string_builder(doc)
-      |> string_builder.prepend(str)
-    SLine(indent, doc) ->
-      to_string_builder(doc)
-      |> string_builder.prepend(string.repeat(" ", indent))
-      |> string_builder.prepend("\n")
+fn simplify(docs: List(#(Document, Int)), w: Int, k: Int) -> Simple {
+  case docs {
+    [] -> SEmpty
+    [#(Column(thunk), i), ..rest] -> simplify([#(thunk(k), i), ..rest], w, k)
+    [#(Concat(a, b), i), ..rest] ->
+      simplify([#(a(), i), #(b(), i), ..rest], w, k)
+    [#(Empty, _), ..rest] -> simplify(rest, w, k)
+    [#(Line(_, separator), i), ..rest] ->
+      SLine(
+        i,
+        separator,
+        fn() { simplify(rest, w, i + string.length(separator)) },
+      )
+    [#(Nest(j, thunk), i), ..rest] ->
+      simplify([#(thunk(), i + j), ..rest], w, k)
+    [#(Nesting(thunk), i), ..rest] -> simplify([#(thunk(i), i), ..rest], w, k)
+    [#(Text(text), _), ..rest] ->
+      SText(text, fn() { simplify(rest, w, k + string.length(text)) })
+    [#(Union(a, b), i), ..rest] ->
+      choose(
+        simplify([#(a, i), ..rest], w, k),
+        fn() { simplify([#(b, i), ..rest], w, k) },
+        w,
+        k,
+      )
   }
 }
+
 // UTILS -----------------------------------------------------------------------
+
+fn flatten(doc: Document) -> Document {
+  case doc {
+    Concat(a, b) -> Concat(fn() { flatten(a()) }, fn() { flatten(b()) })
+    Nest(i, a) -> Nest(i, fn() { flatten(a()) })
+    Union(a, _) -> flatten(a)
+    Line(hsep, _) -> Text(hsep)
+    Nesting(f) -> flatten(f(0))
+    Column(f) -> flatten(f(0))
+    _ -> doc
+  }
+}
+
+fn layout(doc: Simple) -> String {
+  use s, c <- list.fold(layout_inner(doc, []), "")
+  s <> c
+}
+
+fn layout_inner(doc: Simple, lines: List(String)) -> List(String) {
+  case doc {
+    SEmpty -> lines
+    SText(text, thunk) -> layout_inner(thunk(), [text, ..lines])
+    SLine(indent, seperator, thunk) ->
+      layout_inner(
+        thunk(),
+        ["\n" <> string.repeat(" ", indent) <> seperator, ..lines],
+      )
+  }
+}
