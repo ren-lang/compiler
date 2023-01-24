@@ -130,17 +130,17 @@ fn parse_let_dec() -> Parser(Dec(Expr)) {
 fn parse_ext() -> Parser(Dec(Expr)) {
   debug.crash(
     "parse.gleam",
-    133,
+    134,
     "External declarations are not yet implemented.",
   )
 }
 
 fn parse_typ_dec() -> Parser(Dec(Expr)) {
-  debug.crash("parse.gleam", 139, "Type declarations are not yet implemented.")
+  debug.crash("parse.gleam", 140, "Type declarations are not yet implemented.")
 }
 
 fn parse_annotation() -> Parser(Type) {
-  debug.crash("parse.gleam", 143, "Type annotations are not yet implemented.")
+  debug.crash("parse.gleam", 145, "Type annotations are not yet implemented.")
 }
 
 fn parse_exposed() -> Parser(Bool) {
@@ -156,6 +156,8 @@ fn parse_expr() -> Parser(Expr) {
   let call = fn(fun, arg) {
     case fun {
       Call(f, args) -> return(Call(f, list.append(args, [arg])))
+      Literal(Con(tag, args)) ->
+        return(Literal(Con(tag, list.append(args, [arg]))))
       _ -> return(Call(fun, [arg]))
     }
   }
@@ -219,9 +221,11 @@ fn parse_let_expr(parsers: pratt.Parsers(Expr)) -> Parser(Expr) {
   use _ <- do(keyword(token.Let))
   use name <- do(lower_identifier())
   use _ <- do(symbol(token.Equals))
-  use value <- do(pratt.subexpr(0, parsers))
+  use value <- do(pratt.subexpr(1, parsers))
+  use _ <- do(operator(token.Seq))
+  use body <- do(pratt.subexpr(0, parsers))
 
-  return(Let(Bind(name), value))
+  return(Let(Bind(name), value, body))
 }
 
 fn parse_lit(parsers: pratt.Parsers(Expr)) -> Parser(Expr) {
@@ -229,7 +233,7 @@ fn parse_lit(parsers: pratt.Parsers(Expr)) -> Parser(Expr) {
     parse_array(parsers),
     parse_enum(),
     parse_num(),
-    parse_record(parsers),
+    parse_record(parsers, Var),
     parse_str(),
   ])
   |> map(Literal)
@@ -321,21 +325,27 @@ fn parse_num() -> Parser(Lit(a)) {
   }
 }
 
-fn parse_record(parsers: pratt.Parsers(a)) -> Parser(Lit(a)) {
+fn parse_record(
+  parsers: pratt.Parsers(a),
+  from_label: fn(String) -> a,
+) -> Parser(Lit(a)) {
   use _ <- do(symbol(token.LBrace))
-  use fields <- do(or(parse_record_fields(parsers), return([])))
+  use fields <- do(or(parse_record_fields(parsers, from_label), return([])))
   use _ <- do(symbol(token.RBrace))
 
   return(Obj(fields))
 }
 
-fn parse_record_fields(parsers: pratt.Parsers(a)) -> Parser(List(#(String, a))) {
-  use first <- do(parse_record_field(parsers))
+fn parse_record_fields(
+  parsers: pratt.Parsers(a),
+  from_label: fn(String) -> a,
+) -> Parser(List(#(String, a))) {
+  use first <- do(parse_record_field(parsers, from_label))
   use rest <- loop([first])
 
   one_of([
     symbol(token.Comma)
-    |> then_replace(with: parse_record_field(parsers))
+    |> then_replace(with: parse_record_field(parsers, from_label))
     |> map(list.prepend(rest, _))
     |> map(Continue),
     //
@@ -344,12 +354,20 @@ fn parse_record_fields(parsers: pratt.Parsers(a)) -> Parser(List(#(String, a))) 
   ])
 }
 
-fn parse_record_field(parsers: pratt.Parsers(a)) -> Parser(#(String, a)) {
+fn parse_record_field(
+  parsers: pratt.Parsers(a),
+  from_label: fn(String) -> a,
+) -> Parser(#(String, a)) {
   use label <- do(lower_identifier())
-  use _ <- do(symbol(token.Colon))
-  use expr <- do(pratt.subexpr(0, parsers))
 
-  return(#(label, expr))
+  one_of([
+    {
+      use _ <- do(symbol(token.Colon))
+      use expr <- do(pratt.subexpr(0, parsers))
+      return(#(label, expr))
+    },
+    return(#(label, from_label(label))),
+  ])
 }
 
 fn parse_str() -> Parser(Lit(a)) {
@@ -393,7 +411,7 @@ fn parse_value(parsers: pratt.Parsers(Pat)) -> Parser(Pat) {
     parse_array(parsers),
     parse_enum(),
     parse_num(),
-    parse_record(parsers),
+    parse_record(parsers, Bind),
     parse_str(),
   ])
   |> map(Value)
