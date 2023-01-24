@@ -65,6 +65,8 @@ pub type Src {
 
 // QUERIES ---------------------------------------------------------------------
 
+///
+///
 pub fn imports(mod: Mod(expr)) -> List(Dec(expr)) {
   use dec <- list.filter(mod)
 
@@ -74,6 +76,8 @@ pub fn imports(mod: Mod(expr)) -> List(Dec(expr)) {
   }
 }
 
+///
+///
 pub fn bindings(mod: Mod(expr)) -> List(Dec(expr)) {
   use dec <- list.filter(mod)
 
@@ -83,6 +87,8 @@ pub fn bindings(mod: Mod(expr)) -> List(Dec(expr)) {
   }
 }
 
+///
+///
 pub fn externals(mod: Mod(expr)) -> List(Dec(expr)) {
   use dec <- list.filter(mod)
 
@@ -92,11 +98,44 @@ pub fn externals(mod: Mod(expr)) -> List(Dec(expr)) {
   }
 }
 
+///
+///
 pub fn types(mod: Mod(expr)) -> List(Dec(expr)) {
   use dec <- list.filter(mod)
 
   case dec {
     Typ(_, _, _, _) -> True
     _ -> False
+  }
+}
+
+///
+///
+pub fn emittables(
+  mod: Mod(expr),
+) -> #(List(Dec(expr)), List(Dec(expr)), List(Dec(expr))) {
+  use emittables, dec <- list.fold_right(mod, #([], [], []))
+  let #(imports, externals, bindings) = emittables
+
+  case dec {
+    Imp(_, _, _) -> #([dec, ..imports], externals, bindings)
+    Let(_, _, _, _) -> #(imports, externals, [dec, ..bindings])
+    Ext(_, _, _, _) -> #(imports, [dec, ..externals], bindings)
+    Typ(_, _, _, _) -> emittables
+  }
+}
+
+// MANIPULATIONS ---------------------------------------------------------------
+
+///
+///
+pub fn map(mod: Mod(a), f: fn(a) -> b) -> Mod(b) {
+  use dec <- list.map(mod)
+
+  case dec {
+    Imp(source, path, alias) -> Imp(source, path, alias)
+    Let(exposed, var, typ, expr) -> Let(exposed, var, typ, f(expr))
+    Ext(exposed, var, typ, name) -> Ext(exposed, var, typ, name)
+    Typ(exposed, name, vars, typ) -> Typ(exposed, name, vars, typ)
   }
 }
