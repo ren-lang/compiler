@@ -1,3 +1,49 @@
+//// The following module is a mostly faithful port of the great `elm-safe-recursion`
+//// package by Micah Hahn. You can find the original source and documentation
+//// here:
+////
+////   https://github.com/micahhahn/elm-safe-recursion/tree/2.0.0
+////
+//// The original package is licensed under the BSD 3-Clause License, reproduced
+//// below:
+//// 
+////   BSD 3-Clause License
+////   
+////   Copyright (c) 2022, NoRedInk
+////   All rights reserved.
+////   
+////   Redistribution and use in source and binary forms, with or without
+////   modification, are permitted provided that the following conditions are met:
+////   
+////   * Redistributions of source code must retain the above copyright notice, this
+////     list of conditions and the following disclaimer.
+////   
+////   * Redistributions in binary form must reproduce the above copyright notice,
+////     this list of conditions and the following disclaimer in the documentation
+////     and/or other materials provided with the distribution.
+////   
+////   * Neither the name of the copyright holder nor the names of its
+////     contributors may be used to endorse or promote products derived from
+////     this software without specific prior written permission.
+////   
+////   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+////   AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+////   IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+////   DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+////   FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+////   DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+////   SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+////   CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+////   OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+////   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+////
+////
+//// The point of this module is to make it simple to write stack-safe recursive
+//// algorithms without worrying about how to make your code tail-recursive. Coupled
+//// with Gleam's great `use` syntax, it makes it super easy to write recursive code
+//// mostly in a way that you want to write anyway.
+////
+
 // IMPORTS ---------------------------------------------------------------------
 
 import gleam/list
@@ -11,7 +57,6 @@ pub opaque type Rec(a, r, t) {
   Base(a)
 }
 
-// CONSTANTS -------------------------------------------------------------------
 // CONSTRUCTORS ----------------------------------------------------------------
 
 ///
@@ -26,7 +71,6 @@ pub fn rec(r: r) -> Rec(a, r, a) {
   Rec(r, Base)
 }
 
-// QUERIES ---------------------------------------------------------------------
 // MANIPULATIONS ---------------------------------------------------------------
 
 ///
@@ -55,7 +99,7 @@ pub fn step(r: r, cont: fn(t) -> Rec(a, r, t)) -> Rec(a, r, t) {
 
 ///
 ///
-pub fn list(items: List(r), next) -> Rec(b, r, t) {
+pub fn list(items: List(r), next: fn(List(a)) -> Rec(a, r, a)) -> Rec(a, r, a) {
   use xs <- fold([], items, list.prepend)
   next(list.reverse(xs))
 }
@@ -116,4 +160,3 @@ fn do_run(
     Rec(r, cont), _ -> do_run(proj(r), [cont, ..stack], proj)
   }
 }
-// UTILS -----------------------------------------------------------------------

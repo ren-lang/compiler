@@ -129,12 +129,12 @@ pub fn emittables(
 
 ///
 ///
-pub fn map(mod: Mod(a), f: fn(a) -> b) -> Mod(b) {
+pub fn map(mod: Mod(a), f: fn(String, a) -> b) -> Mod(b) {
   use dec <- list.map(mod)
 
   case dec {
     Imp(source, path, alias) -> Imp(source, path, alias)
-    Let(exposed, var, typ, expr) -> Let(exposed, var, typ, f(expr))
+    Let(exposed, var, typ, expr) -> Let(exposed, var, typ, f(var, expr))
     Ext(exposed, var, typ, name) -> Ext(exposed, var, typ, name)
     Typ(exposed, name, vars, typ) -> Typ(exposed, name, vars, typ)
   }

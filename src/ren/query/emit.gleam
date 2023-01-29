@@ -3,23 +3,26 @@
 import gleam/list
 import gleam/option.{None, Option}
 import gleam/string
-import ren/ast/expr
-import ren/ast/mod.{Dec, Ext, External, Imp, Let, Mod, Package, Project}
+import ren/ast/mod.{
+  Dec, Ext, External, Imp, Let as LetDec, Mod, Package, Project,
+}
+import ren/ast/lit.{Field}
 import ren/pretty.{Document}
 import ren/ir/imp.{
   Access, Add, And, Array, Arrow, Assign, Binop, Block, Break, Call, Comma,
   Comment, Const, Continue, Div, Eq, Export, Expr, Expression, ForIn, Function,
-  Gt, Gte, IIFE, If, IfElse, In, Index, Instanceof, JSFalse, JSTrue, Lt, Lte,
-  Mod as Modulo, Mul, Neg, Neq, New, Not, Null, Number, Object, Or, Pos, Pow,
-  Return, Spread, Statement, String, Sub, Ternary, Throw, Typeof, Undefined,
+  Gt, Gte, IIFE, If, IfElse, In, Index, Instanceof, JSFalse, JSTrue, Let, Lt,
+  Lte, Mod as Modulo, Mul, Neg, Neq, New, Not, Null, Number, Object, Or, Pos,
+  Pow, Return, Spread, Statement, String, Sub, Ternary, Throw, Typeof, Undefined,
   Unop, Var, While,
 }
 
-//
+// EMIT ------------------------------------------------------------------------
 
-pub fn mod(input: Mod(expr.Expr)) -> String {
+///
+///
+pub fn mod(input: Mod(Statement)) -> String {
   input
-  |> mod.map(expr.to_imp)
   |> emit_mod(None, None)
   |> pretty.print(100)
 }
@@ -107,7 +110,7 @@ fn emit_ext(dec: Dec(Statement)) -> Document {
 }
 
 fn emit_let(dec: Dec(Statement)) -> Document {
-  assert Let(exposed, var, _, stmt) = dec
+  assert LetDec(exposed, var, _, stmt) = dec
   let export = pretty.when(exposed, fn() { export })
 
   pretty.words([
@@ -162,7 +165,7 @@ fn emit_statement(stmt: Statement) -> Document {
         function,
         emit_js_var(var),
         pretty.parens(pretty.join(
-          list.map(args, pretty.text),
+          list.map(args, emit_js_var),
           pretty.text(", "),
         )),
         emit_as_block(Block(stmts)),
@@ -181,14 +184,20 @@ fn emit_statement(stmt: Statement) -> Document {
         else,
         emit_as_block(Block(else_)),
       ])
-
+    Let(var, expr) ->
+      pretty.words([
+        let_,
+        emit_js_var(var),
+        pretty.equals,
+        emit_expression(expr),
+      ])
     Return(expr) -> pretty.words([return, emit_expression(expr)])
     Throw(message) ->
       pretty.words([
         throw,
         new,
-        pretty.text("Error"),
-        pretty.doublequotes(pretty.text(message)),
+        pretty.text("Error")
+        |> pretty.append(pretty.parens(pretty.doublequotes(pretty.text(message)))),
       ])
     While(cond, stmts) ->
       pretty.words([
@@ -217,7 +226,7 @@ fn emit_expression(expr: Expression) -> Document {
     Arrow(args, body) ->
       pretty.words([
         pretty.parens(pretty.join(
-          list.map(args, pretty.text),
+          list.map(args, emit_js_var),
           pretty.text(", "),
         )),
         pretty.fatarrow,
@@ -229,8 +238,8 @@ fn emit_expression(expr: Expression) -> Document {
           _ -> emit_as_block(Block(body))
         },
       ])
-    Assign(var, expr) ->
-      pretty.words([emit_expression(var), pretty.equals, emit_expression(expr)])
+    Assign(name, expr) ->
+      pretty.words([pretty.text(name), pretty.equals, emit_expression(expr)])
     Binop(lhs, Add, rhs) -> emit_binop(lhs, "+", rhs)
     Binop(lhs, And, rhs) -> emit_binop(lhs, "&&", rhs)
     Binop(lhs, Comma, rhs) -> emit_binop(lhs, ",", rhs)
@@ -274,13 +283,17 @@ fn emit_expression(expr: Expression) -> Document {
     Null -> null
     Number(num) -> pretty.number(num)
     Object(fields) -> {
-      let emit_field = fn(field: #(String, Expression)) {
-        pretty.concat([
-          pretty.text(field.0),
-          pretty.colon,
-          pretty.space,
-          emit_expression(field.1),
-        ])
+      let emit_field = fn(field: Field(Expression)) {
+        case field {
+          Field(key, Var(var)) if var == key -> pretty.text(field.key)
+          _ ->
+            pretty.concat([
+              pretty.text(field.key),
+              pretty.colon,
+              pretty.space,
+              emit_expression(field.value),
+            ])
+        }
       }
       list.map(fields, emit_field)
       |> pretty.join(pretty.text(", "))
@@ -295,10 +308,12 @@ fn emit_expression(expr: Expression) -> Document {
       ])
     String(str) -> pretty.doublequotes(pretty.text(str))
     Ternary(cond, then, else) ->
-      pretty.lines([
+      pretty.words([
         emit_parens(cond, precedence),
-        pretty.words([pretty.question, emit_parens(then, precedence)]),
-        pretty.words([pretty.colon, emit_parens(else, precedence)]),
+        pretty.question,
+        emit_parens(then, precedence),
+        pretty.colon,
+        emit_parens(else, precedence),
       ])
     Undefined -> undefined
     Unop(Neg, expr) ->
@@ -333,6 +348,7 @@ fn emit_as_block(stmt: Statement) -> Document {
       Function(_, _, _) -> pretty.concat([pretty.newline, emit_statement(stmt)])
       If(_, _) -> pretty.concat([pretty.newline, emit_statement(stmt)])
       IfElse(_, _, _) -> pretty.concat([pretty.newline, emit_statement(stmt)])
+      Let(_, _) -> emit_statement(stmt)
       Return(_) -> pretty.concat([pretty.newline, emit_statement(stmt)])
       Throw(_) -> pretty.concat([pretty.newline, emit_statement(stmt)])
       While(_, _) -> pretty.concat([pretty.newline, emit_statement(stmt)])
@@ -418,10 +434,11 @@ fn emit_js_var(name: String) -> Document {
     void,
     while,
     with,
+    yield,
   ]
 
   case list.contains(keywords, name) {
-    True -> pretty.append(pretty.dollar, name)
+    True -> pretty.append(pretty.underscore, name)
     False -> name
   }
 }
@@ -571,7 +588,7 @@ const prelude_fn: Statement = Export(
             [
               Expr(
                 Assign(
-                  Access(Var("f"), ["k"]),
+                  "f.k",
                   Call(Var("$fn"), [Access(Var("f"), ["k"]), Var("f")]),
                 ),
               ),

@@ -1,13 +1,10 @@
 // IMPORTS ---------------------------------------------------------------------
 
-import gleam/float
-import gleam/int
 import gleam/list
-import gleam/option.{Option}
 import ren/ast/expr.{Call,
   Expr, Fun, If, Let, Literal, Placeholder, Switch, Var}
-import ren/ast/lit.{Arr, Con, Int, Lit, Num, Obj, Str}
-import ren/ast/pat.{Alias, Bind, Pat, Typeof, Value, Wildcard}
+import ren/ast/lit.{Arr, Con, Field, Lit, Num, Obj, Str}
+import ren/ast/pat.{Alias, Bind, Case, Pat, Typeof, Value, Wildcard}
 import ren/ast/mod.{Dec, Mod}
 import ren/data/error.{UnexpectedInput}
 import ren/data/token.{Token}
@@ -128,19 +125,22 @@ fn parse_let_dec() -> Parser(Dec(Expr)) {
 }
 
 fn parse_ext() -> Parser(Dec(Expr)) {
-  debug.crash(
-    "parse.gleam",
-    134,
-    "External declarations are not yet implemented.",
-  )
+  use exposed <- do(parse_exposed())
+  use _ <- do(keyword(token.Let))
+  use name <- do(lower_identifier())
+  use typ <- do(parse_annotation())
+  use _ <- do(symbol(token.Equals))
+  use symbol <- do(string())
+
+  return(mod.Ext(exposed, name, typ, symbol))
 }
 
 fn parse_typ_dec() -> Parser(Dec(Expr)) {
-  debug.crash("parse.gleam", 140, "Type declarations are not yet implemented.")
+  debug.crash("parse.gleam", 139, "Type declarations are not yet implemented.")
 }
 
 fn parse_annotation() -> Parser(Type) {
-  debug.crash("parse.gleam", 145, "Type annotations are not yet implemented.")
+  debug.crash("parse.gleam", 143, "Type annotations are not yet implemented.")
 }
 
 fn parse_exposed() -> Parser(Bool) {
@@ -165,9 +165,9 @@ fn parse_expr() -> Parser(Expr) {
   pratt.expr(
     one_of: [
       fn(parsers) { parse_parens(pratt.subexpr(0, parsers)) },
+      pratt.literal(parse_block()),
       parse_fun,
       parse_if,
-      parse_let_expr,
       parse_lit,
       pratt.literal(parse_placeholder()),
       parse_switch,
@@ -183,17 +183,34 @@ fn parse_expr() -> Parser(Expr) {
       pratt.infixl(4, operator(token.Lte), binop(expr.lte)),
       pratt.infixl(4, operator(token.Neq), binop(expr.neq)),
       pratt.infixl(6, operator(token.Add), binop(expr.add)),
+      pratt.infixl(6, operator(token.Concat), binop(expr.concat)),
       pratt.infixl(6, operator(token.Sub), binop(expr.sub)),
       pratt.infixl(7, operator(token.Mul), binop(expr.mul)),
       pratt.infixl(7, operator(token.Div), binop(expr.div)),
       pratt.infixl(10, return(Nil), call),
       // Right associative operators.
-      pratt.infixr(1, operator(token.Seq), binop(expr.seq)),
-      pratt.postfix(1, operator(token.Seq), return),
       pratt.infixr(2, operator(token.Or), binop(expr.or)),
       pratt.infixr(3, operator(token.And), binop(expr.and)),
     ],
   )
+}
+
+fn parse_block() -> Parser(Expr) {
+  let binop = fn(op) { fn(lhs, rhs) { return(op(lhs, rhs)) } }
+
+  use _ <- do(symbol(token.LBrace))
+  use expr <- do(one_of([parse_let_expr(), parse_expr()]))
+  use _ <- do(operator(token.Seq))
+  use rest <- do(one_of([
+    pratt.expr(
+      one_of: [pratt.literal(parse_let_expr()), pratt.literal(parse_expr())],
+      then: [pratt.infixr(0, operator(token.Seq), binop(expr.seq))],
+    ),
+    return(Literal(Con("undefined", []))),
+  ]))
+  use _ <- do(symbol(token.RBrace))
+
+  return(expr.seq(expr, rest))
 }
 
 fn parse_fun(parsers: pratt.Parsers(Expr)) -> Parser(Expr) {
@@ -201,7 +218,7 @@ fn parse_fun(parsers: pratt.Parsers(Expr)) -> Parser(Expr) {
   use pat <- do(parse_pattern())
   use pats <- do(many(parse_pattern()))
   use _ <- do(symbol(token.Arrow))
-  use body <- do(pratt.subexpr(0, parsers))
+  use body <- do(pratt.subexpr(2, parsers))
 
   return(Fun([pat, ..pats], body))
 }
@@ -217,15 +234,13 @@ fn parse_if(parsers: pratt.Parsers(Expr)) -> Parser(Expr) {
   return(If(cond, then, else))
 }
 
-fn parse_let_expr(parsers: pratt.Parsers(Expr)) -> Parser(Expr) {
+fn parse_let_expr() -> Parser(Expr) {
   use _ <- do(keyword(token.Let))
   use name <- do(lower_identifier())
   use _ <- do(symbol(token.Equals))
-  use value <- do(pratt.subexpr(1, parsers))
-  use _ <- do(operator(token.Seq))
-  use body <- do(pratt.subexpr(0, parsers))
+  use value <- do(parse_expr())
 
-  return(Let(Bind(name), value, body))
+  return(Let(Bind(name), value))
 }
 
 fn parse_lit(parsers: pratt.Parsers(Expr)) -> Parser(Expr) {
@@ -254,16 +269,14 @@ fn parse_switch(parsers: pratt.Parsers(Expr)) -> Parser(Expr) {
   return(Switch(expr, cases))
 }
 
-fn parse_case(
-  parsers: pratt.Parsers(Expr),
-) -> Parser(#(Pat, Option(Expr), Expr)) {
+fn parse_case(parsers: pratt.Parsers(Expr)) -> Parser(Case(Expr)) {
   use _ <- do(keyword(token.Case))
   use pat <- do(parse_pattern())
   use guard <- do(optional(parse_guard(parsers)))
   use _ <- do(symbol(token.Arrow))
   use body <- do(pratt.subexpr(0, parsers))
 
-  return(#(pat, guard, body))
+  return(Case(pat, guard, body))
 }
 
 fn parse_guard(parsers: pratt.Parsers(Expr)) -> Parser(Expr) {
@@ -317,12 +330,7 @@ fn parse_enum() -> Parser(Lit(a)) {
 
 fn parse_num() -> Parser(Lit(a)) {
   use n <- do(number())
-  let i = float.round(n)
-
-  case int.to_float(i) == n {
-    True -> return(Int(i))
-    False -> return(Num(n))
-  }
+  return(Num(n))
 }
 
 fn parse_record(
@@ -339,7 +347,7 @@ fn parse_record(
 fn parse_record_fields(
   parsers: pratt.Parsers(a),
   from_label: fn(String) -> a,
-) -> Parser(List(#(String, a))) {
+) -> Parser(List(Field(a))) {
   use first <- do(parse_record_field(parsers, from_label))
   use rest <- loop([first])
 
@@ -357,16 +365,16 @@ fn parse_record_fields(
 fn parse_record_field(
   parsers: pratt.Parsers(a),
   from_label: fn(String) -> a,
-) -> Parser(#(String, a)) {
+) -> Parser(Field(a)) {
   use label <- do(lower_identifier())
 
   one_of([
     {
       use _ <- do(symbol(token.Colon))
       use expr <- do(pratt.subexpr(0, parsers))
-      return(#(label, expr))
+      return(Field(label, expr))
     },
-    return(#(label, from_label(label))),
+    return(Field(label, from_label(label))),
   ])
 }
 

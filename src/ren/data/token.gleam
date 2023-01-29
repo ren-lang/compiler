@@ -83,6 +83,7 @@ pub type Symbol {
 pub type Operator {
   Add
   And
+  Concat
   Div
   Eq
   Gt
@@ -170,6 +171,8 @@ pub const rparen: Token = Symbol(RParen)
 pub const underscore: Token = Symbol(Underscore)
 
 pub const add: Token = Operator(Add)
+
+pub const concat: Token = Operator(Concat)
 
 pub const sub: Token = Operator(Sub)
 
@@ -303,6 +306,7 @@ pub fn to_string(token: Token) {
 
     Operator(Add) -> "+"
     Operator(And) -> "&"
+    Operator(Concat) -> "<>"
     Operator(Div) -> "/"
     Operator(Eq) -> "=="
     Operator(Gt) -> ">"

@@ -1,13 +1,16 @@
 // IMPORTS ---------------------------------------------------------------------
 
+import gleam/float
+import gleam/int
 import gleam/list
 import gleam/option.{None, Option, Some}
 import gleam/string
-import gleam/io
-import gleam/float
+import ren/util/num
 
 // TYPES -----------------------------------------------------------------------
 
+///
+///
 pub type Document {
   Column(fn(Int) -> Document)
   Concat(fn() -> Document, fn() -> Document)
@@ -99,10 +102,14 @@ pub const underscore: Document = Text("_")
 
 // CONSTRUCTORS ----------------------------------------------------------------
 
+///
+///
 pub fn append(a: Document, b: Document) -> Document {
   Concat(fn() { b }, fn() { a })
 }
 
+///
+///
 pub fn concat(docs: List(Document)) -> Document {
   case docs {
     [] -> empty
@@ -112,74 +119,118 @@ pub fn concat(docs: List(Document)) -> Document {
   }
 }
 
+///
+///
 pub fn column(f: fn(Int) -> Document) -> Document {
   Column(f)
 }
 
+///
+///
 pub const empty: Document = Empty
 
+///
+///
 pub fn group(doc: Document) -> Document {
   Union(flatten(doc), doc)
 }
 
+///
+///
 pub fn nest(doc: Document, i: Int) -> Document {
   Nest(i, fn() { doc })
 }
 
+///
+///
 pub fn nesting(f: fn(Int) -> Document) -> Document {
   Nesting(f)
 }
 
+///
+///
 pub const newline: Document = Line(" ", "")
 
+///
+///
 pub fn doubleline() -> Document {
   append(newline, newline)
 }
 
+///
+///
 pub fn text(text: String) -> Document {
   Text(text)
 }
 
+///
+///
 pub fn number(num: Float) -> Document {
-  text(float.to_string(num))
+  case num.is_int(num) {
+    True ->
+      float.round(num)
+      |> int.to_string
+      |> text
+    False ->
+      float.to_string(num)
+      |> text
+  }
 }
 
+///
+///
 pub const tightline: Document = Line("", "")
 
+///
+///
 pub fn softline() -> Document {
   group(newline)
 }
 
 // COMBINATORS -----------------------------------------------------------------
 
+///
+///
 pub fn surround(doc: Document, left: Document, right: Document) -> Document {
   left
   |> append(doc)
   |> append(right)
 }
 
+///
+///
 pub fn singlequotes(doc: Document) -> Document {
   surround(doc, singlequote, singlequote)
 }
 
+///
+///
 pub fn doublequotes(doc: Document) -> Document {
   surround(doc, doublequote, doublequote)
 }
 
+///
+///
 pub fn parens(doc: Document) -> Document {
   surround(doc, lparen, rparen)
 }
 
+///
+///
 pub fn brackets(doc: Document) -> Document {
   surround(doc, lbracket, rbracket)
 }
 
+///
+///
 pub fn braces(doc: Document) -> Document {
   surround(doc, lbrace, rbrace)
 }
 
 //
 
+///
+///
 pub fn join(docs: List(Document), separator: Document) -> Document {
   case docs {
     [] -> empty
@@ -195,24 +246,34 @@ pub fn join(docs: List(Document), separator: Document) -> Document {
   }
 }
 
+///
+///
 pub fn lines(docs: List(Document)) -> Document {
   join(docs, newline)
 }
 
+///
+///
 pub fn doublelines(docs: List(Document)) -> Document {
   join(docs, append(newline, newline))
 }
 
+///
+///
 pub fn softlines(docs: List(Document)) -> Document {
   join(docs, softline())
 }
 
+///
+///
 pub fn words(docs: List(Document)) -> Document {
   join(docs, space)
 }
 
 //
 
+///
+///
 pub fn align(doc: Document) -> Document {
   use col <- column
   use indent <- nesting
@@ -220,12 +281,16 @@ pub fn align(doc: Document) -> Document {
   nest(doc, col - indent)
 }
 
+///
+///
 pub fn hang(doc: Document, i: Int) -> Document {
   doc
   |> nest(i)
   |> align
 }
 
+///
+///
 pub fn indent(doc: Document, i: Int) -> Document {
   let spaces = text(string.repeat(" ", i))
 
@@ -236,6 +301,8 @@ pub fn indent(doc: Document, i: Int) -> Document {
 
 //
 
+///
+///
 pub fn optional(value: Option(a), f: fn(a) -> Document) -> Document {
   case value {
     None -> empty
@@ -243,6 +310,8 @@ pub fn optional(value: Option(a), f: fn(a) -> Document) -> Document {
   }
 }
 
+///
+///
 pub fn when(condition: Bool, f: fn() -> Document) -> Document {
   case condition {
     True -> f()
@@ -271,6 +340,8 @@ fn choose(doc: Simple, thunk: fn() -> Simple, w: Int, k: Int) -> Simple {
 // MANIPULATIONS ---------------------------------------------------------------
 // CONVERSIONS -----------------------------------------------------------------
 
+///
+///
 pub fn print(doc: Document, w: Int) -> String {
   [#(doc, 0)]
   |> simplify(w, 0)
