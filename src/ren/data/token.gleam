@@ -227,7 +227,7 @@ pub fn identifier(name: String) -> Option(Token) {
 /// use the more general `identifier` function instead.
 ///
 pub fn upper(name: String) -> Token {
-  assert Ok(first) = string.first(name)
+  let assert Ok(first) = string.first(name)
 
   // This matching is intentionally not exhaustive: we want the program to crash
   // if an unexpected string was passed in.
@@ -243,7 +243,7 @@ pub fn upper(name: String) -> Token {
 /// use the more general `identifier` function instead.
 ///
 pub fn lower(name: String) -> Token {
-  assert Ok(first) = string.first(name)
+  let assert Ok(first) = string.first(name)
 
   // This matching is intentionally not exhaustive: we want the program to crash
   // if an unexpected string was passed in.

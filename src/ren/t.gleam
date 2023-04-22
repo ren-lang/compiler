@@ -192,7 +192,7 @@ pub fn variant(fields: List(#(String, Type))) -> Type {
 pub fn fresh(n: Int) -> String {
   // Whatever muppet tries to call this with a negative number deserves to have
   // the compiler crash on them.
-  assert True = n >= 0
+  let assert True = n >= 0
 
   case n >= 26 {
     True -> fresh(n / 26 - 1) <> fresh(n % 26)
@@ -206,7 +206,7 @@ pub fn fresh(n: Int) -> String {
       // In other scenarios that might fail but in this case we know for sure
       // what we're producing is going to be a valid string because of the other
       // logic we have going on.
-      assert Ok(var) = bit_string.to_string(<<n:int>>)
+      let assert Ok(var) = bit_string.to_string(<<n:int>>)
       var
     }
   }

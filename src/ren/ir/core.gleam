@@ -101,7 +101,7 @@ fn from_fun_expr(pats: List(Pat), body: Expr) -> Expr {
     }
 
     [pat] -> {
-      assert [name] = complex_names
+      let assert [name] = complex_names
       let args = list.map(pats_and_names, fn(p) { p.1 })
       let expr = Var(name)
       let body = Pat(expr, [Case(pat, None, body)])

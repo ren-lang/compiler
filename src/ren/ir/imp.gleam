@@ -136,7 +136,7 @@ fn from_app_expr(fun: Statement, args: List(Statement)) -> Statement {
     // expression form back it is easily recoverable with the `as_expression`
     // utility function.
     Var("$if"), [cond, _, _] -> {
-      assert [_, then, else] = args
+      let assert [_, then, else] = args
       IfElse(cond, statements(then), statements(else))
     }
 
@@ -201,7 +201,6 @@ fn from_app_expr(fun: Statement, args: List(Statement)) -> Statement {
           _ -> #([stmt, ..acc.0], acc.1)
         }
       }
-
       Block(list.reverse(stmts))
     }
 
@@ -332,10 +331,9 @@ fn checks_from_pat(pat: Pat, expr: Expression) -> Expression {
     // object constructor name matches the primitive type. This is because when
     // performing `typeof` on primitives constructed using `new`, such as
     // `new Number(1)`, the operation will return `"object"` and *not* `"Number"`.
-    pat.Typeof("Boolean" as t, pat) | pat.Typeof("Number" as t, pat) | pat.Typeof(
-      "String" as t,
-      pat,
-    ) -> {
+    pat.Typeof("Boolean" as t, pat)
+    | pat.Typeof("Number" as t, pat)
+    | pat.Typeof("String" as t, pat) -> {
       let typeof = eq(Unop(Typeof, expr), String(string.lowercase(t)))
       let constructor = eq(Access(expr, ["constructor", "name"]), String(t))
       let is_type = or(typeof, constructor)
@@ -379,10 +377,10 @@ fn checks_from_arr(elements: List(Pat), expr: Expression) -> Expression {
       Number(int.to_float(list.length(elements))),
     )
   let init = and(is_array, length)
-  // Now we can fold over the patterns and generate the checks for each
+  use checks, pat, i <- // Now we can fold over the patterns and generate the checks for each
   // element. This ignores constant `true` checks because they don't change
   // the result.
-  use checks, pat, i <- list.index_fold(elements, init)
+  list.index_fold(elements, init)
   let index = Number(int.to_float(i))
   let expr = Index(expr, index)
   and(checks, checks_from_pat(pat, expr))

@@ -17,12 +17,7 @@ pub fn crash(module: String, line: Int, message: String) -> a {
   io.println("This is probably a bug. Please report it by opening an issue at:")
   io.println("https://github.com/ren-lang/compiler/issues/new")
 
-  assert False = True
-
-  // The above assertion will always fail and crash the program. The Gleam compiler
-  // can't know that, though, so we pretend to infinitely recurse the `crash`
-  // function so we can satisfy the return type `a`.
-  crash(module, line, message)
+  panic
 }
 
 fn fit_to_width(message: String, max_width: Int) -> String {
@@ -38,7 +33,6 @@ fn fit_to_width(message: String, max_width: Int) -> String {
       lines -> #(l, [word, ..lines])
     }
   }
-
   lines
   |> list.reverse
   |> string.join("\n")

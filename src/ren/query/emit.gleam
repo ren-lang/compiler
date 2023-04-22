@@ -44,7 +44,6 @@ fn emit_mod(
       pretty.doublequotes(pretty.text(pkgs <> "/prelude.js")),
     ])
   }
-
   let ffi_import = {
     use <- pretty.when(list.length(mod.externals(mod)) > 0)
     use name <- pretty.optional(mod_name)
@@ -58,7 +57,6 @@ fn emit_mod(
       pretty.doublequotes(pretty.text("./" <> name <> ".ffi.js")),
     ])
   }
-
   let #(imports, externals, bindings) = mod.emittables(mod)
 
   pretty.doublelines([
@@ -70,7 +68,7 @@ fn emit_mod(
 }
 
 fn emit_imp(dec: Dec(Statement), pkg_path: Option(String)) -> Document {
-  assert Imp(source, path, alias) = dec
+  let assert Imp(source, path, alias) = dec
 
   use pkgs <- pretty.optional(pkg_path)
   let path = case source {
@@ -94,7 +92,7 @@ fn emit_imp(dec: Dec(Statement), pkg_path: Option(String)) -> Document {
 }
 
 fn emit_ext(dec: Dec(Statement)) -> Document {
-  assert Ext(exposed, var, _, ffi_name) = dec
+  let assert Ext(exposed, var, _, ffi_name) = dec
   let export = pretty.when(exposed, fn() { export })
 
   pretty.words([
@@ -110,7 +108,7 @@ fn emit_ext(dec: Dec(Statement)) -> Document {
 }
 
 fn emit_let(dec: Dec(Statement)) -> Document {
-  assert LetDec(exposed, var, _, stmt) = dec
+  let assert LetDec(exposed, var, _, stmt) = dec
   let export = pretty.when(exposed, fn() { export })
 
   pretty.words([
