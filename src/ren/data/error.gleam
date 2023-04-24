@@ -1,6 +1,6 @@
 // IMPORTS ---------------------------------------------------------------------
 
-import ren/data/token.{Token}
+import ren/data/token.{TokenT}
 
 // TYPES -----------------------------------------------------------------------
 
@@ -13,11 +13,11 @@ pub type Error {
 }
 
 pub type ParseError {
-  Expected(Token, got: Token)
-  ExpectedLowerIdentifier(got: Token)
-  ExpectedNumber(got: Token)
-  ExpectedString(got: Token)
-  ExpectedUpperIdentifier(got: Token)
+  Expected(TokenT, got: TokenT)
+  ExpectedLowerIdentifier(got: TokenT)
+  ExpectedNumber(got: TokenT)
+  ExpectedString(got: TokenT)
+  ExpectedUpperIdentifier(got: TokenT)
   //
   UnexpectedEOF
   UnexpectedInput

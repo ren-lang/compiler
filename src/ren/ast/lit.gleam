@@ -14,12 +14,16 @@ pub type Lit(e) {
   Str(String)
 }
 
+///
+///
 pub type Field(e) {
   Field(key: String, value: e)
 }
 
 // CONSTRUCTORS ----------------------------------------------------------------
 
+///
+///
 pub fn bool(b: Bool) -> Lit(e) {
   case b {
     True -> Con("true", [])
@@ -29,6 +33,8 @@ pub fn bool(b: Bool) -> Lit(e) {
 
 // MANIPULATIONS ---------------------------------------------------------------
 
+///
+///
 pub fn map(lit: Lit(e), f: fn(e) -> a) -> Lit(a) {
   case lit {
     Arr(elements) -> Arr(list.map(elements, f))
@@ -45,6 +51,8 @@ pub fn map(lit: Lit(e), f: fn(e) -> a) -> Lit(a) {
 
 // CONVERSIONS -----------------------------------------------------------------
 
+///
+///
 pub fn key_val_pairs(fields: List(Field(e))) -> List(#(String, e)) {
   use field <- list.map(fields)
 

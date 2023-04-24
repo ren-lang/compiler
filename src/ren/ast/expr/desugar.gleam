@@ -8,12 +8,16 @@ import ren/ast/pat
 
 // DESUGAR ---------------------------------------------------------------------
 
+///
+///
 pub fn all(expr: Expr) -> Expr {
   expr.transform(expr, expr.transform_many(_, [placeholders]))
 }
 
 // PLACEHOLDERS ----------------------------------------------------------------
 
+///
+///
 pub fn placeholders(expr: Expr) -> Expr {
   case expr {
     expr.Binop(op, lhs, rhs) -> {

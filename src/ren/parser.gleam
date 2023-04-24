@@ -39,10 +39,9 @@
 // IMPORTS ---------------------------------------------------------------------
 
 import gleam/list
-import gleam/map.{Map}
 import gleam/option.{None, Option, Some}
 import ren/data/error.{Error, ParseError}
-import ren/data/token.{Token}
+import ren/data/token.{Token, TokenT}
 
 // TYPES -----------------------------------------------------------------------
 
@@ -54,15 +53,12 @@ import ren/data/token.{Token}
 /// wrapper: you should *never* need to use or consume this `Step` type directly.
 ///
 pub opaque type Step(a) {
-  Good(Bool, a, State)
+  Good(Bool, a, List(Token))
   Bad(Bool, Bag)
 }
 
-type State =
-  #(Map(Int, Token), Int)
-
 /// A `Parser` is actually nothing special, it's just a function! Specifically,
-/// it's a function that takes the current parser `State` and returns the next
+/// it's a function that takes the current parser `tokens` and returns the next
 /// parser `Step` (either a succeed indicating we should carry on or a failure
 /// telling us to stop or try another path). 
 ///
@@ -72,7 +68,7 @@ type State =
 /// one variant) so preferring a type alias is a tiny bit more efficient.
 ///
 pub type Parser(a) =
-  fn(State) -> Step(a)
+  fn(List(Token)) -> Step(a)
 
 /// A `Bag` acts as a more efficient way to build up a list of errors. Crucially,
 /// this defers the concatenation of lists until the very end, when the parser
@@ -99,14 +95,7 @@ pub type Loop(a, b) {
 ///
 ///
 pub fn run(tokens: List(Token), parser: Parser(a)) -> Result(a, Error) {
-  let tokens =
-    list.index_fold(
-      tokens,
-      map.new(),
-      fn(map, tok, idx) { map.insert(map, idx, tok) },
-    )
-
-  case parser(#(tokens, 0)) {
+  case parser(tokens) {
     Good(_, value, _) -> Ok(value)
     Bad(_, bag) ->
       bag_to_list(bag, [])
@@ -150,22 +139,22 @@ pub fn throw(error: ParseError) -> Parser(a) {
 
 ///
 ///
-pub fn any() -> Parser(Token) {
-  fn(state) {
-    case peek(state) {
+pub fn any() -> Parser(TokenT) {
+  fn(tokens) {
+    case peek(tokens) {
+      token -> Good(False, token, next(tokens))
       token.EOF -> Bad(False, AddRight(Empty, error.UnexpectedEOF))
-      token -> Good(False, token, next(state))
     }
   }
 }
 
 ///
 ///
-pub fn token(token: Token) -> Parser(Nil) {
-  fn(state) {
-    let next_token = peek(state)
+pub fn token(token: TokenT) -> Parser(Nil) {
+  fn(tokens) {
+    let next_token = peek(tokens)
     case next_token == token {
-      True -> Good(True, Nil, next(state))
+      True -> Good(True, Nil, next(tokens))
       False ->
         Bad(False, AddRight(Empty, error.Expected(token, got: next_token)))
     }
@@ -193,10 +182,10 @@ pub fn operator(operator: token.Operator) -> Parser(Nil) {
 ///
 ///
 pub fn end() -> Parser(Nil) {
-  fn(state) {
-    case peek(state), map.size(state.0) <= state.1 {
-      token.EOF, _ | _, True -> Good(False, Nil, state)
-      token, False ->
+  fn(tokens) {
+    case peek(tokens) {
+      token.EOF -> Good(False, Nil, tokens)
+      token ->
         Bad(False, AddRight(Empty, error.Expected(token.EOF, got: token)))
     }
   }
@@ -207,10 +196,10 @@ pub fn end() -> Parser(Nil) {
 ///
 ///
 pub fn lower_identifier() -> Parser(String) {
-  fn(state) {
-    let next_token = peek(state)
+  fn(tokens) {
+    let next_token = peek(tokens)
     case next_token {
-      token.Identifier(token.Lower(name)) -> Good(False, name, next(state))
+      token.Identifier(token.Lower(name)) -> Good(False, name, next(tokens))
       token ->
         Bad(False, AddRight(Empty, error.ExpectedLowerIdentifier(got: token)))
     }
@@ -220,9 +209,9 @@ pub fn lower_identifier() -> Parser(String) {
 ///
 ///
 pub fn upper_identifier() -> Parser(String) {
-  fn(state) {
-    case peek(state) {
-      token.Identifier(token.Upper(name)) -> Good(False, name, next(state))
+  fn(tokens) {
+    case peek(tokens) {
+      token.Identifier(token.Upper(name)) -> Good(False, name, next(tokens))
       token ->
         Bad(False, AddRight(Empty, error.ExpectedUpperIdentifier(got: token)))
     }
@@ -232,9 +221,9 @@ pub fn upper_identifier() -> Parser(String) {
 ///
 ///
 pub fn number() -> Parser(Float) {
-  fn(state) {
-    case peek(state) {
-      token.Literal(token.Number(num)) -> Good(False, num, next(state))
+  fn(tokens) {
+    case peek(tokens) {
+      token.Literal(token.Number(num)) -> Good(False, num, next(tokens))
       token -> Bad(False, AddRight(Empty, error.ExpectedNumber(got: token)))
     }
   }
@@ -243,9 +232,9 @@ pub fn number() -> Parser(Float) {
 ///
 ///
 pub fn string() -> Parser(String) {
-  fn(state) {
-    case peek(state) {
-      token.Literal(token.String(str)) -> Good(False, str, next(state))
+  fn(tokens) {
+    case peek(tokens) {
+      token.Literal(token.String(str)) -> Good(False, str, next(tokens))
       token -> Bad(False, AddRight(Empty, error.ExpectedString(got: token)))
     }
   }
@@ -256,8 +245,8 @@ pub fn string() -> Parser(String) {
 ///
 ///
 pub fn do(parser: Parser(a), k: fn(a) -> Parser(b)) -> Parser(b) {
-  fn(state) {
-    case parser(state) {
+  fn(tokens) {
+    case parser(tokens) {
       Bad(commit, error) -> Bad(commit, error)
       // NOTE: The original implementation pattern matched on the result of the
       // parser, and then used boolaen OR to determine whether to commit or not.
@@ -268,7 +257,7 @@ pub fn do(parser: Parser(a), k: fn(a) -> Parser(b)) -> Parser(b) {
       //
       // I'm leaving this comment here in case I need to come back and revert to
       // the original implementation.
-      Good(_, a, state) -> k(a)(state)
+      Good(_, a, tokens) -> k(a)(tokens)
     }
   }
 }
@@ -311,16 +300,16 @@ pub fn or(parser: Parser(a), other: Parser(a)) -> Parser(a) {
 ///
 ///
 pub fn lazy(parser: fn() -> Parser(a)) -> Parser(a) {
-  fn(state) { parser()(state) }
+  fn(tokens) { parser()(tokens) }
 }
 
 ///
 ///
 pub fn backtrackable(parser: Parser(a)) -> Parser(a) {
-  fn(state) {
-    case parser(state) {
+  fn(tokens) {
+    case parser(tokens) {
       Bad(_, error) -> Bad(False, error)
-      Good(_, a, state) -> Good(False, a, state)
+      Good(_, a, tokens) -> Good(False, a, tokens)
     }
   }
 }
@@ -330,16 +319,16 @@ pub fn backtrackable(parser: Parser(a)) -> Parser(a) {
 ///
 ///
 pub fn one_of(parsers: List(Parser(a))) -> Parser(a) {
-  fn(state) { do_one_of(state, Empty, parsers) }
+  fn(tokens) { do_one_of(tokens, Empty, parsers) }
 }
 
-fn do_one_of(state: State, bag: Bag, parsers: List(Parser(a))) -> Step(a) {
+fn do_one_of(tokens: List(Token), bag: Bag, parsers: List(Parser(a))) -> Step(a) {
   case parsers {
     [] -> Bad(False, bag)
     [parser, ..parsers] ->
-      case parser(state) {
+      case parser(tokens) {
         Bad(commit, _) as step if commit -> step
-        Bad(_, error) -> do_one_of(state, Append(bag, error), parsers)
+        Bad(_, error) -> do_one_of(tokens, Append(bag, error), parsers)
         Good(_, _, _) as step -> step
       }
   }
@@ -353,19 +342,19 @@ pub fn optional(parser: Parser(a)) -> Parser(Option(a)) {
 
 ///
 ///
-pub fn loop(init: state, k: fn(state) -> Parser(Loop(a, state))) -> Parser(a) {
-  fn(state) { do_loop(False, init, state, k) }
+pub fn loop(init: tokens, k: fn(tokens) -> Parser(Loop(a, tokens))) -> Parser(a) {
+  fn(tokens) { do_loop(False, init, tokens, k) }
 }
 
 fn do_loop(
   c1: Bool,
-  acc: state,
-  state: State,
-  k: fn(state) -> Parser(Loop(a, state)),
+  acc: tokens,
+  tokens: List(Token),
+  k: fn(tokens) -> Parser(Loop(a, tokens)),
 ) -> Step(a) {
-  case k(acc)(state) {
-    Good(c2, Continue(acc), state) -> do_loop(c1 || c2, acc, state, k)
-    Good(c2, Break(a), state) -> Good(c1 || c2, a, state)
+  case k(acc)(tokens) {
+    Good(c2, Continue(acc), tokens) -> do_loop(c1 || c2, acc, tokens, k)
+    Good(c2, Break(a), tokens) -> Good(c1 || c2, a, tokens)
     Bad(c2, error) -> Bad(c1 || c2, error)
   }
 }
@@ -382,13 +371,16 @@ pub fn many(parser: Parser(a)) -> Parser(List(a)) {
 
 // UTILS -----------------------------------------------------------------------
 
-fn peek(state: State) -> Token {
-  case map.get(state.0, state.1) {
-    Ok(token) -> token
-    Error(_) -> token.EOF
+fn peek(tokens: List(Token)) -> TokenT {
+  case tokens {
+    [Token(_, _, _, _, _, token), ..] -> token
+    [] -> token.EOF
   }
 }
 
-fn next(state: State) -> State {
-  #(state.0, state.1 + 1)
+fn next(tokens: List(Token)) -> List(Token) {
+  case tokens {
+    [_, ..tokens] -> tokens
+    [] -> []
+  }
 }

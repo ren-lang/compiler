@@ -1,290 +1,291 @@
 // IMPORTS ---------------------------------------------------------------------
 
 import gleam/float
-import gleam/list
-import gleam/int
-import gleam/result
-import gleam/option.{None, Option, Some}
+import gleam/list.{Continue, Stop}
+import gleam/regex
 import gleam/string
-import ren/data/token.{Token}
+import ren/data/token.{Token, TokenT}
 import ren/query.{Query}
 
 // TYPES -----------------------------------------------------------------------
 
+type Matcher(a) =
+  fn(String, String) -> Match(a)
+
+type Match(a) {
+  Keep(a)
+  Drop
+  NoMatch
+}
+
 type State {
-  State(
-    chars: List(String),
-    stack: List(String),
-    tokens: List(Token),
-    row: Int,
-    col: Int,
-  )
+  State(tokens: List(Token), buffer: #(Int, Int, String), row: Int, col: Int)
 }
 
-// RUNNING THE LEXER -----------------------------------------------------------
+// QUERIES ---------------------------------------------------------------------
 
-///
-///
 pub fn file(path: String) -> Query(List(Token), env) {
-  query.read(path)
-  |> query.then(run)
+  use src <- query.do(query.read(path))
+
+  run(src)
 }
 
-/// Splits some source code into a list of graphemes (*not* characters!) and then
-/// reduces that list to a stream of tokens. This can never fail, instead unknown
-/// tokens are simply assigned the `Unknown` token type.
-///
-pub fn run(input: String) -> Query(List(Token), env) {
-  let chars = string.to_graphemes(input)
-  let state = State(chars, [], [], 1, 1)
+pub fn run(src: String) -> Query(List(Token), env) {
+  let source = string.to_graphemes(src)
+  let buffer = #(1, 1, "")
+  let state = State([], buffer, 1, 1)
 
-  query.return(step(state))
+  source
+  |> do_run(state)
+  |> query.return
 }
 
-fn peek(chars: List(String)) -> String {
-  case chars {
-    [char, ..] -> char
-    [] -> ""
-  }
-}
+fn do_run(source: List(String), state: State) -> List(Token) {
+  case source, state.buffer {
+    // We're at the end of the source and there's nothing left in the buffer so
+    // we can just return the tokens we've collected!
+    [], #(_, _, "") -> list.reverse(state.tokens)
 
-// STEPPING THROUGH THE LEXER --------------------------------------------------
-
-fn step(state: State) -> List(Token) {
-  let follow = peek(state.chars)
-  let token = match_token(state.stack, follow)
-
-  case token {
-    Some(tok) if follow == "" -> list.reverse([token.EOF, tok, ..state.tokens])
-    None if follow == "" -> list.reverse([token.EOF, ..state.tokens])
-
-    Some(tok) -> {
-      let [char, ..chars] = state.chars
-      let tokens = [tok, ..state.tokens]
-      case char {
-        "\n" -> {
-          let row = state.row + 1
-          let col = 1
-          let stack = []
-          step(State(chars, stack, tokens, row, col))
+    // We're at the end of the source but there's some stuff left in the buffer
+    // so we need to try and match it.
+    [], #(start_row, start_col, lexeme) ->
+      case do_match(lexeme, "") {
+        NoMatch ->
+          list.reverse([
+            Token(
+              start_row,
+              start_col,
+              state.row,
+              state.col,
+              lexeme,
+              token.Unknown(lexeme),
+            ),
+            ..state.tokens
+          ])
+        Drop -> list.reverse(state.tokens)
+        Keep(token) -> {
+          list.reverse([
+            Token(start_row, start_col, state.row, state.col, lexeme, token),
+            ..state.tokens
+          ])
         }
-        " " | "\t" -> {
-          let col = state.col + 1
-          let stack = []
-          let state =
-            State(..state, chars: chars, stack: stack, tokens: tokens, col: col)
-          step(state)
+      }
+
+    // We get one grapheme lookahead when trying to match the current buffer with
+    // a token.
+    [lookahead, ..rest], #(start_row, start_col, lexeme) -> {
+      let #(row, col) = next(state.row, state.col, lexeme)
+
+      case do_match(lexeme, lookahead) {
+        // We've found a match so we can add the token to the list of tokens and
+        // set the buffer to the next grapheme, progress the row/col and continue.
+        Keep(token) -> {
+          let buffer = #(state.row, state.col, lookahead)
+          let tokens = [
+            Token(start_row, start_col, state.row, state.col, lexeme, token),
+            ..state.tokens
+          ]
+          do_run(rest, State(tokens, buffer, row, col))
         }
-        _ -> {
-          let col = state.col + 1
-          let stack = [char]
-          step(
-            State(..state, chars: chars, stack: stack, tokens: tokens, col: col),
-          )
+
+        // We matched a token but we want to drop it. That means we *don't* add
+        // it to the list of tokens, but we do still set the buffer to the next
+        // grapheme, progress the row/col and continue.
+        Drop -> {
+          let buffer = #(state.row, state.col, lookahead)
+          do_run(rest, State(state.tokens, buffer, row, col))
+        }
+
+        // We haven't matched a token yet so add the current grapheme to the 
+        // buffer and continue.
+        NoMatch -> {
+          let buffer = #(start_row, start_col, lexeme <> lookahead)
+          do_run(rest, State(state.tokens, buffer, row, col))
         }
       }
     }
+  }
+}
 
-    None -> {
-      let [char, ..chars] = state.chars
-      case char {
-        "\n" -> {
-          let row = state.row + 1
-          let col = 1
-          let stack = []
-          step(State(..state, chars: chars, stack: stack, row: row, col: col))
-        }
-        " " | "\t" -> {
-          let col = state.col + 1
-          let stack = []
-          step(State(..state, chars: chars, stack: stack, col: col))
-        }
-        _ -> {
-          let col = state.col + 1
-          let stack = [char, ..state.stack]
-          step(State(..state, chars: chars, stack: stack, col: col))
-        }
+fn do_match(lexeme: String, lookahead: String) -> Match(TokenT) {
+  use _, matcher <- list.fold_until(matchers, NoMatch)
+
+  case matcher(lexeme, lookahead) {
+    Keep(a) -> Stop(Keep(a))
+    Drop -> Stop(Drop)
+    NoMatch -> Continue(NoMatch)
+  }
+}
+
+fn next(row: Int, col: Int, lexeme: String) -> #(Int, Int) {
+  case lexeme {
+    "\n" -> #(row + 1, 1)
+    _ -> #(row, col + 1)
+  }
+}
+
+const matchers: List(Matcher(TokenT)) = [
+  symbols_and_operators,
+  keywords_and_identifiers,
+  numbers,
+  strings,
+  whitespace,
+]
+
+// MATCHERS --------------------------------------------------------------------
+
+fn symbols_and_operators(lexeme: String, lookahead: String) -> Match(TokenT) {
+  // 🚨 Don't forget to order matchers from longest to shortest so that everything
+  // gets tested properly. If you don't, you'll get weird bugs like `|>` lexing
+  // as `|` and `>` instead of `|>`.
+  case lexeme, lookahead {
+    "->", _ | "→", _ -> Keep(token.arrow)
+    "-", ">" -> NoMatch
+    "-", "0" -> NoMatch
+    "-", "1" -> NoMatch
+    "-", "2" -> NoMatch
+    "-", "3" -> NoMatch
+    "-", "4" -> NoMatch
+    "-", "5" -> NoMatch
+    "-", "6" -> NoMatch
+    "-", "7" -> NoMatch
+    "-", "8" -> NoMatch
+    "-", "9" -> NoMatch
+    "-", _ -> Keep(token.sub)
+    "_", _ -> Keep(token.underscore)
+    ",", _ -> Keep(token.comma)
+    ";", _ -> Keep(token.seq)
+    ":", _ -> Keep(token.colon)
+    "?", _ -> Keep(token.question)
+    ".", "." -> NoMatch
+    ".", _ -> Keep(token.dot)
+    "..", _ -> Keep(token.double_dot)
+    "(", _ -> Keep(token.lparen)
+    ")", _ -> Keep(token.rparen)
+    "[", _ -> Keep(token.lbracket)
+    "]", _ -> Keep(token.rbracket)
+    "{", _ -> Keep(token.lbrace)
+    "}", _ -> Keep(token.rbrace)
+    "@", _ -> Keep(token.at)
+    "*", _ -> Keep(token.mul)
+    "/", "/" -> NoMatch
+    "/", _ -> Keep(token.div)
+    "//", _ -> Keep(token.double_slash)
+    "&", _ -> Keep(token.and)
+    "#", _ -> Keep(token.hash)
+    "%", _ -> Keep(token.mod)
+    "^", _ -> Keep(token.pow)
+    "+", "+" -> NoMatch
+    "+", _ -> Keep(token.add)
+    "++", _ -> Keep(token.concat)
+    "<", "=" -> NoMatch
+    "<", _ -> Keep(token.lt)
+    "<=", _ -> Keep(token.lte)
+    "=", "=" -> NoMatch
+    "=", _ -> Keep(token.equals)
+    "==", _ -> Keep(token.eq)
+    ">", "=" -> NoMatch
+    ">", _ -> Keep(token.gt)
+    ">=", _ -> Keep(token.gte)
+    "|", ">" -> NoMatch
+    "|", _ -> Keep(token.or)
+    "|>", _ -> Keep(token.pipe)
+    "!=", _ -> Keep(token.neq)
+
+    _, _ -> NoMatch
+  }
+}
+
+fn keywords_and_identifiers(lexeme: String, lookahead: String) -> Match(TokenT) {
+  let assert Ok(is_lower) = regex.from_string("^[a-z][a-zA-Z0-9_]*$")
+  let assert Ok(is_upper) = regex.from_string("^[A-Z][a-zA-Z0-9_]*$")
+  let assert Ok(is_inner) = regex.from_string("[a-zA-Z0-9_]")
+
+  case lexeme, regex.check(is_inner, lookahead) {
+    "as", False -> Keep(token.as_)
+    "assert", False -> Keep(token.assert_)
+    "case", False -> Keep(token.case_)
+    "else", False -> Keep(token.else)
+    "expect", False -> Keep(token.expect)
+    "ext", False -> Keep(token.ext)
+    "forall", False | "∀", _ -> Keep(token.forall)
+    "fun", False | "λ", _ -> Keep(token.fun)
+    "if", False -> Keep(token.if_)
+    "import", False -> Keep(token.import_)
+    "let", False -> Keep(token.let_)
+    "on", False -> Keep(token.on)
+    "pkg", False -> Keep(token.pkg)
+    "pub", False -> Keep(token.pub_)
+    "switch", False -> Keep(token.switch)
+    "then", False -> Keep(token.then)
+    "type", False -> Keep(token.type_)
+
+    _, lookead_is_valid -> {
+      case regex.check(is_lower, lexeme) {
+        True if lookead_is_valid -> NoMatch
+        True -> Keep(token.lower(lexeme))
+        False ->
+          case regex.check(is_upper, lexeme) {
+            True if lookead_is_valid -> NoMatch
+            True -> Keep(token.upper(lexeme))
+            False -> NoMatch
+          }
       }
     }
   }
 }
 
-//
+fn numbers(lexeme: String, lookahead: String) -> Match(TokenT) {
+  let assert Ok(is_digit) = regex.from_string("[0-9]")
+  let assert Ok(is_int) = regex.from_string("^-*[0-9]+$")
+  let assert Ok(is_num) = regex.from_string("^-*[0-9]+\\.[0-9]+$")
 
-fn match_token(stack: List(String), follow: String) -> Option(Token) {
-  let follow_upper = is_upper(follow)
-  let follow_lower = is_lower(follow)
-  let follow_digit = is_digit(follow)
-  let follow_alpha = follow_upper || follow_lower
-  let follow_alphanum = follow_alpha || follow_digit
-  let follow_whitespace = is_whitespace(follow)
-  let follow_empty = follow == ""
-  let follow_symbol = is_ren_symbol(follow)
-  let follow_unknown = is_unknown_symbol(follow)
+  let lookead_is_valid = regex.check(is_digit, lookahead)
 
-  let is_keyword = follow_empty || follow_whitespace || !follow_alphanum
+  case regex.check(is_int, lexeme) {
+    True if lookahead == "." -> NoMatch
+    True if lookead_is_valid -> NoMatch
 
-  // ❗️ The stack is built in reverse, so we have to remember to match characters
-  // on the stack backwards otherwise everything will be wrong.
-  //
-  // If we're chomping the characters "fun" then the stack is going to grow like
-  // this:
-  //
-  //                [] "fun"
-  //            [ "f"] "un"
-  //      [ "u", "f" ] "n"
-  // [ "n", "u", "f" ] ""
-  // 
-  case stack {
-    // KEYWORDS ----------------------------------------------------------------
-    ["s", "a"] if is_keyword -> Some(token.as_)
-    ["t", "r", "e", "s", "s", "a"] if is_keyword -> Some(token.assert_)
-    ["e", "s", "a", "c"] if is_keyword -> Some(token.case_)
-    ["e", "s", "l", "e"] if is_keyword -> Some(token.else)
-    ["t", "c", "e", "p", "x", "e"] if is_keyword -> Some(token.expect)
-    ["t", "x", "e"] if is_keyword -> Some(token.ext)
-    ["l", "l", "a", "r", "o", "f"] if is_keyword -> Some(token.forall)
-    ["∀"] -> Some(token.forall)
-    ["n", "u", "f"] if is_keyword -> Some(token.fun)
-    ["λ"] -> Some(token.fun)
-    ["f", "i"] if is_keyword -> Some(token.if_)
-    ["t", "r", "o", "p", "m", "i"] if is_keyword -> Some(token.import_)
-    ["t", "e", "l"] if is_keyword -> Some(token.let_)
-    ["n", "o"] if is_keyword -> Some(token.on)
-    ["g", "k", "p"] if is_keyword -> Some(token.pkg)
-    ["b", "u", "p"] if is_keyword -> Some(token.pub_)
-    ["h", "c", "t", "i", "w", "s"] if is_keyword -> Some(token.switch)
-    ["n", "e", "h", "t"] if is_keyword -> Some(token.then)
-    ["e", "p", "y", "t"] if is_keyword -> Some(token.type_)
+    True -> {
+      let assert Ok(val) = float.parse(lexeme <> ".0")
+      Keep(token.num(val))
+    }
 
-    // SYMBOLS -----------------------------------------------------------------
-    [">", "-"] -> Some(token.arrow)
-    ["→"] -> Some(token.arrow)
-    ["@"] -> Some(token.at)
-    [":"] -> Some(token.colon)
-    [","] -> Some(token.comma)
-    ["."] if follow != "." -> Some(token.dot)
-    ["."] -> None
-    [".", "."] -> Some(token.double_dot)
-    ["/", "/"] -> Some(token.double_slash)
-    ["="] if follow != "=" -> Some(token.equals)
-    ["="] -> None
-    ["#"] -> Some(token.hash)
-    ["{"] -> Some(token.lbrace)
-    ["["] -> Some(token.lbracket)
-    ["("] -> Some(token.lparen)
-    ["?"] -> Some(token.question)
-    ["}"] -> Some(token.rbrace)
-    ["]"] -> Some(token.rbracket)
-    [")"] -> Some(token.rparen)
-    ["_"] -> Some(token.underscore)
-
-    // OPERATORS ---------------------------------------------------------------
-    ["+"] -> Some(token.add)
-    ["-"] if follow != ">" -> Some(token.sub)
-    ["-"] -> None
-    ["*"] -> Some(token.mul)
-    ["/"] if follow != "/" -> Some(token.div)
-    ["/"] -> None
-    ["%"] -> Some(token.mod)
-    ["^"] -> Some(token.pow)
-    ["&"] -> Some(token.and)
-    ["|"] if follow != ">" -> Some(token.or)
-    ["|"] -> None
-    ["=", "="] -> Some(token.eq)
-    ["=", "!"] -> Some(token.neq)
-    ["<"] if follow != "=" -> Some(token.lt)
-    ["<"] -> None
-    ["=", "<"] -> Some(token.lte)
-    [">"] if follow != "=" -> Some(token.gt)
-    [">"] -> None
-    ["=", ">"] -> Some(token.gte)
-    [">", "|"] -> Some(token.pipe)
-    [";"] -> Some(token.seq)
-
-    // EVERYTHING ELSE ---------------------------------------------------------
-    [_, ..] if follow_alpha ->
-      case list.all(stack, is_digit) {
+    False ->
+      case regex.check(is_num, lexeme) {
+        True if lookead_is_valid -> NoMatch
         True -> {
-          let chars = list.reverse(stack)
-          let str = string.concat(chars)
-          let num = float.parse(str)
-          let int = result.map(int.parse(str), int.to_float)
-          result.or(num, int)
-          |> option.from_result
-          |> option.map(token.num)
+          let assert Ok(val) = float.parse(lexeme)
+          Keep(token.num(val))
         }
-        False -> None
+        False -> NoMatch
       }
-
-    [_, ..] if follow_empty || follow_whitespace || follow_symbol || follow_unknown && follow != "_" -> {
-      let chars = list.reverse(stack)
-      let str = string.concat(chars)
-      case list.all(chars, is_digit) {
-        True -> {
-          let num = float.parse(str)
-          let int = result.map(int.parse(str), int.to_float)
-          result.or(num, int)
-          |> option.from_result
-          |> option.map(token.num)
-        }
-        False -> token.identifier(str)
-      }
-    }
-
-    _ -> None
   }
 }
 
-// PREDICATES ------------------------------------------------------------------
+fn strings(lexeme: String, _lookahead: String) -> Match(TokenT) {
+  let assert Ok(is_string) =
+    regex.from_string("^\"([^\"\\\\]|\\\\[\\s\\S])*\"$")
 
-fn is_upper(char: String) -> Bool {
-  case char {
-    "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "I" -> True
-    "J" | "K" | "L" | "M" | "N" | "O" | "P" | "Q" | "R" -> True
-    "S" | "T" | "U" | "V" | "W" | "X" | "Y" | "Z" -> True
-    _ -> False
+  case regex.check(is_string, lexeme) {
+    True ->
+      lexeme
+      |> string.drop_left(1)
+      |> string.drop_right(1)
+      |> token.str
+      |> Keep
+    False -> NoMatch
   }
 }
 
-fn is_lower(char: String) -> Bool {
-  case char {
-    "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" -> True
-    "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" -> True
-    "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" -> True
-    _ -> False
-  }
-}
+fn whitespace(lexeme: String, lookahead: String) -> Match(TokenT) {
+  let assert Ok(is_whitespace) = regex.from_string("^[\\s\\n]+$")
 
-fn is_digit(char: String) -> Bool {
-  case char {
-    "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" -> True
-    _ -> False
-  }
-}
-
-fn is_whitespace(char: String) -> Bool {
-  case char {
-    " " | "\t" | "\r" | "\n" -> True
-    _ -> False
-  }
-}
-
-fn is_ren_symbol(char: String) -> Bool {
-  case char {
-    "-" | "," | ";" | ":" | "!" | "?" | "." -> True
-    "(" | ")" | "[" | "]" | "{" | "}" | "*" | "/" -> True
-    "&" | "%" | "^" | "+" | "<" | "=" | ">" | "|" -> True
-    _ -> False
-  }
-}
-
-fn is_unknown_symbol(char: String) -> Bool {
-  case <<char:utf8>> {
-    <<code:int>> if code > 47 && code < 58 -> False
-    <<code:int>> if code > 64 && code < 91 -> False
-    <<code:int>> if code > 96 && code < 123 -> False
-
-    _ -> !is_ren_symbol(char)
+  case regex.check(is_whitespace, lexeme), lookahead {
+    True, " " -> NoMatch
+    True, "\t" -> NoMatch
+    True, "\n" -> NoMatch
+    True, _ -> Drop
+    False, _ -> NoMatch
   }
 }

@@ -14,7 +14,9 @@ import ren/data/error.{Error}
 pub type Provider {
   Provider(
     read: fn(String) -> Result(String, Error),
+    read_dir: fn(String) -> Result(List(String), Error),
     write: fn(String, String) -> Result(Nil, Error),
+    write_dir: fn(String) -> Result(Nil, Error),
     stdout: fn(String) -> Nil,
     stderr: fn(String) -> Nil,
     log: fn(String) -> Nil,
@@ -106,6 +108,8 @@ pub fn read(path: String) -> Query(String, env) {
   }
 }
 
+///
+///
 /// Write a file to the given path using a `Provider`s write function. This is
 /// organised so the file's contents is the argument that can be piped into the
 /// function as the path is usually fixed or known for a given query.

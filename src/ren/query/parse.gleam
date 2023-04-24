@@ -187,10 +187,12 @@ fn parse_expr() -> Parser(Expr) {
       pratt.infixl(6, operator(token.Sub), binop(expr.sub)),
       pratt.infixl(7, operator(token.Mul), binop(expr.mul)),
       pratt.infixl(7, operator(token.Div), binop(expr.div)),
+      pratt.infixl(7, operator(token.Mod), binop(expr.mod)),
       pratt.infixl(10, return(Nil), call),
       // Right associative operators.
       pratt.infixr(2, operator(token.Or), binop(expr.or)),
       pratt.infixr(3, operator(token.And), binop(expr.and)),
+      pratt.infixr(9, operator(token.Pow), binop(expr.pow)),
     ],
   )
 }
@@ -204,7 +206,14 @@ fn parse_block() -> Parser(Expr) {
   use rest <- do(one_of([
     pratt.expr(
       one_of: [pratt.literal(parse_let_expr()), pratt.literal(parse_expr())],
-      then: [pratt.infixr(0, operator(token.Seq), binop(expr.seq))],
+      then: [
+        pratt.infixr(1, operator(token.Seq), binop(expr.seq)),
+        pratt.postfix(
+          1,
+          operator(token.Seq),
+          binop(expr.seq)(_, Literal(Con("undefined", []))),
+        ),
+      ],
     ),
     return(Literal(Con("undefined", []))),
   ]))

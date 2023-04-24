@@ -11,6 +11,19 @@ import gleam/string
 ///
 ///
 pub type Token {
+  Token(
+    start_row: Int,
+    start_col: Int,
+    end_row: Int,
+    end_col: Int,
+    lexeme: String,
+    token: TokenT,
+  )
+}
+
+///
+///
+pub type TokenT {
   EOF
   Identifier(Identifier)
   Keyword(Keyword)
@@ -102,107 +115,107 @@ pub type Operator {
 
 // CONSTANTS -------------------------------------------------------------------
 
-pub const as_: Token = Keyword(As)
+pub const as_: TokenT = Keyword(As)
 
-pub const assert_: Token = Keyword(Assert)
+pub const assert_: TokenT = Keyword(Assert)
 
-pub const case_: Token = Keyword(Case)
+pub const case_: TokenT = Keyword(Case)
 
-pub const else: Token = Keyword(Else)
+pub const else: TokenT = Keyword(Else)
 
-pub const expect: Token = Keyword(Expect)
+pub const expect: TokenT = Keyword(Expect)
 
-pub const ext: Token = Keyword(Ext)
+pub const ext: TokenT = Keyword(Ext)
 
-pub const forall: Token = Keyword(Forall)
+pub const forall: TokenT = Keyword(Forall)
 
-pub const fun: Token = Keyword(Fun)
+pub const fun: TokenT = Keyword(Fun)
 
-pub const if_: Token = Keyword(If)
+pub const if_: TokenT = Keyword(If)
 
-pub const import_: Token = Keyword(Import)
+pub const import_: TokenT = Keyword(Import)
 
-pub const let_: Token = Keyword(Let)
+pub const let_: TokenT = Keyword(Let)
 
-pub const on: Token = Keyword(On)
+pub const on: TokenT = Keyword(On)
 
-pub const pkg: Token = Keyword(Pkg)
+pub const pkg: TokenT = Keyword(Pkg)
 
-pub const pub_: Token = Keyword(Pub)
+pub const pub_: TokenT = Keyword(Pub)
 
-pub const switch: Token = Keyword(Switch)
+pub const switch: TokenT = Keyword(Switch)
 
-pub const then: Token = Keyword(Then)
+pub const then: TokenT = Keyword(Then)
 
-pub const type_: Token = Keyword(Type)
+pub const type_: TokenT = Keyword(Type)
 
-pub const arrow: Token = Symbol(Arrow)
+pub const arrow: TokenT = Symbol(Arrow)
 
-pub const at = Symbol(At)
+pub const at: TokenT = Symbol(At)
 
-pub const colon: Token = Symbol(Colon)
+pub const colon: TokenT = Symbol(Colon)
 
-pub const comma: Token = Symbol(Comma)
+pub const comma: TokenT = Symbol(Comma)
 
-pub const dot: Token = Symbol(Dot)
+pub const dot: TokenT = Symbol(Dot)
 
-pub const double_dot: Token = Symbol(DoubleDot)
+pub const double_dot: TokenT = Symbol(DoubleDot)
 
-pub const double_slash: Token = Symbol(DoubleSlash)
+pub const double_slash: TokenT = Symbol(DoubleSlash)
 
-pub const equals: Token = Symbol(Equals)
+pub const equals: TokenT = Symbol(Equals)
 
-pub const hash: Token = Symbol(Hash)
+pub const hash: TokenT = Symbol(Hash)
 
-pub const lbrace: Token = Symbol(LBrace)
+pub const lbrace: TokenT = Symbol(LBrace)
 
-pub const lbracket: Token = Symbol(LBracket)
+pub const lbracket: TokenT = Symbol(LBracket)
 
-pub const lparen: Token = Symbol(LParen)
+pub const lparen: TokenT = Symbol(LParen)
 
-pub const question: Token = Symbol(Question)
+pub const question: TokenT = Symbol(Question)
 
-pub const rbrace: Token = Symbol(RBrace)
+pub const rbrace: TokenT = Symbol(RBrace)
 
-pub const rbracket: Token = Symbol(RBracket)
+pub const rbracket: TokenT = Symbol(RBracket)
 
-pub const rparen: Token = Symbol(RParen)
+pub const rparen: TokenT = Symbol(RParen)
 
-pub const underscore: Token = Symbol(Underscore)
+pub const underscore: TokenT = Symbol(Underscore)
 
-pub const add: Token = Operator(Add)
+pub const add: TokenT = Operator(Add)
 
-pub const concat: Token = Operator(Concat)
+pub const concat: TokenT = Operator(Concat)
 
-pub const sub: Token = Operator(Sub)
+pub const sub: TokenT = Operator(Sub)
 
-pub const mul: Token = Operator(Mul)
+pub const mul: TokenT = Operator(Mul)
 
-pub const div: Token = Operator(Div)
+pub const div: TokenT = Operator(Div)
 
-pub const mod: Token = Operator(Mod)
+pub const mod: TokenT = Operator(Mod)
 
-pub const pow: Token = Operator(Pow)
+pub const pow: TokenT = Operator(Pow)
 
-pub const and: Token = Operator(And)
+pub const and: TokenT = Operator(And)
 
-pub const or: Token = Operator(Or)
+pub const or: TokenT = Operator(Or)
 
-pub const eq: Token = Operator(Eq)
+pub const eq: TokenT = Operator(Eq)
 
-pub const neq: Token = Operator(Neq)
+pub const neq: TokenT = Operator(Neq)
 
-pub const lt: Token = Operator(Lt)
+pub const lt: TokenT = Operator(Lt)
 
-pub const lte: Token = Operator(Lte)
+pub const lte: TokenT = Operator(Lte)
 
-pub const gt: Token = Operator(Gt)
+pub const gt: TokenT = Operator(Gt)
 
-pub const gte: Token = Operator(Gte)
+pub const gte: TokenT = Operator(Gte)
 
-pub const pipe: Token = Operator(Pipe)
+pub const pipe: TokenT = Operator(Pipe)
 
-pub const seq: Token = Operator(Seq)
+pub const seq: TokenT = Operator(Seq)
 
 // CONSTRUCTORS ----------------------------------------------------------------
 
@@ -210,7 +223,7 @@ pub const seq: Token = Operator(Seq)
 /// `Upper` or `Lower` identifier token based on casing. Invalid identifiers
 /// will return `None`.
 ///
-pub fn identifier(name: String) -> Option(Token) {
+pub fn identifier(name: String) -> Option(TokenT) {
   let first = result.unwrap(string.first(name), "")
 
   case <<first:utf8>> {
@@ -226,7 +239,7 @@ pub fn identifier(name: String) -> Option(Token) {
 /// string is not an uppercase letter. If you'd like a safe version of this function,
 /// use the more general `identifier` function instead.
 ///
-pub fn upper(name: String) -> Token {
+pub fn upper(name: String) -> TokenT {
   let assert Ok(first) = string.first(name)
 
   // This matching is intentionally not exhaustive: we want the program to crash
@@ -242,7 +255,7 @@ pub fn upper(name: String) -> Token {
 /// string is not a lowercase letter. If you'd like a safe version of this 
 /// use the more general `identifier` function instead.
 ///
-pub fn lower(name: String) -> Token {
+pub fn lower(name: String) -> TokenT {
   let assert Ok(first) = string.first(name)
 
   // This matching is intentionally not exhaustive: we want the program to crash
@@ -254,7 +267,7 @@ pub fn lower(name: String) -> Token {
 
 ///
 ///
-pub fn num(num: Float) -> Token {
+pub fn num(num: Float) -> TokenT {
   Literal(Number(num))
 }
 
@@ -262,13 +275,13 @@ pub fn num(num: Float) -> Token {
 /// construct a `Number` token from a Gleam `Int` so this function just wraps up
 /// the conversion for us.
 ///
-pub fn int(int: Int) -> Token {
+pub fn int(int: Int) -> TokenT {
   num(int.to_float(int))
 }
 
 ///
 ///
-pub fn str(str: String) -> Token {
+pub fn str(str: String) -> TokenT {
   Literal(String(str))
 }
 
@@ -276,7 +289,7 @@ pub fn str(str: String) -> Token {
 
 ///
 ///
-pub fn to_string(token: Token) {
+pub fn to_string(token: TokenT) {
   case token {
     EOF -> "EOF"
 

@@ -1,7 +1,7 @@
 // IMPORTS ---------------------------------------------------------------------
 
 import gleam/list
-import gleam/option.{None, Option}
+import gleam/option.{Option, Some}
 import gleam/string
 import ren/ast/mod.{
   Dec, Ext, External, Imp, Let as LetDec, Mod, Package, Project,
@@ -21,9 +21,9 @@ import ren/ir/imp.{
 
 ///
 ///
-pub fn mod(input: Mod(Statement)) -> String {
+pub fn mod(input: Mod(Statement), pkg_path: String, mod_name: String) -> String {
   input
-  |> emit_mod(None, None)
+  |> emit_mod(Some(pkg_path), Some(mod_name))
   |> pretty.print(100)
 }
 
